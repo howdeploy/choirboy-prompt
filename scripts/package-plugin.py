@@ -16,13 +16,17 @@ REQUIRED = {
     ".claude-plugin/plugin.json",
     ".claude-plugin/marketplace.json",
     "hooks/hooks.json",
+    "hooks/artifact-stop.sh",
     "hooks/session-start.sh",
+    "scripts/artifact-generator.py",
     "skills/load-context/SKILL.md",
     "skills/diagnose/SKILL.md",
 }
 EXECUTABLES = {
     "install.sh",
+    "hooks/artifact-stop.sh",
     "hooks/session-start.sh",
+    "scripts/artifact-generator.py",
     "scripts/build-context.py",
     "scripts/package-plugin.py",
     "scripts/test.sh",
@@ -41,14 +45,22 @@ def repository_files() -> list[Path]:
         check=True,
         capture_output=True,
     )
-    paths = []
+    paths = set()
     for raw in result.stdout.split(b"\0"):
         if not raw:
             continue
         relative = Path(os.fsdecode(raw))
         path = ROOT / relative
         if path.is_file() and relative.parts[0] != "dist":
-            paths.append(relative)
+            paths.add(relative)
+    # REQUIRED is the distribution contract. Include newly added required
+    # files even before their first commit so local release validation cannot
+    # accidentally test a ZIP that omits the feature under development.
+    for required in REQUIRED:
+        relative = Path(required)
+        path = ROOT / relative
+        if path.is_file():
+            paths.add(relative)
     return sorted(paths, key=lambda value: value.as_posix())
 
 

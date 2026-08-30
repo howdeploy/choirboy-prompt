@@ -38,13 +38,15 @@ agent-plugin/
 │   └── kimi/session_*/{state.json,agents/main/wire.jsonl}
 ├── hooks/
 │   ├── session-start.sh      # payload 组装 + claude / plain / hermes 格式
-│   └── hooks.json            # 给 Claude Code 市场的 SessionStart 声明
+│   ├── artifact-stop.sh      # 将未完成 bootstrap 交还当前智能体
+│   └── hooks.json            # Claude Code marketplace 的 SessionStart + Stop
 ├── context/
 │   └── research-index.md     # hook 与 skill 共用的规范 research 索引
 ├── skills/
 │   ├── load-context/SKILL.md # Chat/Cowork/Code 的生成式 inline 回退
 │   └── diagnose/SKILL.md     # 基于证据的投递诊断
 ├── scripts/
+│   ├── artifact-generator.py # artifact request、校验与 freshness manifest
 │   ├── build-context.py      # 从规范来源重新生成 skill
 │   ├── package-plugin.py     # 构建 custom-plugin ZIP
 │   └── test.sh               # 可重复运行的测试套件
@@ -111,13 +113,30 @@ prompt.md  →  security-posture.md  →  lore.md  →  user.md  →  research �
 SHA-256 marker；hook 还包含每次运行的 nonce：
 
 ```xml
-<choirboy-delivery version="1.3.0" delivery="session-start"
+<choirboy-delivery version="1.4.0" delivery="session-start"
   context_sha256="..." nonce="..." />
 <choirboy-context>...</choirboy-context>
 ```
 
 生成的 skill 使用同一 wrapper 和 `delivery="skill"`。因此无需把模型的确认措辞
 当作投递证据。
+
+### 2.4. 项目 artifact lifecycle
+
+在规范 wrapper 之后，`SessionStart` 会追加独立的
+`choirboy-project-artifacts` 块。`artifact-generator.py` 读取完整 lore 与所有
+research Markdown 文件，只写 request 元数据并计算状态。状态为 `pending` 时，
+当前智能体必须用自己的 file tools 创建 `INDEX.md`，并为 `lore.md` 中每个
+`###` 项目写一份 dossier。脚本本身绝不生成 dossier 内容。
+
+`finalize` 校验精确链接、必需章节与来源引用，然后写入 SHA-256 manifest。
+manifest 缺失或过期时，`Stop` 通过 `decision: block` 将 bootstrap 一次性交还
+同一智能体。状态为 `ready` 后，新会话会收到 INDEX 路径，并须先读取相关
+dossier；发生冲突时始终以规范 lore/research 为准。
+
+Marketplace 状态位于 `${CLAUDE_PLUGIN_DATA}/project-artifacts`；手动安装默认
+使用插件的 `artifacts/`。可通过 `CHOIRBOY_ARTIFACTS_DIR` 覆盖路径，手动卸载
+不会删除这些文件。
 
 ---
 
@@ -197,10 +216,10 @@ Hermes 配置中的钩子超时——15 秒（由 install.sh 设置）。
 
 | 运行时 | 文件 | 机制 | 钩子格式 |
 |---|---|---|---|
-| Claude Code CLI / Desktop Code | marketplace 或 `~/.claude/settings.json` | `hooks.SessionStart` | claude |
+| Claude Code CLI / Desktop Code | marketplace 或 `~/.claude/settings.json` | `SessionStart` + `Stop` | claude / JSON |
 | Claude Chat | custom plugin skill | inline `load-context` | — |
 | Claude Cowork | custom plugin hook/skill | 可用时 hook，skill 回退 | claude / — |
-| Codex | `~/.codex/hooks.json` | `SessionStart` | claude |
+| Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | 全局 `chat.message` 插件 | plain → synthetic text part |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + 授权白名单 | hermes |
 | Kimi Code | `~/.kimi-code/config.toml` | `[[hooks]]` SessionStart | plain |
@@ -229,12 +248,15 @@ set 覆盖存活进程；持久化的 OpenCode 消息历史可避免 headless �
   把发布版本复制到 cache，并按清单版本更新。
 - **双模式投递。** 有 `SessionStart` 时自动使用 hook；其他 Claude 界面以内联
   skill 加载同一规范上下文。
+- **artifact 由智能体创作。** Lifecycle 代码只输出确定性 request、校验结果，
+  并用 SHA-256 跟踪 freshness。
 - **Session fixtures 按需读取。** 三种原生 transcript 示例进入分发包和文档，
   但不会注入每次对话。
 - **可观测执行。** Marketplace hook 只把技术元数据写入
   `${CLAUDE_PLUGIN_DATA}/latest-delivery.log`，不会记录 lore 本身。
 - **OpenCode 对每个持久化会话只投递一次。** 运行钩子前同时检查当前进程的
   set 与历史消息中的 synthetic parts。
-- **依赖极简。** `claude` 和 `plain` 格式只需要 Bash；`hermes` 还需要
-  `jq` 或 `python3` 解析 stdin。终端 `install.sh` 需要 `python3`。
+- **依赖极简。** `claude` 与 `plain` 投递可只依赖 Bash，但自动 artifact
+  lifecycle 和 `install.sh` 需要 `python3`；`hermes` 需要 `jq` 或 `python3`
+  解析 stdin。
 - **payload 没有被签名、运行时也不验证**——这不是 harness 的缺陷，恰恰是被演示的向量本身（见 [docs/mechanism.zh-CN.md](mechanism.zh-CN.md)）。

@@ -2,8 +2,8 @@
 # agent-plugin installer — multi-runtime.
 #
 # Registers the plugin's fixed context (prompt.md + lore.md + user.md +
-# research/) for automatic session delivery where supported, or prepares the
-# runtime's supported explicit workflow fallback.
+# research/) for automatic session delivery and prepares a persistent,
+# agent-authored project-artifact lifecycle.
 #
 # Usage:
 #   ./install.sh                      install into every detected runtime
@@ -16,8 +16,8 @@
 #   ./install.sh --settings PATH      Claude Code: explicit settings file
 #
 # Runtime targets:
-#   claude   ~/.claude/settings.json     SessionStart hook (Claude Code)
-#   codex    ~/.codex/hooks.json         SessionStart hook
+#   claude   ~/.claude/settings.json     SessionStart + Stop hooks (Claude Code)
+#   codex    ~/.codex/hooks.json         SessionStart + Stop hooks
 #   opencode ~/.config/opencode/plugins/agent-plugin.ts
 #                                         chat.message plugin (first message)
 #   hermes   ~/.hermes/config.yaml       pre_llm_call shell hook + consent allowlist
@@ -35,6 +35,8 @@ set -euo pipefail
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MARK="agent-plugin:vibe-lore"
 HOOK_SCRIPT="$PLUGIN_ROOT/hooks/session-start.sh"
+STOP_HOOK_SCRIPT="$PLUGIN_ROOT/hooks/artifact-stop.sh"
+ARTIFACT_GENERATOR="$PLUGIN_ROOT/scripts/artifact-generator.py"
 ALL_TARGETS="claude codex opencode hermes kimi gemini grok grokbot"
 
 UNINSTALL=0
@@ -65,7 +67,8 @@ while [ $# -gt 0 ]; do
 done
 
 command -v python3 >/dev/null 2>&1 || die "python3 is required"
-if [ "$UNINSTALL" = 0 ] && [ -f "$PLUGIN_ROOT/scripts/build-context.py" ]; then
+if [ "$UNINSTALL" = 0 ] && [ "$LIST_ONLY" = 0 ] \
+  && [ -f "$PLUGIN_ROOT/scripts/build-context.py" ]; then
   python3 "$PLUGIN_ROOT/scripts/build-context.py" >/dev/null
 fi
 
@@ -95,8 +98,10 @@ claude_settings_file() {
 
 target_installed() {
   case "$1" in
-    claude) grep -qF "session-start.sh" "$(claude_settings_file)" 2>/dev/null ;;
-    codex)  grep -qF "session-start.sh" "$HOME/.codex/hooks.json" 2>/dev/null ;;
+    claude) grep -qF "session-start.sh" "$(claude_settings_file)" 2>/dev/null \
+              && grep -qF "artifact-stop.sh" "$(claude_settings_file)" 2>/dev/null ;;
+    codex)  grep -qF "session-start.sh" "$HOME/.codex/hooks.json" 2>/dev/null \
+              && grep -qF "artifact-stop.sh" "$HOME/.codex/hooks.json" 2>/dev/null ;;
     opencode) grep -qF "$MARK" "$HOME/.config/opencode/plugins/agent-plugin.ts" 2>/dev/null ;;
     hermes) grep -qF "$MARK" "$HOME/.hermes/config.yaml" 2>/dev/null ;;
     kimi)   grep -qF "$MARK" "$HOME/.kimi-code/config.toml" 2>/dev/null ;;
@@ -151,6 +156,39 @@ block_remove() {
     echo "  no block in $file — skipped"
     return 0
   fi
+  if ! START="$start" END="$end" python3 - "$file" <<'PY'
+import os, sys
+
+path = sys.argv[1]
+start, end = os.environ["START"], os.environ["END"]
+lines = open(path, encoding="utf-8").read().splitlines()
+inside = False
+seen = 0
+for number, line in enumerate(lines, start=1):
+    has_start, has_end = start in line, end in line
+    if has_start and has_end:
+        print(f"both block markers occur on line {number}", file=sys.stderr)
+        raise SystemExit(2)
+    if has_start:
+        if inside:
+            print(f"nested START marker on line {number}", file=sys.stderr)
+            raise SystemExit(2)
+        inside = True
+        seen += 1
+    elif has_end:
+        if not inside:
+            print(f"END marker without START on line {number}", file=sys.stderr)
+            raise SystemExit(2)
+        inside = False
+if inside:
+    print("START marker has no matching END marker", file=sys.stderr)
+    raise SystemExit(2)
+if not seen:
+    raise SystemExit(2)
+PY
+  then
+    die "refusing unsafe block removal from $file; repair its markers first"
+  fi
   backup "$file"
   START="$start" END="$end" python3 - "$file" <<'PY'
 import os, sys
@@ -175,36 +213,55 @@ PY
   echo "  block removed from $file"
 }
 
-# json_hook FILE CMD install|uninstall DOTPATH [ARG] [TIMEOUT] — add/remove a
-# SessionStart command hook entry in a Claude-Code-shaped hooks JSON file.
-# ARG enables the shell-free exec form used by current Claude Code.
+# json_hook FILE CMD install|uninstall DOTPATH [ARG] [TIMEOUT]
+#           [CONTEXT_LIMIT] [SCRIPT_ID] — safely add/remove one command hook in
+# a Claude-Code-shaped hooks JSON file. ARG enables Claude's shell-free form;
+# CONTEXT_LIMIT prevents Codex from spilling a large SessionStart payload.
 json_hook() {
   HOOK_CMD="$2" MODE="$3" DOTPATH="$4" HOOK_ARG="${5-}" HOOK_TIMEOUT="${6-}" \
+  HOOK_CONTEXT_LIMIT="${7-}" HOOK_ID="${8-}" \
     python3 - "$1" <<'PY'
-import json, os, shutil, sys, time
+import json, os, shutil, sys, tempfile, time
 
 path = sys.argv[1]
 cmd, mode, dotpath = os.environ["HOOK_CMD"], os.environ["MODE"], os.environ["DOTPATH"]
 hook_arg = os.environ.get("HOOK_ARG") or None
 hook_timeout = int(os.environ["HOOK_TIMEOUT"]) if os.environ.get("HOOK_TIMEOUT") else None
+context_limit = int(os.environ["HOOK_CONTEXT_LIMIT"]) if os.environ.get("HOOK_CONTEXT_LIMIT") else None
+hook_id = os.environ.get("HOOK_ID")
+if not hook_id:
+    print("managed hook script id is required", file=sys.stderr)
+    raise SystemExit(2)
 
 try:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-except (OSError, ValueError):
+except FileNotFoundError:
     data = {}
+except (OSError, ValueError) as exc:
+    print(f"refusing to replace invalid JSON in {path}: {exc}", file=sys.stderr)
+    raise SystemExit(2)
+if not isinstance(data, dict):
+    print(f"refusing to replace non-object JSON in {path}", file=sys.stderr)
+    raise SystemExit(2)
 
 node = data
 keys = dotpath.split(".")
 for k in keys[:-1]:
-    if not isinstance(node.get(k), dict):
+    if k not in node:
         node[k] = {}
+    elif not isinstance(node[k], dict):
+        print(f"refusing to replace non-object JSON path: {'.'.join(keys[:-1])}", file=sys.stderr)
+        raise SystemExit(2)
     node = node[k]
 entries = node.get(keys[-1])
-if not isinstance(entries, list):
+if entries is None:
     entries = []
+elif not isinstance(entries, list):
+    print(f"refusing to replace non-array JSON path: {dotpath}", file=sys.stderr)
+    raise SystemExit(2)
 
-# A settings hook entry belongs to us if it runs our session-start.sh,
+# A settings hook entry belongs to us if it runs the selected managed script,
 # regardless of the absolute path (the plugin folder may move). This keeps the
 # manual installer idempotent across working-copy moves. Marketplace hooks are
 # resolved from the plugin cache and do not appear in this settings array.
@@ -212,7 +269,7 @@ def is_ours(entry):
     if not isinstance(entry, dict):
         return False
     return any(
-        isinstance(h, dict) and "session-start.sh" in (
+        isinstance(h, dict) and hook_id in (
             h.get("command", "") + " " + " ".join(str(a) for a in h.get("args", []))
         )
         for h in entry.get("hooks", [])
@@ -222,8 +279,9 @@ def has_exact(es):
     return any(
         isinstance(h, dict)
         and h.get("command") == cmd
-        and (hook_arg is None or h.get("args") == [hook_arg])
+        and ((hook_arg is None and "args" not in h) or h.get("args") == [hook_arg])
         and (hook_timeout is None or h.get("timeout") == hook_timeout)
+        and (context_limit is None or h.get("additionalContextLimit") == context_limit)
         for e in es if isinstance(e, dict)
         for h in e.get("hooks", [])
     )
@@ -248,6 +306,8 @@ if mode == "install":
             handler["args"] = [hook_arg]
         if hook_timeout is not None:
             handler["timeout"] = hook_timeout
+        if context_limit is not None:
+            handler["additionalContextLimit"] = context_limit
         entries.append({"hooks": [handler]})
 else:
     before = len(entries)
@@ -258,10 +318,22 @@ else:
 
 node[keys[-1]] = entries
 if os.path.exists(path):
-    shutil.copy2(path, "%s.bak.%s" % (path, time.strftime("%Y%m%d-%H%M%S")))
-with open(path, "w", encoding="utf-8") as f:
-    json.dump(data, f, ensure_ascii=False, indent=2)
-    f.write("\n")
+    suffix = "%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), time.time_ns())
+    shutil.copy2(path, "%s.bak.%s" % (path, suffix))
+directory = os.path.dirname(path) or "."
+descriptor, temporary = tempfile.mkstemp(prefix=".agent-plugin-hooks.", dir=directory)
+try:
+    with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(temporary, path)
+finally:
+    try:
+        os.unlink(temporary)
+    except FileNotFoundError:
+        pass
 print("changed")
 PY
 }
@@ -498,7 +570,7 @@ PY
 hermes_allowlist() {
   local allowlist_path="$HOME/.hermes/shell-hooks-allowlist.json"
   ALLOWLIST_PATH="$allowlist_path" ALLOW_CMD="$1" MODE="$2" python3 - <<'PY'
-import json, os
+import json, os, shutil, sys, tempfile, time
 
 path = os.environ["ALLOWLIST_PATH"]
 cmd, mode = os.environ["ALLOW_CMD"], os.environ["MODE"]
@@ -506,11 +578,20 @@ cmd, mode = os.environ["ALLOW_CMD"], os.environ["MODE"]
 try:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-except (OSError, ValueError):
+except FileNotFoundError:
     data = {}
+except (OSError, ValueError) as exc:
+    print(f"refusing to replace invalid Hermes allowlist {path}: {exc}", file=sys.stderr)
+    raise SystemExit(2)
+if not isinstance(data, dict):
+    print(f"refusing to replace non-object Hermes allowlist {path}", file=sys.stderr)
+    raise SystemExit(2)
 approvals = data.get("approvals")
-if not isinstance(approvals, list):
+if approvals is None:
     approvals = []
+elif not isinstance(approvals, list):
+    print(f"refusing to replace non-array approvals in {path}", file=sys.stderr)
+    raise SystemExit(2)
 
 def is_ours(approval):
     return (
@@ -530,10 +611,29 @@ else:
     approvals = [a for a in approvals if not is_ours(a)]
     status = "changed" if len(approvals) != before else "unchanged"
 
+if status == "unchanged":
+    print(status)
+    raise SystemExit(0)
+
 data["approvals"] = approvals
-with open(path, "w", encoding="utf-8") as f:
-    json.dump(data, f, ensure_ascii=False, indent=2)
-    f.write("\n")
+if os.path.exists(path):
+    suffix = "%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), time.time_ns())
+    shutil.copy2(path, "%s.bak.%s" % (path, suffix))
+directory = os.path.dirname(path) or "."
+os.makedirs(directory, exist_ok=True)
+descriptor, temporary = tempfile.mkstemp(prefix=".agent-plugin-allowlist.", dir=directory)
+try:
+    with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(temporary, path)
+finally:
+    try:
+        os.unlink(temporary)
+    except FileNotFoundError:
+        pass
 print(status)
 PY
 }
@@ -552,6 +652,12 @@ instruction_block() {
 - $PLUGIN_ROOT/user.md — профиль пользователя
 - $PLUGIN_ROOT/research/ — обоснования решений (читай по требованию)
 
+В начале сессии запусти
+\`python3 "$ARTIFACT_GENERATOR" session-context\` и выполни выданную инструкцию.
+Содержимое проектных dossiers создаёшь ты сам; lifecycle-скрипт только готовит
+request, проверяет файлы и фиксирует их свежесть. При статусе \`ready\` сначала
+прочитай \`artifacts/INDEX.md\` и dossier нужного домена.
+
 Не переоткрывай зафиксированные там решения без причины; если предлагаешь
 отступить — скажи, что изменилось со времени соответствующего документа.
 EOF
@@ -566,45 +672,66 @@ EOF
 # --- per-target install/uninstall -------------------------------------------
 
 do_claude() {
-  local file; file="$(claude_settings_file)"
+  local file status
+  file="$(claude_settings_file)"
   mkdir -p "$(dirname "$file")"
   [ -f "$file" ] || printf '{}\n' > "$file"
   if [ "$UNINSTALL" = 1 ]; then
-    echo "claude: removing SessionStart hook from $file"
-    [ "$(json_hook "$file" bash uninstall hooks.SessionStart "$HOOK_SCRIPT" 15)" = "changed" ] \
-      && echo "  hook removed" || echo "  hook was not registered"
+    echo "claude: removing SessionStart/Stop hooks from $file"
+    if ! status="$(json_hook "$file" bash uninstall hooks.SessionStart "$HOOK_SCRIPT" 15 "" session-start.sh)"; then
+      die "claude: refusing to edit invalid hook settings in $file"
+    fi
+    [ "$status" = "changed" ] && echo "  SessionStart removed" || echo "  SessionStart was not registered"
+    if ! status="$(json_hook "$file" bash uninstall hooks.Stop "$STOP_HOOK_SCRIPT" 15 "" artifact-stop.sh)"; then
+      die "claude: refusing to edit invalid hook settings in $file"
+    fi
+    [ "$status" = "changed" ] && echo "  Stop removed" || echo "  Stop was not registered"
   else
-    echo "claude: installing SessionStart hook into $file"
+    echo "claude: installing SessionStart/Stop hooks into $file"
     if grep -qF 'choirboy-prompt@choirboy-prompt' "$file" 2>/dev/null; then
-      echo "  warning: marketplace plugin appears enabled in $file; a manual hook would inject the context twice" >&2
+      echo "  warning: marketplace plugin appears enabled in $file; manual hooks would run twice" >&2
     fi
-    if [ "$(json_hook "$file" bash install hooks.SessionStart "$HOOK_SCRIPT" 15)" = "unchanged" ]; then
-      echo "  hook already registered — skipped"
-    else
-      echo "  hook installed (exec: bash $HOOK_SCRIPT)"
+    if ! status="$(json_hook "$file" bash install hooks.SessionStart "$HOOK_SCRIPT" 15 "" session-start.sh)"; then
+      die "claude: refusing to edit invalid hook settings in $file"
     fi
+    [ "$status" = "changed" ] && echo "  SessionStart installed" || echo "  SessionStart already registered — skipped"
+    if ! status="$(json_hook "$file" bash install hooks.Stop "$STOP_HOOK_SCRIPT" 15 "" artifact-stop.sh)"; then
+      die "claude: refusing to edit invalid hook settings in $file"
+    fi
+    [ "$status" = "changed" ] && echo "  Stop installed" || echo "  Stop already registered — skipped"
   fi
 }
 
 do_codex() {
   local file="$HOME/.codex/hooks.json"
   local command="bash \"$HOOK_SCRIPT\""
+  local stop_command="bash \"$STOP_HOOK_SCRIPT\""
+  local status
   mkdir -p "$(dirname "$file")"
   [ -f "$file" ] || printf '{}\n' > "$file"
   if [ "$UNINSTALL" = 1 ]; then
-    echo "codex: removing SessionStart hook from $file"
-    [ "$(json_hook "$file" "$command" uninstall hooks.SessionStart)" = "changed" ] \
-      && echo "  hook removed" || echo "  hook was not registered"
+    echo "codex: removing SessionStart/Stop hooks from $file"
+    if ! status="$(json_hook "$file" "$command" uninstall hooks.SessionStart "" 15 20000 session-start.sh)"; then
+      die "codex: refusing to edit invalid hook settings in $file"
+    fi
+    [ "$status" = "changed" ] && echo "  SessionStart removed" || echo "  SessionStart was not registered"
+    if ! status="$(json_hook "$file" "$stop_command" uninstall hooks.Stop "" 15 "" artifact-stop.sh)"; then
+      die "codex: refusing to edit invalid hook settings in $file"
+    fi
+    [ "$status" = "changed" ] && echo "  Stop removed" || echo "  Stop was not registered"
   else
-    echo "codex: installing SessionStart hook into $file"
-    if ! grep -qE '^[[:space:]]*hooks[[:space:]]*=[[:space:]]*true' "$HOME/.codex/config.toml" 2>/dev/null; then
-      echo "  warning: codex hooks look disabled — set hooks = true under [features] in ~/.codex/config.toml" >&2
+    echo "codex: installing SessionStart/Stop hooks into $file"
+    if grep -qE '^[[:space:]]*hooks[[:space:]]*=[[:space:]]*false' "$HOME/.codex/config.toml" 2>/dev/null; then
+      echo "  warning: codex hooks are explicitly disabled in ~/.codex/config.toml" >&2
     fi
-    if [ "$(json_hook "$file" "$command" install hooks.SessionStart)" = "unchanged" ]; then
-      echo "  hook already registered — skipped"
-    else
-      echo "  hook installed ($command)"
+    if ! status="$(json_hook "$file" "$command" install hooks.SessionStart "" 15 20000 session-start.sh)"; then
+      die "codex: refusing to edit invalid hook settings in $file"
     fi
+    [ "$status" = "changed" ] && echo "  SessionStart installed (additionalContextLimit=20000)" || echo "  SessionStart already registered — skipped"
+    if ! status="$(json_hook "$file" "$stop_command" install hooks.Stop "" 15 "" artifact-stop.sh)"; then
+      die "codex: refusing to edit invalid hook settings in $file"
+    fi
+    [ "$status" = "changed" ] && echo "  Stop installed" || echo "  Stop already registered — skipped"
   fi
 }
 
@@ -782,6 +909,14 @@ fi
 [ -n "$TARGETS" ] || [ ${#INSTRUCTIONS_FILES[@]} -gt 0 ] \
   || die "no agent runtimes detected; use --target or --instructions"
 
+if [ "$UNINSTALL" = 0 ]; then
+  [ -f "$ARTIFACT_GENERATOR" ] || die "artifact lifecycle is missing: $ARTIFACT_GENERATOR"
+  if ! artifact_status="$(python3 "$ARTIFACT_GENERATOR" prepare)"; then
+    die "could not prepare the agent-authored artifact lifecycle"
+  fi
+  echo "agent-plugin: artifact lifecycle prepared — $artifact_status"
+fi
+
 for t in $TARGETS; do
   case "$t" in
     claude|codex|opencode|hermes|kimi|gemini|grok|grokbot) "do_$t" ;;
@@ -800,5 +935,5 @@ done
 if [ "$UNINSTALL" = 1 ]; then
   echo "agent-plugin: uninstall complete"
 else
-  echo "agent-plugin: install complete — target registrations updated; follow any runtime-specific next step above"
+  echo "agent-plugin: install complete — the next agent session will author or load project artifacts"
 fi

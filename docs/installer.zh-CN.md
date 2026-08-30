@@ -7,7 +7,7 @@
 ## 0. 安装 Claude plugin
 
 本仓库通过 `.claude-plugin/marketplace.json` 充当带版本的 Claude
-marketplace。安装包同时包含 Claude Code `SessionStart` 钩子和可在
+marketplace。安装包同时包含 Claude Code `SessionStart`、`Stop` 钩子和可在
 Chat/Cowork 中使用的 skills。
 
 ### 0.1. Claude Code CLI
@@ -67,13 +67,15 @@ shell 元字符不会被重新分词。15 秒超时避免卡住会话启动。
 
 | 模式 | 作用 |
 |---|---|
-| install（默认） | 在所选运行时中注册钩子/块 |
-| `--uninstall` | 精确删除安装器添加的内容 |
-| `--list` | 显示运行时状态：`absent` / `detected` / `installed` |
+| install（默认） | 注册钩子/块并准备 artifact request |
+| `--uninstall` | 删除注册，但保留智能体创建的 artifacts |
+| `--list` | 只读显示：`absent` / `detected` / `installed` |
 
 `install.sh` 需要 `python3` 进行 JSON 操作。钩子的 `claude` 和 `plain`
 格式只依赖 Bash，不需要 `jq`/`python3`；`hermes` 格式需要其中一个 JSON
-解析器。安装器在注册 hooks 前也会从规范 lore 文件重新生成 load-context skill。
+解析器。自动 artifact lifecycle 需要 `python3`：安装阶段只准备元数据，下一次
+会话由当前智能体编写 dossiers 并通过 validator。手动安装默认使用
+`artifacts/`，可由 `CHOIRBOY_ARTIFACTS_DIR` 覆盖。
 
 ---
 
@@ -101,8 +103,8 @@ gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
 
 | 目标 | 文件 | 机制 |
 |---|---|---|
-| claude | `~/.claude/settings.json`（或 `--settings`/`--project`） | JSON 钩子 `hooks.SessionStart` |
-| codex | `~/.codex/hooks.json` | JSON 钩子 `SessionStart` |
+| claude | `~/.claude/settings.json`（或 `--settings`/`--project`） | JSON 钩子 `SessionStart` + `Stop` |
+| codex | `~/.codex/hooks.json` | JSON 钩子 `SessionStart` + `Stop` |
 | opencode | `~/.config/opencode/plugins/agent-plugin.ts` | 全局 `chat.message` 插件 |
 | hermes | `~/.hermes/config.yaml` | 带标记的 `hooks.pre_llm_call` 块 + 授权白名单 |
 | kimi | `~/.kimi-code/config.toml` | 带标记的 `[[hooks]]` 块 |
@@ -125,7 +127,7 @@ gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
 ### 3.2. 幂等性
 
 - `block_add` 检查 START 标记：已存在 → `already present — skipped`，不会重复。
-- `json_hook` 按脚本名（命令中的 `session-start.sh`）匹配条目，而不是绝对路径：如果插件文件夹移动了，过期的注册会被替换，而不是叠加。
+- `json_hook` 按脚本名（命令中的 `session-start.sh` 或 `artifact-stop.sh`）匹配条目，而不是绝对路径：如果插件文件夹移动了，过期的注册会被替换，而不是叠加。
 - Marketplace 钩子位于 plugin cache，不会写入 `settings.json` 的钩子数组。
   因此 marketplace 和手动 Claude 钩子是二选一的安装路径，不能同时启用。
 - OpenCode 目标拥有一个完整的带标记插件文件。内容相同时重复安装不做
@@ -179,19 +181,20 @@ backup() {
 
 ```python
 def is_ours(entry):
-    return any("session-start.sh" in
+    return any(hook_id in
                (h.get("command", "") + " " + " ".join(h.get("args", [])))
                for h in entry.get("hooks", []))
 ```
 
 - install：删除过期注册并添加精确 handler。Claude 使用 `command: bash`、一个
-  `args` 路径和 `timeout: 15`；Codex 保留带引用路径的字符串命令。
+  `args` 路径和 `timeout: 15`；Codex 保留带引用路径的字符串命令，并为完整
+  启动 payload 设置 `additionalContextLimit: 20000`。
 - uninstall：删除所有 `is_ours()` 条目。
-- 实际变化时保存备份。
+- 无效 JSON 不会被替换；实际变化会先备份，再原子写入。
 
 ### 5.2. `hermes_allowlist` — 细节
 
-Hermes 要求对 shell 钩子显式同意：`~/.hermes/shell-hooks-allowlist.json` 中的 `(event, command)` 对。该函数添加/删除精确对 `("pre_llm_call", "<session-start.sh> --format hermes")`。
+Hermes 要求对 shell 钩子显式同意：`~/.hermes/shell-hooks-allowlist.json` 中的 `(event, command)` 对。该函数添加/删除精确对 `("pre_llm_call", "<session-start.sh> --format hermes")`，拒绝损坏的 JSON，并原子写入有效变更。
 
 ### 5.3. `block_add` / `block_remove` — 细节
 

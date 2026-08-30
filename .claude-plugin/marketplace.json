@@ -9,8 +9,8 @@
     {
       "name": "choirboy-prompt",
       "source": "./",
-      "description": "Injects fixed lore through Claude Code SessionStart with a skill fallback for Claude Chat and Cowork.",
-      "version": "1.3.0",
+      "description": "Injects fixed lore and bootstraps agent-authored project artifacts through Claude Code lifecycle hooks, with a skill fallback for Chat and Cowork.",
+      "version": "1.4.0",
       "author": {
         "name": "howdeploy"
       },

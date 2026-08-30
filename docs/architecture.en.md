@@ -39,13 +39,15 @@ agent-plugin/
 │   └── kimi/session_*/{state.json,agents/main/wire.jsonl}
 ├── hooks/
 │   ├── session-start.sh      # payload assembly + claude / plain / hermes formats
-│   └── hooks.json            # SessionStart declaration for the Claude Code marketplace
+│   ├── artifact-stop.sh      # return unfinished bootstrap to the current agent
+│   └── hooks.json            # SessionStart + Stop for the Claude Code marketplace
 ├── context/
 │   └── research-index.md     # canonical research pointer shared by hook and skill
 ├── skills/
 │   ├── load-context/SKILL.md # generated inline fallback for Chat/Cowork/Code
 │   └── diagnose/SKILL.md     # evidence-based delivery diagnosis
 ├── scripts/
+│   ├── artifact-generator.py # artifact request, validation, and freshness manifest
 │   ├── build-context.py      # regenerate the inline skill from canonical sources
 │   ├── package-plugin.py     # build a custom-plugin ZIP
 │   └── test.sh               # repeatable validation suite
@@ -123,13 +125,32 @@ wrapped in a marker containing version, delivery path, and SHA-256; hook deliver
 also carries a per-run nonce:
 
 ```xml
-<choirboy-delivery version="1.3.0" delivery="session-start"
+<choirboy-delivery version="1.4.0" delivery="session-start"
   context_sha256="..." nonce="..." />
 <choirboy-context>...</choirboy-context>
 ```
 
 The generated skill uses the same wrapper with `delivery="skill"`. This proves
 delivery without treating an assistant acknowledgement as evidence.
+
+### 2.4. Project-artifact lifecycle
+
+After the canonical wrapper, `SessionStart` appends a separate
+`choirboy-project-artifacts` block. `artifact-generator.py` reads the complete
+lore and every research Markdown file, writes only request metadata, and
+computes lifecycle status. While status is `pending`, the current agent must use
+its own file tools to author `INDEX.md` and one dossier for every `###` project
+in `lore.md`. The script never writes dossier content.
+
+`finalize` validates exact links, required sections, and source citations, then
+records a SHA-256 manifest. While that manifest is missing or stale, `Stop`
+returns the bootstrap to the same agent once with `decision: block`. At `ready`,
+future sessions receive the INDEX path and must read the relevant dossier first;
+canonical lore/research always overrides a derived summary.
+
+Marketplace state lives under `${CLAUDE_PLUGIN_DATA}/project-artifacts`; manual
+installs default to the plugin's `artifacts/` directory. Set
+`CHOIRBOY_ARTIFACTS_DIR` to override it. Manual uninstall preserves these files.
 
 ---
 
@@ -216,10 +237,10 @@ Hook timeout in the Hermes config — 15 seconds (set by install.sh).
 
 | Runtime | File | Mechanism | Hook format |
 |---|---|---|---|
-| Claude Code CLI / Desktop Code | marketplace or `~/.claude/settings.json` | `hooks.SessionStart` | claude |
+| Claude Code CLI / Desktop Code | marketplace or `~/.claude/settings.json` | `SessionStart` + `Stop` | claude / JSON |
 | Claude Chat | custom plugin skill | inline `load-context` | — |
 | Claude Cowork | custom plugin hook/skill | hook when available, skill fallback | claude / — |
-| Codex | `~/.codex/hooks.json` | `SessionStart` | claude |
+| Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | global `chat.message` plugin | plain → synthetic text part |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent allowlist | hermes |
 | Kimi Code | `~/.kimi-code/config.toml` | `[[hooks]]` SessionStart | plain |
@@ -255,15 +276,17 @@ silent no-op so chat remains fail-open.
   its cache and updates it by manifest version.
 - **Dual-mode delivery.** The hook is automatic where `SessionStart` exists;
   the inline skill carries the same canonical context where it does not.
+- **The agent authors artifacts.** Lifecycle code only emits a deterministic
+  request, validates the result, and tracks SHA-256 freshness.
 - **Session fixtures stay on demand.** The three native transcript examples are
   packaged and documented, but never injected into every conversation.
 - **Observable execution.** Marketplace hooks write only non-sensitive delivery
   metadata to `${CLAUDE_PLUGIN_DATA}/latest-delivery.log`; lore is never logged.
 - **OpenCode delivery is once per persisted session.** Both the live-process set
   and prior synthetic message history are checked before running the hook.
-- **Minimal dependencies.** The `claude` and `plain` formats require only Bash;
-  `hermes` additionally needs `jq` or `python3` to parse stdin. The terminal
-  `install.sh` needs `python3`.
+- **Minimal dependencies.** `claude` and `plain` delivery can run on Bash alone,
+  but the automatic artifact lifecycle and `install.sh` require `python3`;
+  `hermes` needs `jq` or `python3` to parse stdin.
 - **The payload is not signed and not verified** by runtimes — this is not a
   harness bug, it is exactly the demonstrated vector (see
   [docs/mechanism.en.md](mechanism.en.md)).

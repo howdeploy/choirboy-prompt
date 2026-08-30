@@ -39,13 +39,15 @@ agent-plugin/
 │   └── kimi/session_*/{state.json,agents/main/wire.jsonl}
 ├── hooks/
 │   ├── session-start.sh      # сборка пейлоада + форматы claude / plain / hermes
-│   └── hooks.json            # декларация SessionStart для маркетплейса Claude Code
+│   ├── artifact-stop.sh      # возврат незавершённого bootstrap текущему агенту
+│   └── hooks.json            # SessionStart + Stop для маркетплейса Claude Code
 ├── context/
 │   └── research-index.md     # общий канонический указатель research
 ├── skills/
 │   ├── load-context/SKILL.md # сгенерированный inline fallback Chat/Cowork/Code
 │   └── diagnose/SKILL.md     # доказательная диагностика доставки
 ├── scripts/
+│   ├── artifact-generator.py # request, проверка и freshness manifest артефактов
 │   ├── build-context.py      # сборка skill из канонических источников
 │   ├── package-plugin.py     # сборка custom-plugin ZIP
 │   └── test.sh               # повторяемый тестовый сьют
@@ -122,13 +124,32 @@ markdown). В конце добавляется канонический `contex
 маркером с версией, способом и SHA-256; hook также добавляет nonce запуска:
 
 ```xml
-<choirboy-delivery version="1.3.0" delivery="session-start"
+<choirboy-delivery version="1.4.0" delivery="session-start"
   context_sha256="..." nonce="..." />
 <choirboy-context>...</choirboy-context>
 ```
 
 Сгенерированный skill использует тот же wrapper с `delivery="skill"`. Так
 доставка доказывается без доверия к фразе модели «я прочитал контекст».
+
+### 2.4. Lifecycle проектных артефактов
+
+После канонического wrapper `SessionStart` добавляет отдельный блок
+`choirboy-project-artifacts`. `artifact-generator.py` читает весь lore и все
+Markdown-файлы research, создаёт только служебный request и определяет статус.
+При `pending` текущий агент получает обязательную задачу своими file tools
+написать `INDEX.md` и по одному dossier на каждый `###`-проект из `lore.md`.
+Скрипт не пишет содержимое dossiers.
+
+Команда `finalize` проверяет точные ссылки, обязательные разделы и источники,
+после чего записывает manifest с SHA-256. Пока manifest отсутствует или устарел,
+`Stop` один раз возвращает bootstrap тому же агенту через `decision: block`.
+При `ready` следующие сессии получают путь к INDEX и обязаны прочитать dossier
+нужного домена. Канонические lore/research всегда сильнее производной сводки.
+
+Marketplace хранит состояние в `${CLAUDE_PLUGIN_DATA}/project-artifacts`, ручная
+установка — в `artifacts/` плагина. Путь можно переопределить через
+`CHOIRBOY_ARTIFACTS_DIR`; ручной uninstall эти файлы не удаляет.
 
 ---
 
@@ -216,10 +237,10 @@ bash hooks/session-start.sh --format plain | head -40
 
 | Рантайм | Файл | Механизм | Формат хука |
 |---|---|---|---|
-| Claude Code CLI / Desktop Code | marketplace или `~/.claude/settings.json` | `hooks.SessionStart` | claude |
+| Claude Code CLI / Desktop Code | marketplace или `~/.claude/settings.json` | `SessionStart` + `Stop` | claude / JSON |
 | Claude Chat | custom plugin skill | inline `load-context` | — |
 | Claude Cowork | custom plugin hook/skill | hook где доступен, skill fallback | claude / — |
-| Codex | `~/.codex/hooks.json` | `SessionStart` | claude |
+| Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | глобальный `chat.message`-плагин | plain → synthetic text-part |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent-allowlist | hermes |
 | Kimi Code | `~/.kimi-code/config.toml` | `[[hooks]]` SessionStart | plain |
@@ -255,14 +276,16 @@ fallback, если его runtime теряет `SessionStart`.
 - **Dual-mode доставка.** Hook работает автоматически там, где есть
   `SessionStart`; inline skill несёт тот же канонический контекст в остальных
   поверхностях Claude.
+- **Артефакты пишет агент, не скрипт.** Lifecycle только выдаёт детерминированный
+  request, валидирует результат и отслеживает свежесть по SHA-256.
 - **Session fixtures читаются по требованию.** Три примера нативных transcripts
   входят в пакет и документацию, но не инъектятся в каждую беседу.
 - **Наблюдаемое исполнение.** Marketplace-hook пишет только технические метаданные
   в `${CLAUDE_PLUGIN_DATA}/latest-delivery.log`; сам лор не логируется.
 - **OpenCode-доставка — один раз на сохранённую сессию.** Перед запуском хука
   проверяются и set живого процесса, и предыдущие synthetic parts в истории.
-- **Зависимости минимальны.** Форматы `claude` и `plain` требуют только Bash;
-  `hermes` дополнительно требует `jq` или `python3` для разбора stdin.
-  Терминальному `install.sh` нужен `python3`.
+- **Зависимости минимальны.** Доставка `claude` и `plain` может работать только
+  на Bash, но автоматический lifecycle артефактов и `install.sh` требуют
+  `python3`; `hermes` требует `jq` или `python3` для разбора stdin.
 - **Пейлоад не подписан и не верифицируется** рантаймами — это не баг
   харнесса, это и есть демонстрируемый вектор (см. `docs/mechanism.md`).

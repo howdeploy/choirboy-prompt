@@ -10,7 +10,7 @@ document is "how it gets installed and removed".
 
 The repository is a versioned Claude marketplace through
 `.claude-plugin/marketplace.json`. The installed package contains both the
-Claude Code `SessionStart` hook and skills that also work in Chat and Cowork.
+Claude Code `SessionStart` and `Stop` hooks plus skills for Chat and Cowork.
 
 ### 0.1. Claude Code CLI
 
@@ -73,14 +73,16 @@ Three modes:
 
 | Mode | What it does |
 |---|---|
-| install (default) | Registers a hook/block in each selected runtime |
-| `--uninstall` | Removes exactly what the installer added |
-| `--list` | Shows runtime status: `absent` / `detected` / `installed` |
+| install (default) | Registers hooks/blocks and prepares the artifact request |
+| `--uninstall` | Removes registrations but preserves agent-authored artifacts |
+| `--list` | Read-only status: `absent` / `detected` / `installed` |
 
 `install.sh` requires `python3` for JSON operations. The hook's `claude` and
 `plain` formats run on Bash without `jq`/`python3`; the `hermes` format requires
-one of those two JSON parsers. The installer also regenerates the load-context
-skill from the canonical lore files before registering hooks.
+one of those two JSON parsers. The automatic artifact lifecycle requires
+`python3`: installation prepares metadata only, while the next session asks the
+current agent to write dossiers and pass the validator. Manual installs default
+to `artifacts/`; `CHOIRBOY_ARTIFACTS_DIR` overrides that location.
 
 ---
 
@@ -108,8 +110,8 @@ Each target writes to its own file:
 
 | Target | File | Mechanism |
 |---|---|---|
-| claude | `~/.claude/settings.json` (or `--settings`/`--project`) | JSON hook `hooks.SessionStart` |
-| codex | `~/.codex/hooks.json` | JSON hook `SessionStart` |
+| claude | `~/.claude/settings.json` (or `--settings`/`--project`) | JSON hooks `SessionStart` + `Stop` |
+| codex | `~/.codex/hooks.json` | JSON hooks `SessionStart` + `Stop` |
 | opencode | `~/.config/opencode/plugins/agent-plugin.ts` | global `chat.message` plugin |
 | hermes | `~/.hermes/config.yaml` | marked `hooks.pre_llm_call` block + consent allowlist |
 | kimi | `~/.kimi-code/config.toml` | marked `[[hooks]]` block |
@@ -135,7 +137,8 @@ The marker is both the ownership identifier and the block boundary for removal.
 
 - `block_add` checks the START marker: already present → `already present — skipped`,
   duplicates nothing.
-- `json_hook` matches entries by script name (`session-start.sh` in the
+- `json_hook` matches entries by script name (`session-start.sh` or
+  `artifact-stop.sh` in the
   command), not by absolute path: if the plugin folder moved, the stale
   registration is replaced, not duplicated.
 - A marketplace hook lives in the plugin cache and is not written into the
@@ -199,22 +202,25 @@ key — **matching by script name**, not by path:
 
 ```python
 def is_ours(entry):
-    return any("session-start.sh" in
+    return any(hook_id in
                (h.get("command", "") + " " + " ".join(h.get("args", [])))
                for h in entry.get("hooks", []))
 ```
 
 - install: removes stale registrations of our script (folder moved), adds the
   exact handler if absent. Claude receives `command: bash`, one `args` path, and
-  `timeout: 15`; Codex keeps its quoted command string.
+  `timeout: 15`; Codex keeps its quoted command and sets
+  `additionalContextLimit: 20000` for the complete startup payload.
 - uninstall: removes all `is_ours()` entries.
-- Saves a backup on real change.
+- Invalid JSON is never replaced; real changes are backed up and written
+  atomically.
 
 ### 5.2. `hermes_allowlist` — details
 
 Hermes requires explicit consent for a shell hook: the `(event, command)` pair
 in `~/.hermes/shell-hooks-allowlist.json`. The function adds/removes the exact
-pair `("pre_llm_call", "<session-start.sh> --format hermes")`.
+pair `("pre_llm_call", "<session-start.sh> --format hermes")`, refuses malformed
+JSON, and writes valid changes atomically.
 
 ### 5.3. `block_add` / `block_remove` — details
 

@@ -6,6 +6,7 @@ cd "$ROOT"
 VERSION="$(python3 -c 'import json; print(json.load(open(".claude-plugin/plugin.json", encoding="utf-8"))["version"])')"
 
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/choirboy-test.XXXXXX")"
+export CHOIRBOY_ARTIFACTS_DIR="$TEST_ROOT/project-artifacts"
 cleanup() {
   if [ "${CHOIRBOY_TEST_KEEP_TMP:-0}" = 1 ]; then
     printf 'Test artifacts preserved at %s\n' "$TEST_ROOT"
@@ -30,6 +31,17 @@ install_test_command() {
 python3 scripts/build-context.py --check >/dev/null
 pass "generated context skill"
 
+list_copy="$TEST_ROOT/list-copy"
+mkdir -p "$list_copy/scripts" "$list_copy/skills/load-context" "$TEST_ROOT/list-home"
+cp install.sh "$list_copy/"
+cp scripts/build-context.py "$list_copy/scripts/"
+printf 'stale sentinel\n' > "$list_copy/skills/load-context/SKILL.md"
+HOME="$TEST_ROOT/list-home" CHOIRBOY_ARTIFACTS_DIR="$TEST_ROOT/list-artifacts" \
+  bash "$list_copy/install.sh" --list >/dev/null
+grep -qxF 'stale sentinel' "$list_copy/skills/load-context/SKILL.md"
+test ! -e "$TEST_ROOT/list-artifacts"
+pass "list mode is read-only"
+
 python3 - <<'PY'
 import json
 from pathlib import Path
@@ -39,16 +51,123 @@ market = json.loads(Path(".claude-plugin/marketplace.json").read_text(encoding="
 hooks = json.loads(Path("hooks/hooks.json").read_text(encoding="utf-8"))
 entry = market["plugins"][0]
 handler = hooks["hooks"]["SessionStart"][0]["hooks"][0]
+stop_handler = hooks["hooks"]["Stop"][0]["hooks"][0]
 assert plugin["name"] == entry["name"] == "choirboy-prompt"
 assert plugin["version"] == entry["version"]
 assert handler["command"] == "bash"
 assert handler["args"] == ["${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"]
 assert handler["timeout"] == 15
+assert stop_handler == {
+    "type": "command",
+    "command": "bash",
+    "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/artifact-stop.sh"],
+    "timeout": 15,
+}
 PY
-pass "manifests and exec-form hook"
+pass "manifests and lifecycle hooks"
 
 claude plugin validate . >/dev/null
 pass "Claude plugin validator"
+
+python3 scripts/artifact-generator.py prepare --json > "$TEST_ROOT/artifact-pending.json"
+python3 scripts/artifact-generator.py session-context > "$TEST_ROOT/artifact-pending.txt"
+python3 - "$CHOIRBOY_ARTIFACTS_DIR" "$TEST_ROOT/artifact-pending.json" <<'PY'
+import json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+status = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+request = json.loads((root / ".artifact-request.json").read_text(encoding="utf-8"))
+assert status["status"] == "pending"
+assert status["project_count"] == len(request["projects"]) == 11
+assert not (root / "INDEX.md").exists()
+assert not (root / ".artifact-manifest.json").exists()
+assert not any(path.is_file() for path in (root / "projects").iterdir())
+assert request["projects"][0]["title"] == "18+ контент и генерация"
+assert request["projects"][-1]["title"] == "Читы для соло-игр"
+PY
+grep -q '<choirboy-project-artifacts status="pending"' "$TEST_ROOT/artifact-pending.txt"
+grep -q 'Выполни его сам через доступные' "$TEST_ROOT/artifact-pending.txt"
+pass "artifact prepare creates request metadata only"
+
+printf '{}\n' | bash hooks/artifact-stop.sh > "$TEST_ROOT/artifact-stop-pending.json"
+printf '{"stop_hook_active":true}\n' \
+  | bash hooks/artifact-stop.sh > "$TEST_ROOT/artifact-stop-active.json"
+printf 'malformed\n' | bash hooks/artifact-stop.sh > "$TEST_ROOT/artifact-stop-malformed.json"
+python3 - "$TEST_ROOT/artifact-stop-pending.json" \
+  "$TEST_ROOT/artifact-stop-active.json" "$TEST_ROOT/artifact-stop-malformed.json" <<'PY'
+import json, sys
+from pathlib import Path
+
+pending, active, malformed = [
+    json.loads(Path(path).read_text(encoding="utf-8")) for path in sys.argv[1:]
+]
+assert pending["decision"] == "block"
+assert "незавершённый bootstrap" in pending["reason"]
+assert active == malformed == {}
+PY
+pass "Stop returns unfinished bootstrap to the same agent once"
+
+# These temporary files stand in for file-tool writes by the runtime agent.
+# Production lifecycle code is forbidden from synthesizing dossier content.
+python3 - "$CHOIRBOY_ARTIFACTS_DIR" <<'PY'
+import json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+request = json.loads((root / ".artifact-request.json").read_text(encoding="utf-8"))
+index = ["# Проектные артефакты", ""]
+for project in request["projects"]:
+    index.append(f"- [{project['title']}]({project['artifact']})")
+    document = [f"# {project['title']}", ""]
+    for section in request["required_sections"]:
+        document.extend([f"## {section}", ""])
+        if section == "Источники":
+            for source in ["lore.md", *project["research"]]:
+                document.append(f"- `{source}`")
+            document.append("- Канонический набор источников проверен агентом.")
+        else:
+            document.append("Зафиксировано runtime-agent по каноническим источникам проекта.")
+        document.append("")
+    (root / project["artifact"]).write_text("\n".join(document), encoding="utf-8")
+(root / "INDEX.md").write_text("\n".join(index) + "\n", encoding="utf-8")
+PY
+printf '# unexpected dossier\n' > "$CHOIRBOY_ARTIFACTS_DIR/projects/unexpected.md"
+if python3 scripts/artifact-generator.py finalize >/dev/null 2>&1; then
+  echo "artifact validator accepted an extra dossier" >&2
+  exit 1
+fi
+mv "$CHOIRBOY_ARTIFACTS_DIR/projects/unexpected.md" "$TEST_ROOT/unexpected.fixture"
+python3 scripts/artifact-generator.py finalize --json > "$TEST_ROOT/artifact-ready.json"
+python3 scripts/artifact-generator.py session-context > "$TEST_ROOT/artifact-ready.txt"
+python3 - "$CHOIRBOY_ARTIFACTS_DIR" "$TEST_ROOT/artifact-ready.json" <<'PY'
+import json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+status = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+manifest = json.loads((root / ".artifact-manifest.json").read_text(encoding="utf-8"))
+assert status["status"] == "ready"
+assert manifest["content_author"] == "runtime-agent"
+assert len(manifest["projects"]) == 11
+PY
+grep -q '<choirboy-project-artifacts status="ready"' "$TEST_ROOT/artifact-ready.txt"
+grep -q 'сначала прочитай INDEX' "$TEST_ROOT/artifact-ready.txt"
+pass "agent-authored artifacts finalize and become runtime memory"
+
+first_artifact="$(python3 - "$CHOIRBOY_ARTIFACTS_DIR" <<'PY'
+import json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+request = json.loads((root / ".artifact-request.json").read_text(encoding="utf-8"))
+print(root / request["projects"][0]["artifact"])
+PY
+)"
+printf '\n<!-- freshness drift -->\n' >> "$first_artifact"
+test "$(python3 scripts/artifact-generator.py status)" = pending
+python3 scripts/artifact-generator.py finalize >/dev/null
+test "$(python3 scripts/artifact-generator.py status)" = ready
+pass "artifact hash drift invalidates freshness"
 
 market_config="$TEST_ROOT/claude-config"
 CLAUDE_CONFIG_DIR="$market_config" claude plugin marketplace add "$ROOT" >/dev/null
@@ -65,6 +184,8 @@ assert plugin["version"] == sys.argv[2]
 assert plugin["enabled"] is True
 install = Path(plugin["installPath"])
 assert (install / "hooks/hooks.json").is_file()
+assert (install / "hooks/artifact-stop.sh").is_file()
+assert (install / "scripts/artifact-generator.py").is_file()
 assert (install / "skills/load-context/SKILL.md").is_file()
 assert (install / "skills/diagnose/SKILL.md").is_file()
 assert (install / "sessions/README.md").is_file()
@@ -86,6 +207,7 @@ hook_marker = re.search(rf'<choirboy-delivery version="{version}" delivery="sess
 skill_marker = re.search(rf'<choirboy-delivery version="{version}" delivery="skill" context_sha256="([0-9a-f]{{64}})" />', Path("skills/load-context/SKILL.md").read_text(encoding="utf-8"))
 assert hook_marker and skill_marker and hook_marker.group(1) == skill_marker.group(1)
 assert "<choirboy-context>" in context and "</choirboy-context>" in context
+assert '<choirboy-project-artifacts status="ready"' in context
 assert "# Prompt" in context and "## Research — обоснования решений" in context
 PY
 test -s "$TEST_ROOT/plugin-data/latest-delivery.log"
@@ -184,18 +306,97 @@ import json, sys
 from pathlib import Path
 
 doc = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-entries = doc["hooks"]["SessionStart"]
-assert len(entries) == 1
-handler = entries[0]["hooks"][0]
-assert handler == {"type": "command", "command": "bash", "args": [sys.argv[2]], "timeout": 15}
+start_entries = doc["hooks"]["SessionStart"]
+stop_entries = doc["hooks"]["Stop"]
+assert len(start_entries) == len(stop_entries) == 1
+assert start_entries[0]["hooks"][0] == {
+    "type": "command", "command": "bash", "args": [sys.argv[2]], "timeout": 15,
+}
+assert stop_entries[0]["hooks"][0] == {
+    "type": "command",
+    "command": "bash",
+    "args": [str(Path(sys.argv[2]).with_name("artifact-stop.sh"))],
+    "timeout": 15,
+}
 PY
 HOME="$manual_home" ./install.sh --uninstall --target claude --settings "$manual_settings" >/dev/null
 python3 - "$manual_settings" <<'PY'
 import json, sys
 from pathlib import Path
-assert json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["hooks"]["SessionStart"] == []
+hooks = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["hooks"]
+assert hooks["SessionStart"] == []
+assert hooks["Stop"] == []
 PY
 pass "manual installer idempotency and rollback"
+
+codex_home="$TEST_ROOT/codex-home"
+mkdir -p "$codex_home/.codex"
+HOME="$codex_home" ./install.sh --target codex >/dev/null
+HOME="$codex_home" ./install.sh --target codex >/dev/null
+python3 - "$codex_home/.codex/hooks.json" "$ROOT" <<'PY'
+import json, sys
+from pathlib import Path
+
+doc = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["hooks"]
+root = Path(sys.argv[2])
+start = doc["SessionStart"][0]["hooks"][0]
+stop = doc["Stop"][0]["hooks"][0]
+assert start == {
+    "type": "command",
+    "command": f'bash "{root / "hooks/session-start.sh"}"',
+    "timeout": 15,
+    "additionalContextLimit": 20000,
+}
+assert stop == {
+    "type": "command",
+    "command": f'bash "{root / "hooks/artifact-stop.sh"}"',
+    "timeout": 15,
+}
+PY
+HOME="$codex_home" ./install.sh --uninstall --target codex >/dev/null
+python3 - "$codex_home/.codex/hooks.json" <<'PY'
+import json, sys
+from pathlib import Path
+hooks = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["hooks"]
+assert hooks["SessionStart"] == []
+assert hooks["Stop"] == []
+PY
+pass "Codex lifecycle hooks and context limit"
+
+invalid_home="$TEST_ROOT/invalid-json-home"
+invalid_settings="$invalid_home/settings.json"
+mkdir -p "$invalid_home"
+printf '{ definitely not json\n' > "$invalid_settings"
+cp "$invalid_settings" "$TEST_ROOT/invalid-settings.before"
+if HOME="$invalid_home" ./install.sh --target claude --settings "$invalid_settings" >/dev/null 2>&1; then
+  echo "installer accepted malformed hook JSON" >&2
+  exit 1
+fi
+cmp "$invalid_settings" "$TEST_ROOT/invalid-settings.before"
+pass "installer preserves malformed JSON"
+
+invalid_hermes_home="$TEST_ROOT/invalid-hermes-home"
+invalid_allowlist="$invalid_hermes_home/.hermes/shell-hooks-allowlist.json"
+mkdir -p "$(dirname "$invalid_allowlist")"
+printf '[ broken allowlist\n' > "$invalid_allowlist"
+cp "$invalid_allowlist" "$TEST_ROOT/invalid-allowlist.before"
+if HOME="$invalid_hermes_home" ./install.sh --target hermes >/dev/null 2>&1; then
+  echo "installer accepted a malformed Hermes allowlist" >&2
+  exit 1
+fi
+cmp "$invalid_allowlist" "$TEST_ROOT/invalid-allowlist.before"
+pass "installer preserves malformed Hermes allowlist"
+
+broken_markers="$TEST_ROOT/broken-markers.md"
+printf 'keep me\n<!-- agent-plugin:vibe-lore START -->\nmanaged text\nkeep this tail\n' \
+  > "$broken_markers"
+cp "$broken_markers" "$TEST_ROOT/broken-markers.before"
+if ./install.sh --uninstall --target none --instructions "$broken_markers" >/dev/null 2>&1; then
+  echo "installer removed a managed block without an END marker" >&2
+  exit 1
+fi
+cmp "$broken_markers" "$TEST_ROOT/broken-markers.before"
+pass "installer preserves files with unmatched managed markers"
 
 grok_home="$TEST_ROOT/grok-home"
 mkdir -p "$grok_home"
@@ -329,7 +530,10 @@ grep -Eq '^opencode[[:space:]]+installed[[:space:]]+' "$TEST_ROOT/opencode-list.
 printf '\n// test drift\n' >> "$opencode_plugin"
 HOME="$opencode_home" ./install.sh --target opencode >/dev/null
 compgen -G "$opencode_plugin.bak.*" >/dev/null
-! grep -qF '// test drift' "$opencode_plugin"
+if grep -qF '// test drift' "$opencode_plugin"; then
+  echo "OpenCode refresh left test drift in place" >&2
+  exit 1
+fi
 HOME="$opencode_home" ./install.sh --uninstall --target opencode >/dev/null
 test ! -e "$opencode_plugin"
 compgen -G "$opencode_plugin.bak.*" >/dev/null
@@ -422,7 +626,9 @@ required = {
     ".claude-plugin/plugin.json",
     ".claude-plugin/marketplace.json",
     "hooks/hooks.json",
+    "hooks/artifact-stop.sh",
     "hooks/session-start.sh",
+    "scripts/artifact-generator.py",
     "skills/load-context/SKILL.md",
     "skills/diagnose/SKILL.md",
     "sessions/README.md",
@@ -437,8 +643,13 @@ required = {
 }
 with zipfile.ZipFile(sys.argv[1]) as archive:
     assert required.issubset(archive.namelist())
-    mode = archive.getinfo("hooks/session-start.sh").external_attr >> 16
-    assert mode & stat.S_IXUSR
+    for executable in (
+        "hooks/session-start.sh",
+        "hooks/artifact-stop.sh",
+        "scripts/artifact-generator.py",
+    ):
+        mode = archive.getinfo(executable).external_attr >> 16
+        assert mode & stat.S_IXUSR
 PY
 pass "custom-plugin ZIP"
 

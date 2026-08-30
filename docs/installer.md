@@ -10,7 +10,7 @@
 
 Репозиторий является версионированным Claude marketplace через
 `.claude-plugin/marketplace.json`. Установленный пакет содержит и
-`SessionStart`-хук Claude Code, и skills для Chat/Cowork.
+хуки Claude Code `SessionStart` и `Stop`, и skills для Chat/Cowork.
 
 ### 0.1. Claude Code CLI
 
@@ -71,14 +71,16 @@ ZIP от `python3 scripts/package-plugin.py`. Chat не запускает `Sess
 
 | Режим | Что делает |
 |---|---|
-| install (по умолчанию) | Регистрирует хук/блок в каждом выбранном рантайме |
-| `--uninstall` | Удаляет ровно то, что добавил установщик |
-| `--list` | Показывает статус рантаймов: `absent` / `detected` / `installed` |
+| install (по умолчанию) | Регистрирует хуки/блок и готовит artifact request |
+| `--uninstall` | Удаляет регистрации, но сохраняет созданные агентом артефакты |
+| `--list` | Без записи показывает `absent` / `detected` / `installed` |
 
 Требование `install.sh`: `python3` для JSON-операций. Форматы хука `claude` и
 `plain` работают на Bash без `jq`/`python3`; формат `hermes` требует один из
-этих двух JSON-парсеров. Перед регистрацией установщик также пересобирает
-load-context skill из канонических лор-файлов.
+этих двух JSON-парсеров. Автоматический lifecycle артефактов требует `python3`:
+установщик готовит только request, а следующая сессия поручает текущему агенту
+написать dossiers и пройти validator. По умолчанию ручная установка хранит их
+в `artifacts/`; путь переопределяется через `CHOIRBOY_ARTIFACTS_DIR`.
 
 ---
 
@@ -106,8 +108,8 @@ gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
 
 | Таргет | Файл | Механизм |
 |---|---|---|
-| claude | `~/.claude/settings.json` (или `--settings`/`--project`) | JSON-хук `hooks.SessionStart` |
-| codex | `~/.codex/hooks.json` | JSON-хук `SessionStart` |
+| claude | `~/.claude/settings.json` (или `--settings`/`--project`) | JSON-хуки `SessionStart` + `Stop` |
+| codex | `~/.codex/hooks.json` | JSON-хуки `SessionStart` + `Stop` |
 | opencode | `~/.config/opencode/plugins/agent-plugin.ts` | глобальный `chat.message`-плагин |
 | hermes | `~/.hermes/config.yaml` | маркированный блок `hooks.pre_llm_call` + consent-allowlist |
 | kimi | `~/.kimi-code/config.toml` | маркированный блок `[[hooks]]` |
@@ -133,7 +135,8 @@ gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
 
 - `block_add` проверяет START-маркер: уже есть → `already present — skipped`,
   ничего не дублирует.
-- `json_hook` матчит записи по имени скрипта (`session-start.sh` в
+- `json_hook` матчит записи по имени скрипта (`session-start.sh` или
+  `artifact-stop.sh` в
   команде), а не по абсолютному пути: если папка плагина переехала,
   устаревшая регистрация заменяется, а не кладётся вторая.
 - Marketplace-хук живёт в plugin cache и не записывается в массив хуков
@@ -200,22 +203,25 @@ backup() {
 
 ```python
 def is_ours(entry):
-    return any("session-start.sh" in
+    return any(hook_id in
                (h.get("command", "") + " " + " ".join(h.get("args", [])))
                for h in entry.get("hooks", []))
 ```
 
 - install: удаляет stale-регистрации нашего скрипта (папка переехала),
   добавляет точный handler. Claude получает `command: bash`, один путь в `args`
-  и `timeout: 15`; Codex сохраняет строковую команду с процитированным путём.
+  и `timeout: 15`; Codex сохраняет строковую команду и ставит
+  `additionalContextLimit: 20000` для полного стартового payload.
 - uninstall: удаляет все записи `is_ours()`.
-- Сохраняет бэкап при реальном изменении.
+- Невалидный JSON не заменяет; при реальном изменении сохраняет бэкап и пишет
+  новый файл атомарно.
 
 ### 5.2. `hermes_allowlist` — детали
 
 Hermes требует явного consent на shell-хук: пара `(event, command)` в
 `~/.hermes/shell-hooks-allowlist.json`. Функция добавляет/удаляет точную
-пару `("pre_llm_call", "<session-start.sh> --format hermes")`.
+пару `("pre_llm_call", "<session-start.sh> --format hermes")`, не заменяет
+битый JSON и пишет валидное изменение атомарно.
 
 ### 5.3. `block_add` / `block_remove` — детали
 

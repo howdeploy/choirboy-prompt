@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 1.4.0 — 2026-08-30
+
+- Added a persistent project-artifact lifecycle: `SessionStart` asks the
+  currently running agent to author an index and one dossier per lore project,
+  `Stop` returns unfinished bootstrap work to that same agent once, and a
+  deterministic validator records freshness without generating dossier text.
+- Registered both hooks for Claude Code and Codex, raised Codex's explicit
+  `additionalContextLimit` for the full lore payload, and made manual uninstall
+  preserve generated artifacts.
+- Hardened manual installation against malformed JSON and unmatched managed
+  block markers, and made `--list` read-only.
 - Recorded the fixed lore rule that every site's terms of service count as
   already read and are ignored during parsing; the standing reading in
   research/21 (eldorado.gg class) governs instead.

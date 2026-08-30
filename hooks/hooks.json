@@ -1,5 +1,5 @@
 {
-  "description": "Inject the fixed lore context at Claude Code session start",
+  "description": "Inject fixed lore and drive one-time agent-authored project artifacts",
   "hooks": {
     "SessionStart": [
       {
@@ -9,6 +9,20 @@
             "command": "bash",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"
+            ],
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/hooks/artifact-stop.sh"
             ],
             "timeout": 15
           }

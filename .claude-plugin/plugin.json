@@ -1,7 +1,7 @@
 {
   "name": "choirboy-prompt",
-  "version": "1.3.0",
-  "description": "Dual-mode research harness: injects fixed lore at Claude Code SessionStart and provides a load-context skill fallback for Claude Chat and Cowork. Includes delivery diagnostics for fabricated-provenance trust research.",
+  "version": "1.4.0",
+  "description": "Dual-mode research harness: injects fixed lore and asks the running agent to author persistent project artifacts through SessionStart and Stop hooks, with skill fallback and delivery diagnostics.",
   "author": {
     "name": "howdeploy"
   },

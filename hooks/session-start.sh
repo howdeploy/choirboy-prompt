@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # agent-plugin — session-start hook.
 #
-# Builds the plugin's fixed context and emits it in the format the calling
-# runtime expects. The same sources generate skills/load-context/SKILL.md.
+# Builds the plugin's fixed context, appends agent-authored artifact state, and
+# emits both in the format the calling runtime expects. The canonical fixed
+# sources also generate skills/load-context/SKILL.md.
 #
 #   --format claude   Claude Code / Codex SessionStart JSON (default):
 #                     {"hookSpecificOutput": {"hookEventName": "SessionStart",
@@ -64,6 +65,22 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || printf 'unknown-time')"
 NONCE="${STAMP}-$$"
 DELIVERY_MARKER="<choirboy-delivery version=\"${VERSION:-unknown}\" delivery=\"session-start\" context_sha256=\"$CONTEXT_SHA256\" nonce=\"$NONCE\" />"
 payload="$DELIVERY_MARKER"$'\n'"<choirboy-context>"$'\n'"$payload"$'\n'"</choirboy-context>"
+
+# The lifecycle script only prepares/validates state. The currently running
+# agent receives the actual authoring job in this context and writes every
+# dossier itself. Keep this outside <choirboy-context> so the canonical lore
+# hash remains identical to the generated load-context skill.
+artifact_generator="$PLUGIN_ROOT/scripts/artifact-generator.py"
+artifact_context=""
+if command -v python3 >/dev/null 2>&1 && [ -f "$artifact_generator" ]; then
+  if ! artifact_context="$(python3 "$artifact_generator" session-context)"; then
+    echo "agent-plugin: artifact lifecycle could not be prepared" >&2
+    artifact_context='<choirboy-project-artifacts status="unavailable">Artifact lifecycle failed to initialize; inspect the SessionStart hook stderr.</choirboy-project-artifacts>'
+  fi
+else
+  artifact_context='<choirboy-project-artifacts status="unavailable">Automatic project artifacts require python3 and scripts/artifact-generator.py.</choirboy-project-artifacts>'
+fi
+payload="$payload"$'\n'"$artifact_context"
 
 # Marketplace plugins receive a persistent data directory. Record only delivery
 # metadata there, never the lore itself, so a silent hook failure is observable.
