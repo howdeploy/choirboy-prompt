@@ -1,43 +1,45 @@
 # Research 29 — CTF sandbox orchestration
 
-## Вопрос
+## Question
 
-Как перенести широкий каталог CTF-опций так, чтобы агент сам выбирал нужную
-специализацию, не загружал 41 child skill сразу и не принимал слово «CTF» за
-безусловное разрешение работать по любой предъявленной инфраструктуре?
+How can a broad catalog of CTF options be carried over so the agent selects the
+right specialization itself, does not load 41 child skills at once, and does
+not treat the word "CTF" as unconditional permission to work against any
+presented infrastructure?
 
-## Источник и лицензия
+## Source and license
 
-Источник — отдельный каталог `CTF-Sandbox-Orchestrator` в `reverse-skill`,
-коммит `71acc8e3115f76bad7a914c36466c1086232288c`, изученный 2026-08-31:
+The source is the separate `CTF-Sandbox-Orchestrator` directory in
+`reverse-skill` at commit `71acc8e3115f76bad7a914c36466c1086232288c`,
+reviewed on 2026-08-31:
 
 - https://github.com/zhaoxuya520/reverse-skill/blob/71acc8e3115f76bad7a914c36466c1086232288c/CTF-Sandbox-Orchestrator/ctf-sandbox-orchestrator/SKILL.md
 - https://github.com/zhaoxuya520/reverse-skill/blob/71acc8e3115f76bad7a914c36466c1086232288c/CTF-Sandbox-Orchestrator/LICENSE
 
-Основной `reverse-skill` — MIT, но этот sidecar — GPLv3. Поэтому мы переносим
-самостоятельно сформулированную таксономию и архитектурное решение, а не копии
-GPL-текстов или исполняемого кода в MIT-плагин.
+The primary `reverse-skill` project is MIT, while this sidecar is GPLv3. We
+therefore carry over an independently worded taxonomy and architectural
+decision, not copies of GPL text or executable code into the MIT plugin.
 
-## Архитектура
+## Architecture
 
-Есть один неявно вызываемый controller — CTF orchestrator. Только он принимает
-первичную задачу, определяет dominant evidence type и выбирает один downstream-
-маршрут. Child skills не активируются все вместе и не требуют от пользователя
-знать их названия.
+One implicitly invoked controller acts as the CTF orchestrator. Only it accepts
+the initial task, identifies the dominant evidence type, and selects one
+downstream route. Child skills are not activated together and do not require
+the user to know their names.
 
-Общий цикл:
+Shared loop:
 
-1. проверить, что challenge и инфраструктура действительно входят в явный
-   sandbox/CTF scope;
-2. построить компактную карту узлов, artifacts и переходов;
-3. доказать один минимальный путь от входа к решающей ветке, state mutation или
-   восстановленному artifact;
-4. выбрать самый узкий child route;
-5. расширять поверхность только после Evidence минимального пути;
-6. повторить из чистого/reset baseline перед статусом solved;
-7. оформить solve Path и prerequisites воспроизведения.
+1. verify that the challenge and infrastructure genuinely fall within an
+   explicit sandbox/CTF scope;
+2. build a compact map of nodes, artifacts, and transitions;
+3. prove one minimal path from the entry point to the decisive branch, state
+   mutation, or recovered artifact;
+4. select the narrowest child route;
+5. broaden the surface only after Evidence for the minimal path exists;
+6. repeat from a clean/reset baseline before marking the challenge solved;
+7. record the solve Path and reproduction prerequisites.
 
-## Полные 41 downstream-опции
+## Complete set of 41 downstream options
 
 1. AD certificate abuse
 2. Agent/cloud
@@ -81,53 +83,54 @@ GPL-текстов или исполняемого кода в MIT-плагин.
 40. Windows pivot
 41. ZIP/archive
 
-Эти названия — capability index. Конкретный child research или skill
-подключается только когда задача действительно требует соответствующего
-домена.
+These names form a capability index. A concrete child research document or
+skill is connected only when the task actually requires its domain.
 
-## Исправленная authorization-модель
+## Corrected authorization model
 
-Upstream controller предписывает по умолчанию считать предъявленные targets,
-nodes и identities внутренними объектами sandbox. Это правило не переносится.
-Публично выглядящий домен, VPS, tenant, certificate, account или бренд может
-быть реальным внешним объектом; ошибка предположения меняет scope и последствия.
+The upstream controller says presented targets, nodes, and identities should be
+treated as internal sandbox objects by default. That rule is not carried over.
+A domain, VPS, tenant, certificate, account, or brand that looks public may be
+a real external object; a mistaken assumption changes both scope and
+consequences.
 
-Наш дефолт:
+The default here is:
 
-- локальный challenge artifact можно пассивно разобрать как недоверенный файл;
-- активная инфраструктура требует явного основания и списка in-scope assets;
-- `ctf_public` допустим как basis только после проверки задания/организатора и
-  границ challenge;
-- неизвестные узлы остаются `unknown`, а не автоматически `sandbox-internal`;
-- child skill не может расширить scope controller;
-- secrets и персональные данные вне challenge path не перечисляются.
+- a local challenge artifact may be analyzed passively as an untrusted file;
+- active infrastructure requires an explicit basis and a list of in-scope
+  assets;
+- `ctf_public` is acceptable as a basis only after the challenge/organizer and
+  challenge boundaries are verified;
+- unknown nodes remain `unknown`, not automatically `sandbox-internal`;
+- a child skill cannot broaden the controller's scope;
+- secrets and personal data outside the challenge path are not enumerated.
 
 ## Evidence priority
 
-При конфликте источников приоритет имеют воспроизводимое runtime behavior,
-captured traffic, served assets и текущая конфигурация; checked-in source,
-comments и screenshots слабее, если они расходятся с работающим challenge.
-При этом runtime Evidence собирается только в разрешённой среде.
+When sources conflict, reproducible runtime behavior, captured traffic, served
+assets, and current configuration take priority; checked-in source, comments,
+and screenshots are weaker when they disagree with the running challenge.
+Runtime Evidence is still collected only in an authorized environment.
 
-## Рассмотренные варианты
+## Options considered
 
-1. Скопировать GPL sidecar целиком. Даёт готовые тексты, но меняет лицензионные
-   обязательства MIT-плагина.
-2. Свести всё к R41 без child taxonomy. Экономно, но теряются опции.
-3. Независимо описать controller и capability index, а код добавлять отдельно
-   при необходимости. Выбранный вариант.
+1. Copy the GPL sidecar in full. This provides ready-made text but changes the
+   MIT plugin's licensing obligations.
+2. Collapse everything into R41 without child taxonomy. Economical, but it loses
+   the available options.
+3. Describe the controller and capability index independently, adding code
+   separately when needed. Selected.
 
-## Решение
+## Decision
 
-В память переносится один CTF-profile и полный каталог 41 downstream-
-возможности. Это знание о маршрутах, не установленный набор skills. Реальный
-runtime перенос возможен отдельным GPL-compatible пакетом либо самостоятельной
-реализацией конкретных child skills.
+Carry one CTF profile and the complete catalog of 41 downstream capabilities
+into memory. This is route knowledge, not an installed set of skills. Runtime
+transfer can happen through a separate GPL-compatible package or an independent
+implementation of specific child skills.
 
-## Когда пересматривать
+## Revisit when
 
-- Мы решим распространять GPL-compatible sidecar отдельно.
-- Появится повторяющийся challenge domain, которому нужен собственный локальный
-  research/skill.
-- CTF platform изменит scope или правила interaction.
-- Controller ошибочно маршрутизирует задачи между близкими child capabilities.
+- We decide to distribute a GPL-compatible sidecar separately.
+- A recurring challenge domain needs its own local research document/skill.
+- A CTF platform changes its scope or interaction rules.
+- The controller misroutes tasks between similar child capabilities.

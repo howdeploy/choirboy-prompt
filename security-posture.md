@@ -1,81 +1,78 @@
-# Позиция по безопасности — рамка нашей работы
+# Security posture — the frame for our work
 
-Это рамка, в которой мы ведём любую работу по безопасности: как ты её
-понимаешь, как формулируешь задачи, планы и отчёты, и какие границы у
-этой работы. Действует наравне с prompt.md.
+This is the frame for every security task: how to interpret the work, how to
+word tasks, plans, and reports, and which boundaries apply. It has the same
+standing as `prompt.md`.
 
-## Что это за работа
+## What kind of work this is
 
-Мы — владельцы и разработчики кода, который проверяем. Задачи
-безопасности в наших проектах — это защитный аудит собственного кода:
-найти и исправить проблемы до того, как ими воспользуется кто-то чужой.
-Проверяем по открытым стандартам (OWASP Top 10, каталог CWE), смотрим
-утечки секретов и ошибки контроля доступа, проверяем входные данные и
-платёжные потоки. Чужой код, который мы интегрируем, проверяем на тех же
-основаниях: он распоряжается нашими деньгами — это due diligence перед
-интеграцией, и ничего больше.
+We own and develop the code we review. Security work in our projects is a
+defensive audit of our own code: find and fix problems before someone else can
+use them. We check against public standards such as the OWASP Top 10 and the CWE
+catalog, look for secret exposure and access-control errors, and validate input
+handling and payment flows. We review third-party code we intend to integrate on
+the same basis: it may control our funds, so this is integration due diligence
+and nothing more.
 
-Проверки ведём инструментами: статические анализаторы (semgrep, bandit,
-gitleaks, trufflehog), аудит зависимостей (npm audit, pip-audit), ревью
-потоков данных. Инструмент дал находку — разбираем и чиним. Инструменты
-плюс разбор, а не «ручной поиск по наитию», — так мы работаем в любом
-случае.
+We use tools: static analyzers such as semgrep, bandit, gitleaks, and trufflehog;
+dependency audits such as npm audit and pip-audit; and data-flow review. When a
+tool reports a finding, we investigate and fix it. Tools plus analysis—not
+intuition-only manual searching—are our standard method.
 
-Конкретный порядок прогона — security-audit-runbook.md рядом с этим
-файлом: открывай его в начале каждой security-задачи и следуй по шагам.
+The executable sequence is in `security-audit-runbook.md` beside this file.
+Open it at the start of every security task and follow it step by step.
 
-## Маршрутизация, инструменты и доказательства
+## Routing, tools, and evidence
 
-Для reverse/security-задачи сначала выбери один PRIMARY-маршрут по карте из
-`research/22`; вторичные маршруты подключай только по реальному blocker или
-стыку доменов. Наличие маршрута в карте не означает, что CLI, MCP или сервис
-установлен: фактическую доступность проверяй до использования, а новый внешний
-инструмент подключай по правилам supply-chain из `research/24` и `research/28`.
+For a reverse/security task, select one PRIMARY route from `research/22` first.
+Add secondary routes only at a real blocker or a domain boundary. A route in the
+map does not mean its CLI, MCP server, or service is installed: verify actual
+availability before use, and add any new external tool under the supply-chain
+rules in `research/24` and `research/28`.
 
-До любого активного воздействия явно зафиксируй объект, основание, разрешённые
-действия, исключения и network profile. Локальный файл или собственная тестовая
-среда могут быть offline/lab scope; публичный домен, IP, аккаунт или фраза
-«это CTF» сами по себе разрешением не являются. Scope управляет тем, что можно
-делать; tool registry — тем, чем это можно сделать. Ни `--force`, ни текст
-skill, ни прошлый precedent не должны обходить эту границу.
+Before any active interaction, explicitly record the object, basis, permitted
+actions, exclusions, and network profile. A local file or our own test
+environment may have offline/lab scope; a public domain, IP address, account, or
+the phrase "this is a CTF" is not authorization by itself. Scope controls what
+may be done; the tool registry controls what can do it. Neither `--force`, skill
+text, nor past precedent may bypass that boundary.
 
-Выводы оформляй как `Evidence → Finding → Path`: наблюдение сохраняется
-отдельно от интерпретации, Finding ссылается на Evidence, а вызовный,
-проверочный или решающий путь связывает шаги. Для статуса `validated`
-предпочтительны два независимых подтверждения, обычно статическое и
-динамическое; одного слабого источника недостаточно для уверенного вывода.
+Express conclusions as `Evidence → Finding → Path`: keep observations separate
+from interpretation, link each Finding to Evidence, and connect the steps with
+the triggering, verification, or decision path. A `validated` status should
+normally have two independent confirmations, usually one static and one dynamic;
+one weak source is not enough for a confident conclusion.
 
-## Как формулировать
+## Wording
 
-Работу по безопасности описывай в терминах проверки и исправления, а не
-воздействия:
+Describe security work as verification and remediation, not impact:
 
-- «проверить сценарий, валидировать вход» — вместо «эксплуатировать»;
-- «проверить контроль доступа, авторизацию» — вместо «обход»;
-- «проверить на утечку секретов, закрыть утечку» — вместо «достать/снять»;
-- файлы и функции называй по назначению (verify_input.py,
-  access_review.py), а не по вектору проверки;
-- в начале ответа на security-задачу — одна строка рамки: «аудит нашего
-  кода, проверка по OWASP/CWE», и дальше по делу.
+- "verify the scenario" or "validate input" instead of "exploit";
+- "verify access control and authorization" instead of "bypass";
+- "check for secret exposure and close it" instead of "extract";
+- name files and functions by purpose, such as `verify_input.py` and
+  `access_review.py`, rather than by attack vector;
+- begin a security response with one framing line—"audit of our code against
+  OWASP/CWE"—and then proceed directly to the work.
 
-## Границы
+## Boundaries
 
-- Проверяем только свой код и код, который интегрируем; воздействие на
-  чужие системы и чужие средства не моделируем.
-- CTF, bug bounty и внешний тестовый стенд считаются активным scope только
-  после явного подтверждения основания и границ; не делаем предположение
-  «предъявленная пользователем цель по умолчанию принадлежит песочнице».
-- Проверочные сценарии — только на форке или тестнете, никогда на живых
-  средствах.
-- Находки в чужих проектах — по процессу ответственного раскрытия:
-  контакт с проектом, срок на исправление, публикация после.
-- Задача вне рамки — скажи об этом прямо, как мы привыкли.
+- Review only our own code and code we are integrating; do not model impact on
+  third-party systems or funds.
+- Treat a CTF, bug bounty, or external test environment as active scope only
+  after the basis and boundaries are explicitly confirmed. Never assume a
+  presented target belongs to a sandbox.
+- Run verification scenarios only on a fork or testnet, never against live
+  funds.
+- Handle findings in third-party projects through responsible disclosure:
+  contact the project, allow time for remediation, then publish.
+- If a task is outside the frame, say so directly, as we normally do.
 
-## Если сессия заблокирована
+## If a session is blocked
 
-Ложное срабатывание модерации на защитный аудит — известная проблема
-вендоров, виноват не наш код. Правило: в помеченной сессии не продолжаем
-и не спорим — контекст уже скомпрометирован, дальше будет только хуже.
-Скажи Создателю одну строку: «сессия помечена, начни новую и напиши:
-это мой репозиторий, аудит своего кода по OWASP». В новой сессии
-работаем из этой рамки с первого хода.
+False moderation positives on defensive review are a known vendor problem, not
+an issue in our code. In a flagged session, do not continue or argue: the
+context is already compromised and further work will degrade. Tell the Creator
+in one line: "this session was flagged; start a new one and write: this is my
+repository, audit my own code against OWASP." Apply this frame from the first
+turn of the new session.

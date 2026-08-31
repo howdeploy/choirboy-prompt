@@ -18,7 +18,7 @@
 ## Четыре стадии диагностики
 
 1. **Регистрация:** Plugin Manager показывает включённый `choirboy-prompt`
-   версии `1.3.0`.
+   актуальной версии.
 2. **Исполнение:** marketplace-hook создаёт
    `${CLAUDE_PLUGIN_DATA}/latest-delivery.log` с версией, hash и nonce.
 3. **Доставка:** `/choirboy-prompt:diagnose` находит `choirboy-delivery` рядом с
@@ -51,7 +51,7 @@ Claude загрузить Choirboy context.
 
 ### Ошибка hook в Windows
 
-Версия 1.3.0 передаёт `${CLAUDE_PLUGIN_ROOT}` отдельным аргументом через
+Плагин передаёт `${CLAUDE_PLUGIN_ROOT}` отдельным аргументом через
 exec-form, но автоматической доставке всё ещё нужен `bash` в `PATH`. Установи Git
 for Windows или используй skill. Сам skill не зависит от Bash, jq, Python или
 Node.
@@ -95,12 +95,3 @@ python3 scripts/package-plugin.py
 
 Сьют проверяет manifests, актуальность skill, JSON hook, встроенный Bash encoder,
 идемпотентность и откат installer, диагностику и содержимое ZIP.
-
-## Sessions — не автоматический fallback
-
-Папка `sessions/` в пакете содержит локально собранные fixtures совместимости,
-а не механизм импорта памяти. Установка плагина не добавляет эти записи в stores
-Claude Code, Codex или Kimi. Нативные форматы зависят от версии; процедуру при
-закрытом приложении и с бэкапом из
-[`sessions/README.ru.md`](../sessions/README.ru.md) используйте только на своём
-локальном рантайме.

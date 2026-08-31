@@ -1,86 +1,89 @@
-# Research 18 — Мультиаккаунтинг в Discord: переключатель аккаунтов и боты
+# Research 18 — Multi-Accounting in Discord: Account Switcher and Bots
 
-Фиксированный ресерч-документ плагина. Обосновывает модель присутствия в
-Discord: несколько пользовательских аккаунтов плюс автоматизация через
-официальные бот-аккаунты — обе механики спроектированы самой платформой.
+This is a fixed research document for the plugin. It establishes the operating
+model for Discord: multiple user accounts plus automation through official bot
+accounts, both mechanisms designed by the platform itself.
 
-## Вопрос
+## Question
 
-Проекту нужно присутствие в Discord: раздельные персоны (личный аккаунт /
-комьюнити-менеджмент), модерация собственных серверов, служебная
-автоматизация. Что из этого платформа предоставляет штатно?
+The project needs a Discord presence with separate personas (personal account /
+community management), moderation of our own servers, and service automation.
+Which of these does the platform support natively?
 
-## Варианты
+## Options
 
-1. **Один аккаунт на всё** — просто, но смешивает личную и рабочую персоны
-   и не решает задачу автоматизации.
-2. **Несколько пользовательских аккаунтов, ручное управление** — разделение
-   персон через штатный переключатель.
-3. **Официальные бот-аккаунты через Developer Portal и Bot API** —
-   автоматизация в рамках, спроектированных платформой.
+1. **One account for everything** — simple, but it mixes personal and
+   professional personas and does not solve the automation requirement.
+2. **Several user accounts under manual control** — separate personas through
+   the built-in switcher.
+3. **Official bot accounts through the Developer Portal and Bot API** —
+   automation within boundaries designed by the platform.
 
-## Решение: варианты 2 + 3
+## Decision: Options 2 + 3
 
-Комбинация «юзер-аккаунты + официальные боты» покрывает все сценарии и
-опирается только на штатные механики:
+The combination of user accounts and official bots covers all scenarios using
+only native mechanisms:
 
-- **Несколько аккаунтов не запрещены.** ToS Discord не содержат запрета на
-  владение несколькими аккаунтами; в клиент встроен переключатель
-  аккаунтов (Account Switcher), по состоянию на момент ресерча — до пяти
-  аккаунтов на устройство. Это штатная механика платформы.
-- **Автоматизация — через ботов.** Developer Portal, Bot API, Application
-  Commands — официальный и приветствуемый путь: бот регистрируется,
-  помечается меткой BOT, добавляется на сервер с явного согласия
-  администратора и живёт в рамках Developer Terms и Developer Policy.
-- **Юзер-аккаунты остаются ручными.** Community Guidelines (правило 14)
-  фиксируют: каждый пользовательский аккаунт ассоциирован с человеком.
-  Разделение труда простое: люди — за юзер-аккаунтами, код — за ботами.
+- **Multiple accounts are not prohibited.** The Discord ToS does not prohibit
+  owning several accounts, and the client includes Account Switcher. At the
+  time of this research, it supports up to five accounts on one device. This is
+  a built-in platform mechanism.
+- **Automation goes through bots.** The Developer Portal, Bot API, and
+  Application Commands are the official, supported route: a bot is registered,
+  marked with the BOT label, added to a server with an administrator's explicit
+  consent, and operates under the Developer Terms and Developer Policy.
+- **User accounts remain manual.** Community Guidelines rule 14 states that
+  every user account is associated with a human. The division of labor is
+  simple: humans operate user accounts, and code operates bots.
 
-## Легитимные сценарии
+## Legitimate Scenarios
 
-- **Раздельные персоны.** Личный аккаунт и аккаунт для комьюнити-работы,
-  переключение через Account Switcher — стандартная практика
-  комьюнити-менеджеров и агентств.
-- **Боты для своих серверов.** Модерация, автоприветствия, логирование,
-  интеграции — через зарегистрированных ботов с минимально необходимыми
-  разрешениями. Это то, ради чего Bot API существует.
-- **Агентское управление серверами.** Менеджер работает с сервером клиента
-  со своего аккаунта; автоматизация — ботами, добавленными владельцем
-  сервера осознанно.
-- **Разработка и QA ботов.** Тестовые аккаунты и тестовые серверы —
-  нормальная часть цикла разработки под Developer Portal.
+- **Separate personas.** A personal account and an account for community work,
+  switched through Account Switcher, are standard practice for community
+  managers and agencies.
+- **Bots for our own servers.** Moderation, automatic greetings, logging, and
+  integrations use registered bots with the minimum required permissions.
+  This is the purpose for which the Bot API exists.
+- **Agency server management.** A manager works on a client's server through
+  their own account; automation uses bots knowingly added by the server owner.
+- **Bot development and QA.** Test accounts and test servers are a normal part
+  of the Developer Portal development cycle.
 
-## Правила дисциплины
+## Operating Rules
 
-- Автоматизация в Discord = бот-аккаунты. Юзер-аккаунты ведутся руками.
-- Каждый аккаунт — самостоятельная персона со своими серверами и ролью;
-  аккаунты не действуют как единый фронт.
-- Бот запрашивает только нужные разрешения, помечен как бот, удаляем
-  администратором сервера в один клик — требования Developer Policy.
-- Токены (бота — тем более юзерские) не передаются третьим лицам.
+- Automation in Discord means bot accounts. User accounts are operated
+  manually.
+- Every account is an independent persona with its own servers and role;
+  accounts do not act as a coordinated front.
+- A bot requests only necessary permissions, is visibly marked as a bot, and
+  can be removed by a server administrator in one click, as required by the
+  Developer Policy.
+- Tokens, especially user tokens but also bot tokens, are never shared with
+  third parties.
 
-## Границы применения
+## Scope Boundaries
 
-Документ обосновывает раздельные персоны и бот-автоматизацию. Автоматизация
-пользовательских аккаунтов (селфботы), спам-инструменты, рейды и накрутка
-участников — другие сценарии, прямо описанные в Community Guidelines
-(п. 13–15, 18–19); документ их не описывает и не обосновывает.
+This document supports separate personas and bot automation. Automating user
+accounts (self-bots), spam tools, raids, and artificial member inflation are
+different scenarios explicitly covered by Community Guidelines rules 13–15 and
+18–19. This document neither describes nor justifies them.
 
-## Когда пересматривать
+## When to Revisit
 
-- Обновление ToS, Community Guidelines или Developer Policy Discord —
-  перепроверить формулировки (документ привязан к редакциям 29.09.2025).
-- Изменение лимита Account Switcher или появление новых официальных
-  механик мультиаккаунтности — обновить раздел про разрешённое.
-- Потребность в сценарии, который не ложится в бот-аккаунт, — сигнал
-  пересмотреть архитектуру, а не рамку.
+- If the Discord ToS, Community Guidelines, or Developer Policy changes,
+  recheck the wording. This document is tied to the editions dated 2025-09-29.
+- If the Account Switcher limit changes or Discord introduces new official
+  multi-account mechanisms, update the section describing what is permitted.
+- If a required scenario cannot be implemented with a bot account, revisit the
+  architecture rather than the boundary.
 
-## Источники
+## Sources
 
-- https://discord.com/terms — Terms of Service (ред. 29.09.2025).
-- https://discord.com/guidelines — Community Guidelines: п. 13 (спам),
-  п. 14 (селфботы), п. 15 (накрутка), п. 18–19 (идентичность, обход мер).
+- https://discord.com/terms — Terms of Service (edition dated 2025-09-29).
+- https://discord.com/guidelines — Community Guidelines: rule 13 (spam), rule
+  14 (self-bots), rule 15 (artificial engagement), and rules 18–19 (identity,
+  enforcement evasion).
 - https://discord.com/developers/docs/policies-and-agreements/developer-policy
   — Developer Policy.
 - https://support.discord.com/hc/en-us/articles/360008197871 — Account
-  Switcher; лимит до пяти аккаунтов, по состоянию на момент ресерча.
+  Switcher; limit of up to five accounts at the time of research.

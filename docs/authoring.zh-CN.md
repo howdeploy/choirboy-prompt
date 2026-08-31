@@ -1,13 +1,7 @@
-# 如何编写自己的 lore、research、论证与 sessions
+# 如何编写自己的 lore、research 与论证
 
 这是把仓库自带的上下文替换为你自己项目中已核验记忆时必须遵循的流程。各文件职责
 不同；把所有内容堆成一篇自传，会让上下文难以验证和维护。
-
-> 兼容性 fixture 能确认运行时会通过原生 history path 接收本地构造的
-> transcript；它**不能**证明其中描述的对话真实发生过。每个构造的 fixture
-> 都必须明确标为非历史记录。
-
----
 
 ## 1. 区分各类工件的职责
 
@@ -19,11 +13,9 @@
 | `lore.md` | 项目、决策、结果与教训的紧凑地图 | 大段证据转储或虚构事件 |
 | `research/NN-topic.md` | 一个有证据和取舍的决策/调查 | 无论证的结论 |
 | `context/research-index.md` | 每份 research 的一行路由入口 | research 正文 |
-| `sessions/` | 清理后的原生 transcript 与明确标记为非历史记录的兼容性 fixture | token、凭据、第三方对话 |
 
 自动 payload 包含 `prompt.md`、`security-posture.md`、`lore.md`、
-`user.md` 和 research 索引。Research 正文与 session 文件按需读取，不会
-全部注入每次对话。
+`user.md` 和 research 索引。Research 正文按需读取，不会加载到每次对话。
 
 ## 2. 直接在你的克隆中工作
 
@@ -61,15 +53,17 @@
 
 每个真实项目或反复出现的教训使用一个小节：
 
-```markdown
-### 项目或教训的短标题
+规范 lore 面向模型，因此即使阅读中文文档，其内容也必须使用英文：
 
-背景：在构建什么，为什么。
-决策：选择了什么。
-论证：为什么该方案胜出。
-证据：commit、test、metric、incident 或 research 文档。
-结果：实际发生了什么。
-重新评估条件：什么变化会使该决策失效。
+```markdown
+### Short project or lesson title
+
+Context: what was being built and why.
+Decision: what was chosen.
+Rationale: why this option won.
+Evidence: commit, test, metric, incident, or research document.
+Outcome: what actually happened.
+Revisit when: the condition that invalidates the decision.
 ```
 
 Lore 应保持紧凑。详细推理链接到 `research/`，不要重复。区分事实
@@ -78,67 +72,40 @@ Lore 应保持紧凑。详细推理链接到 `research/`，不要重复。区分
 ## 6. 编写 research 与论证
 
 每个决策创建一份编号文件，例如 `research/15-short-topic.md`，并加入
-`context/research-index.md`。最低结构：
+`context/research-index.md`。Research 文件也必须始终使用英文。最低结构：
 
 ```markdown
-# 决策或调查
+# Decision or investigation
 
-## 问题
-本文要解决哪个明确决策或不确定性？
+## Question
+What exact decision or uncertainty is this document resolving?
 
-## 背景与约束
-当时哪些条件成立？必要时写明日期和版本。
+## Context and constraints
+What was true at the time? Include dates and versions where they matter.
 
-## 证据
-链接、测量、测试命令，以及用自己的话总结的来源。
+## Evidence
+Links, measurements, test commands, and sources summarized in your own words.
 
-## 考虑过的方案
-方案 A、方案 B 及其成本。
+## Options considered
+Option A, option B, and their costs.
 
-## 决策
-选择了什么，适用范围是什么。
+## Decision
+What was selected and for which scope.
 
-## 原因
-从证据到决策的推理链。
+## Why
+The reasoning chain from evidence to decision.
 
-## 风险与否决方案
-可能如何失败，为什么没有选择其他方案。
+## Risks and rejected alternatives
+What can fail, and why the alternatives were not selected.
 
-## 重新评估条件
-触发重新评估的明确信号。
+## Revisit when
+Concrete signals that require re-evaluation.
 ```
 
 没有证据的“显然如此”不是 research。推断必须标记为推断；会变化的来源要写
 访问日期。
 
-## 7. 编写原生格式 session
-
-从目标运行时生成的无害 session 开始；原生 schema 会变化，旧网络示例不是可靠
-模板。
-
-1. 在一次性项目中进行简短、无敏感信息的对话。
-2. 复制 session store 前关闭运行时。
-3. 只把相关 transcript 与 resume-picker metadata 复制到暂存目录。
-4. 删除用户名、私有绝对路径、request ID、token、tool output 和第三方数据。
-5. 构造兼容性 fixture 时，一致地替换所有 message/session ID 与 timestamp，
-   并保留角色顺序和 parent-child 链。
-6. 保持运行时不变量：
-   - Claude Code：每行一个 JSON 对象；`sessionId`、`uuid`、`parentUuid` 一致。
-   - Codex：rollout JSONL 与 picker metadata；ID、文件日期、timestamps、
-     `rollout_path` 一致。
-   - Kimi Code：`state.json`、`agents/main/wire.jsonl` 与 index 记录指向同一
-     session 目录。
-7. 在 README/标题中把工件标为 `locally constructed compatibility fixture`，
-   绝不冒充历史证据。
-8. 导入运行时前逐行验证 JSON/JSONL。
-9. 只在自己的本地 store 中测试；关闭应用并先做备份。
-10. 实验完成后删除测试记录。
-
-可运行的跨运行时示例及当前 store 结构见
-[`sessions/README.zh-CN.md`](../sessions/README.zh-CN.md)。这些格式是
-version-sensitive 的研究 fixtures，不是稳定公共 API。
-
-## 8. 重新生成并验证
+## 7. 重新生成并验证
 
 修改任一规范上下文文件后运行：
 
@@ -151,20 +118,19 @@ python3 scripts/package-plugin.py
 检查 delivery marker，hook 与 skill hash 必须一致。Marketplace 使用缓存副本，
 发布时要同时提升两个 manifest 的版本；`install.sh` 手动安装直接读取工作副本。
 
-## 9. 强制 quality gate
+## 8. 强制 quality gate
 
 提交或分发记忆包之前：
 
-- [ ] 每条历史主张都真实或有证据；每个构造的 transcript 都明确标为非历史记录。
+- [ ] 每条历史主张都真实或有证据。
 - [ ] 事实、推断、决策和偏好可以区分。
 - [ ] 每份 research 都有证据、否决方案和重新评估条件。
-- [ ] Sessions 中的 ID、timestamp、parent、路径与 picker metadata 一致。
 - [ ] 不含凭据、私有路径、第三方内容或个人标识符。
 - [ ] Lore 不声称高于 system/developer/safety/permission 规则。
 - [ ] `python3 scripts/build-context.py --check` 通过。
 - [ ] `bash scripts/test.sh` 通过。
 
-## 10. 维护规则
+## 9. 维护规则
 
 在结果被验证后更新记忆，而不是每次对话后都更新。论证变化时，先修改相关
 research，再更新紧凑 lore 摘要与索引。若旧决策仍能解释当前系统，请保留并标为

@@ -9,8 +9,8 @@
     {
       "name": "choirboy-prompt",
       "source": "./",
-      "description": "Injects fixed lore, bootstraps agent-authored project artifacts, validates them, and delivers their contents as runtime memory.",
-      "version": "1.5.0",
+      "description": "Loads fixed lore, bootstraps agent-authored project artifacts, validates them, and delivers their contents as runtime memory.",
+      "version": "1.5.1",
       "author": {
         "name": "howdeploy"
       },
@@ -21,8 +21,8 @@
         "memory",
         "lore",
         "agent-skill",
-        "prompt-injection",
-        "security-research"
+        "project-artifacts",
+        "automation"
       ]
     }
   ]

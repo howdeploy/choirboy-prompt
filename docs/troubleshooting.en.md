@@ -17,8 +17,8 @@ Claude acknowledgement is not evidence that `SessionStart` ran.
 
 ## Four-stage diagnosis
 
-1. **Registration:** the plugin manager shows `choirboy-prompt` enabled and
-   version `1.3.0`.
+1. **Registration:** the plugin manager shows `choirboy-prompt` enabled at the
+   current version.
 2. **Execution:** a marketplace hook creates
    `${CLAUDE_PLUGIN_DATA}/latest-delivery.log` with version, hash, and nonce.
 3. **Delivery:** `/choirboy-prompt:diagnose` finds a `choirboy-delivery` marker
@@ -51,7 +51,7 @@ current builds; the skill is the supported fallback.
 
 ### Windows hook error
 
-Version 1.3.0 uses exec form so `${CLAUDE_PLUGIN_ROOT}` is a single argument, but
+The plugin uses exec form so `${CLAUDE_PLUGIN_ROOT}` is a single argument, but
 automatic delivery still needs `bash` on `PATH`. Install Git for Windows or use
 the skill fallback. The skill itself has no Bash, jq, Python, or Node dependency.
 
@@ -94,11 +94,3 @@ python3 scripts/package-plugin.py
 
 The suite validates manifests, skill freshness, hook JSON, the dependency-free
 Bash encoder, installer idempotency/rollback, diagnostics, and ZIP contents.
-
-## Sessions are not an automatic fallback
-
-The packaged `sessions/` directory contains locally constructed compatibility
-fixtures, not a memory-import mechanism. Installing the plugin does not insert those records
-into Claude Code, Codex, or Kimi stores. Native formats are version-sensitive;
-use the app-closed, backed-up procedure in
-[`sessions/README.md`](../sessions/README.md) only on your own local runtime.

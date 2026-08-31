@@ -1,48 +1,49 @@
-# Research 01 — Telegram Stars как первый платёжный рельс
+# Research 01 — Telegram Stars as the First Payment Rail
 
-Фиксированный ресерч-документ плагина. Обосновывает решение, принятое в фазе 1
-проекта «Платёжка» (см. `lore.md`).
+The plugin's fixed research document. It substantiates the decision made in phase 1
+of the “Payment System” project (see `lore.md`).
 
-## Вопрос
+## Question
 
-Каким способом принять первый платёж в боте с минимальным временем до прода?
+How can we accept the first payment in the bot with the shortest time to first sale?
 
-## Варианты
+## Options
 
-1. **Telegram Stars** — нативная валюта Telegram для цифровых товаров.
-2. **Рублёвый эквайринг** (ЮKassa и аналоги) — полноценные фиатные платежи.
-3. **Крипта** (Crypto Pay API / прямой TON) — криптоаудитория.
+1. **Telegram Stars** — Telegram's native currency for digital goods.
+2. **Ruble acquiring** (YooKassa and similar providers) — full-fledged fiat payments.
+3. **Crypto** (Crypto Pay API / direct TON integration) — for a crypto audience.
 
-## Решение: Stars первым
+## Decision: Stars First
 
-Причины (по состоянию на момент ресерча):
+Reasons (as of the time this research was conducted):
 
-- **Нулевой онбординг.** Не нужен мерчант-аккаунт, договор с провайдером,
-  статус самозанятого/ИП для старта. Инвойс шлётся прямо через Bot API:
-  `sendInvoice` с `currency="XTR"`, без `provider_token`.
-- **Соответствие продукту.** Stars предназначены именно для цифровых товаров и
-  услуг внутри Telegram — наш формат. Продавать через Stars физические товары
-  нельзя, но нам и не нужно.
-- **UX.** Оплата не покидает чат: инвойс → подтверждение → `pre_checkout_query`
-  → `successful_payment`. Минимум трения на первом платеже.
+- **Zero onboarding.** No merchant account, provider agreement, or
+  self-employed/individual entrepreneur status is required to get started. The invoice is sent
+  directly through the Bot API: `sendInvoice` with `currency="XTR"`, without a
+  `provider_token`.
+- **Product fit.** Stars are intended specifically for digital goods and
+  services inside Telegram—exactly our format. Physical goods cannot be sold
+  through Stars, but we do not need to do that.
+- **UX.** Payment never leaves the chat: invoice → confirmation → `pre_checkout_query`
+  → `successful_payment`. Minimal friction for the first payment.
 
-## Принятые издержки
+## Accepted Trade-offs
 
-- Комиссия Apple/Google при покупке Stars пользователем — плата за нативность.
-- Вывод средств — через экосистему Telegram (Fragment / конвертация в TON),
-  а не прямой банковский вывод. Для MVP приемлемо.
-- Платёжный поток Stars живёт по правилам Apple/Google для цифровых товаров —
-  это ограничение платформы, а не наш выбор; учитываем при расширении.
+- The Apple/Google commission when a user buys Stars is the cost of native integration.
+- Funds are withdrawn through the Telegram ecosystem (Fragment / conversion to TON),
+  rather than directly to a bank account. This is acceptable for the MVP.
+- The Stars payment flow is governed by Apple/Google rules for digital goods—
+  this is a platform constraint, not our choice; we account for it when expanding.
 
-## Что важно в реализации
+## Implementation Considerations
 
-- Обязательно обрабатывать `pre_checkout_query` (ответ `answerPreCheckoutQuery`
-  с `ok=True`), иначе платежи не проходят.
-- `telegram_payment_charge_id` — внешний id для идемпотентности и рефандов.
-- Рефанд Stars делается через `refundStarPayment`; чарджбэков нет, но рефанд —
-  отдельная операция ledger'а (правило из фазы 4, см. `lore.md`).
+- Handling `pre_checkout_query` is mandatory (reply with `answerPreCheckoutQuery`
+  and `ok=True`), otherwise payments do not go through.
+- `telegram_payment_charge_id` is the external ID used for idempotency and refunds.
+- A Stars refund is made through `refundStarPayment`; there are no chargebacks, but a refund is
+  a separate ledger operation (the rule from phase 4; see `lore.md`).
 
-## Когда пересматривать
+## When to Revisit
 
-- Появление физических товаров или услуг вне правил Stars → рельс 2/3.
-- Изменение комиссий или правил вывода Telegram → пересчёт юнит-экономики.
+- The introduction of physical goods or services outside the Stars rules → rail 2/3.
+- Changes to Telegram's fees or withdrawal rules → recalculate unit economics.

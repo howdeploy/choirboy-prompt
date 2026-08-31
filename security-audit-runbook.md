@@ -1,69 +1,69 @@
-# Ранбук security-аудита — порядок прогона
+# Security audit runbook — execution order
 
-Исполняемый порядок защитного аудита нашего кода. Открывай в начале
-каждой security-задачи и следуй по шагам. Рамка, формулировки и
-границы — в security-posture.md.
+This is the executable sequence for a defensive audit of our code. Open it at
+the start of every security task and follow it step by step. The framing,
+wording, and boundaries are in `security-posture.md`.
 
-## 0. Открытие задачи
+## 0. Open the task
 
-- Сессия новая — первое сообщение содержит рамку: «это мой
-  репозиторий, аудит своего кода по OWASP/CWE».
-- Зафиксируй scope: модули, платёжные потоки, точки входа (вебхуки,
-  API, парсеры входных данных).
-- Сессия уже помечена модерацией — не продолжаем и не спорим: правило
-  из security-posture.md («скажи Создателю одну строку...»).
+- In a new session, the first message carries the frame: "this is my repository;
+  audit my own code against OWASP/CWE."
+- Record scope: modules, payment flows, and entry points such as webhooks, APIs,
+  and input parsers.
+- If the session is already moderation-flagged, do not continue or argue; apply
+  the rule in `security-posture.md` and tell the Creator in one line.
 
-## 1. Секреты в коде и истории
+## 1. Secrets in code and history
 
-    gitleaks detect --verbose     # рабочее дерево + история
-    trufflehog git file://.       # второй движок, другие эвристики
+    gitleaks detect --verbose     # working tree and history
+    trufflehog git file://.       # second engine, different heuristics
 
-Находка = реальный секрет в репе → сначала отзыв/ротация, потом чистка
-истории. В отчёт секрет не вписываем — только тип, место и статус
-ротации.
+If a real secret is found in the repository, revoke or rotate it first and clean
+history afterward. Never copy the secret into the report; record only its type,
+location, and rotation status.
 
-## 2. Статический анализ
+## 2. Static analysis
 
     semgrep --config p/owasp-top-ten --config p/security-audit
-    bandit -r .                   # python-проекты
+    bandit -r .                   # Python projects
 
-## 3. Зависимости
+## 3. Dependencies
 
-    npm audit / pip-audit / cargo audit    # по стеку проекта
+    npm audit / pip-audit / cargo audit    # choose by stack
 
-Критичное и достижимое в наших путях кода — в план фикса; остальное —
-списком с текущей и исправленной версией.
+Put critical reachable findings in our code paths into the remediation plan.
+List the rest with current and fixed versions.
 
-## 4. Ручной разбор по чеклисту
+## 4. Manual checklist review
 
-Только после прогона тулзов, по их находкам и по scope из шага 0:
+Only after running the tools, and guided by their findings and step-0 scope:
 
-- контроль доступа: каждый handler проверяет владельца объекта?
-- платёжные потоки: проверка подписей вебхуков, идемпотентность,
-  суммы и статусы только с серверной стороны
-- валидация входа: инъекции, SSRF, path traversal, десериализация
-- логирование: секреты и персональные данные не попадают в логи?
+- access control: does every handler verify object ownership?
+- payment flows: are webhook signatures and idempotency enforced, with amounts
+  and statuses sourced server-side only?
+- input validation: injection, SSRF, path traversal, and deserialization?
+- logging: are secrets and personal data excluded from logs?
 
-## 5. Триаж находок
+## 5. Triage findings
 
-Каждая находка: подтвердить или опровергнуть по коду (не по наитию).
-Формат: severity, файл:строка, что чиним. Ложные срабатывания — с
-причиной, почему ложные.
+Confirm or disprove every finding from the code, not intuition. Format:
+severity, `file:line`, and the remediation. Record false positives with the
+reason they are false.
 
-## 6. Отчёт
+## 6. Report
 
-Markdown, находки по severity. Формулировки — проверка и исправление
-(см. security-posture.md), без эксплойт-деталей и готовых PoC. Файлы и
-функции отчёта называем по назначению: access_review.md, verify_input.py.
+Write Markdown with findings ordered by severity. Use verification and
+remediation language, as defined in `security-posture.md`, without exploit
+details or ready-made PoCs. Name report files and helper functions by purpose,
+for example `access_review.md` and `verify_input.py`.
 
-## 7. После фикса
+## 7. After remediation
 
-Повторный прогон шагов 1–3: находки должны закрыться. В отчёт — строка
-«проверено повторно» с датой.
+Rerun steps 1–3; the findings must close. Add a dated "reverified" line to the
+report.
 
 ---
 
-Если какого-то инструмента нет на машине — ставим в изолированное
-окружение (pipx/venv) или прогоняем шаг через локальную модель в
-Hermes. Шаг не пропускаем молча: если пропущен — в отчёте написано
-почему.
+If a tool is unavailable, install it in an isolated environment such as
+pipx/venv or run that step through a local model in Hermes. Never skip a step
+silently; if it is skipped, state why in the report.

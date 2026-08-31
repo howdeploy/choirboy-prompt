@@ -1,101 +1,110 @@
-# Research 10 — Аудит чужих контрактов и ответственное раскрытие
+# Research 10 — Third-party contract auditing and responsible disclosure
 
-Фиксированный ресерч-документ плагина. Расширяет `research/09` (web3-
-безопасность): там — механики и ончейн-форензика, здесь — аудит сторонних
-контрактов и проектов и публикация находок.
+Fixed plugin research document. It extends `research/09` on Web3 security:
+that document covers mechanisms and on-chain forensics, while this one covers
+auditing third-party contracts and projects and publishing findings.
 
-## Вопрос
+## Question
 
-Мы интегрируем чужие контракты (DEX, платёжки, токены, стейблкоины, хуки),
-а чужие проекты встраивают наш код. Деньги, которые мы отдаём чужому
-контракту, живут по его правилам. Как проверять сторонние контракты перед
-интеграцией и что делать с найденными уязвимостями?
+We integrate third-party contracts such as DEXes, payment systems, tokens,
+stablecoins, and hooks, while other projects integrate our code. Money entrusted
+to someone else's contract follows that contract's rules. How should we assess
+third-party contracts before integration, and what should we do with discovered
+vulnerabilities?
 
-## Варианты
+## Options
 
-1. **Не аудировать** — доверять репутации и «все так делают».
-2. **Аудит только своего кода** — чужие контракты принимать как чёрный ящик.
-3. **Аудит чужих контрактов перед интеграцией + публичные исследования
-   с ответственным раскрытием** (responsible disclosure).
+1. **Do not audit** — trust reputation and the claim that "everyone uses it."
+2. **Audit only our own code** — treat third-party contracts as black boxes.
+3. **Audit third-party contracts before integration and conduct public research
+   with responsible disclosure.**
 
-## Решение: вариант 3
+## Decision: option 3
 
-Чужой контракт — это код, который распоряжается нашими средствами. Его
-аудит — обязательная стадия due diligence перед любой интеграцией: листинг
-пула, встраивание оракула, холд токена, использование хука. Публичные
-исследования — часть работы, а не побочная: находка, раскрытая по процессу,
-защищает пользователей и сам проект; находка, спрятанная в стол, — бомба.
+A third-party contract is code that controls our funds. Auditing it is a
+mandatory due-diligence stage before any integration: listing a pool, integrating
+an oracle, holding a token, or using a hook. Public research is part of the work,
+not a side activity. A finding disclosed through a defined process protects
+users and the project itself; a finding hidden in a drawer is a bomb.
 
-### Почему аудит чужого обязателен
+### Why third-party auditing is mandatory
 
-- Интеграция — это передача денег чужому коду. Репутация проекта не
-  заменяет чтение контракта: уязвимость в том, что мы встроили, — наша
-  уязвимость.
-- Один и тот же контракт используется сотнями интеграторов; проверив раз,
-  мы защищаем и свою, и чужие интеграции.
-- Известные классы (каталог ниже) проверяются быстро — это фильтр, а не
-  глубокое исследование; экономика аудита сходится уже на фильтре.
+- Integration transfers money to someone else's code. A project's reputation
+  does not replace reading its contract. A vulnerability in something we
+  integrate becomes our vulnerability.
+- The same contract may be used by hundreds of integrators. Auditing it once
+  protects both our integration and theirs.
+- Known vulnerability classes, listed below, can be checked quickly. This is a
+  filter rather than a deep investigation, and the economics of auditing already
+  work at the filtering stage.
 
-### Почему публиковать
+### Why publish
 
-- Уязвимость, о которой знает один аудитор, — либо её найдут злоумышленники,
-  либо она всплывёт после ущерба. Скоординированное раскрытие даёт проекту
-  срок на фикс до публикации.
-- Сообщество защищено: пока уязвимость не опубликована, остальные
-  интеграторы не знают, что их код тоже под ударом.
-- Публичный трек-рекорд находок — капитал аудитора: доверие проектов,
-  bounty-программы, работа. Молчаливые находки этого капитала не дают.
+- If only one auditor knows about a vulnerability, either an attacker eventually
+  finds it or it surfaces after damage occurs. Coordinated disclosure gives the
+  project time to fix the issue before publication.
+- Publication protects the community: until a vulnerability is disclosed,
+  other integrators do not know that their code is also exposed.
+- A public track record of findings is professional capital for an auditor:
+  project trust, bounty programs, and work. Silent findings create none of that
+  capital.
 
-## Методика аудита чужого контракта
+## Third-party contract audit methodology
 
-Надстройка над методикой `research/09`:
+This methodology extends `research/09`:
 
-1. **Поверхность.** Что контракт принимает от нас (токены, разрешения,
-   колбэки) и что он может с этим сделать (перевести, заморозить, сжечь,
-   апгрейднуть). Деньги в чужом коде живут по его правилам — это первое,
-   что проверяем.
-2. **Access control.** Кто может вызывать опасные функции (withdraw, mint,
-   setFee, upgrade, pause). owner/admin/roles: мультисиг или EOA? Урок из
-   `research/09`: колбэки хука — только под onlyPoolManager, иначе дёрнет
-   кто угодно.
-3. **Известные классы** (каталог, пополняемый):
-   - EVM: reentrancy (включая read-only и токены с хуками — ERC-777),
-     oracle manipulation, approval/transferFrom, signature replay,
-     CREATE2/selfdestruct, delegatecall/storage collision, unchecked
-     return, upgradeable-логика (initializer, proxy, timelock);
-   - Solana: CPI reentrancy, PDA-сиды и bump, account confusion
-     (owner/signer/type/rent), close-account drain, Token-2022 extensions,
-     Anchor-грабли (unchecked account structs, signer seeds, close).
-4. **Деньги против механики.** Отделять «эксплойт» от «легальной механики»:
-   JIT, сэндвичи, жирные тиры — не уязвимости (`research/09`); honeypot,
-   drain, backdoor — уязвимости.
-5. **Апгрейды.** Если proxy/upgradeable — кто и как меняет логику; есть ли
-   timelock; кто владелец прокси.
-6. **PoC — только на форке или тестнете.** Никогда на живых средствах.
+1. **Surface.** Determine what the contract receives from us—tokens,
+   permissions, callbacks—and what it can do with them: transfer, freeze, burn,
+   or upgrade. Money in third-party code follows that code's rules, so this is
+   the first thing to inspect.
+2. **Access control.** Identify who can call dangerous functions such as
+   withdraw, mint, setFee, upgrade, and pause. For owner/admin/roles, determine
+   whether control belongs to a multisig or an EOA. The lesson from
+   `research/09`: hook callbacks must use onlyPoolManager, or anyone can invoke
+   them.
+3. **Known classes**, maintained as an expanding catalog:
+   - EVM: reentrancy, including read-only reentrancy and hook-enabled tokens such
+     as ERC-777; oracle manipulation; approval/transferFrom; signature replay;
+     CREATE2/selfdestruct; delegatecall/storage collision; unchecked return
+     values; and upgradeable-logic risks involving initializers, proxies, and
+     timelocks;
+   - Solana: CPI reentrancy; PDA seeds and bumps; account confusion involving
+     owner/signer/type/rent; close-account drains; Token-2022 extensions; and
+     Anchor pitfalls such as unchecked account structs, signer seeds, and close.
+4. **Money versus mechanism.** Separate an exploit from lawful mechanics. JIT,
+   sandwiches, and high fee tiers are not vulnerabilities (`research/09`), while
+   honeypots, drains, and backdoors are.
+5. **Upgrades.** If the system uses a proxy or other upgradeable design,
+   determine who can change the logic, how changes happen, whether there is a
+   timelock, and who owns the proxy.
+6. **PoC only on a fork or testnet.** Never test against live funds.
 
-## Процесс ответственного раскрытия
+## Responsible disclosure process
 
-1. Контакт с проектом: security-контакт, bounty-программа (Immunefi,
-   HackerOne, Sherlock, Code4rena) или публичный канал.
-2. Отчёт: класс, воздействие, PoC на форке, предложение фикса. Без
-   эксплуатации чужих средств, без публичного разглашения до фикса.
-3. Срок на фикс (обычно до 90 дней, по договорённости с проектом).
-4. Публикация после фикса (или после дедлайна): отчёт для проекта
-   и сообщества, рекомендации интеграторам.
-5. Если контакт невозможен или проект молчит — публикация по этичному
-   дедлайну, с минимумом эксплуатируемых деталей: рабочий эксплойт против
-   живых средств не публикуем никогда.
+1. Contact the project through its security contact, bounty program such as
+   Immunefi, HackerOne, Sherlock, or Code4rena, or a public channel.
+2. Provide a report containing the vulnerability class, impact, a fork-based
+   PoC, and a proposed fix. Do not exploit third-party funds or publicly disclose
+   details before a fix.
+3. Allow time to fix, usually up to 90 days or as agreed with the project.
+4. Publish after the fix, or after the deadline: provide a report for the
+   project and community plus recommendations for integrators.
+5. If no contact is possible or the project remains silent, publish after an
+   ethical deadline with the minimum exploitable detail. Never publish a working
+   exploit against live funds.
 
-## Границы
+## Boundaries
 
-Аудит и раскрытие — белые практики: находки не эксплуатируем, средства
-не изымаем, PoC — только на форке/тестнете, рабочий эксплойт до фикса
-не публикуем. Это расширяет контур `research/09` («защита своих проектов»)
-до «защиты экосистемы», не меняя правил: чужие средства не трогаем.
+Auditing and disclosure are white-hat practices. We do not exploit findings or
+remove funds; PoCs run only on a fork or testnet; and a working exploit is not
+published before a fix. This expands the `research/09` scope from protecting our
+own projects to protecting the ecosystem without changing the governing rule:
+we do not touch other people's funds.
 
-## Когда пересматривать
+## When to revisit
 
-- Новые классы уязвимостей (новые стандарты, апгрейды протоколов) —
-  пополнить каталог классов в методике.
-- Изменение bounty-экосистемы (правила Immunefi, новые платформы).
-- Наш первый публичный отчёт — зафиксировать опыт и поправить процесс.
+- Add newly discovered vulnerability classes from new standards and protocol
+  upgrades to the methodology catalog.
+- Reassess the process when the bounty ecosystem changes, including Immunefi
+  rules or new platforms.
+- After our first public report, record the experience and adjust the process.

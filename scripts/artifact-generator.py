@@ -22,7 +22,7 @@ import sys
 import tempfile
 import unicodedata
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
@@ -30,6 +30,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_VERSION = 1
 REQUEST_FILE = ".artifact-request.json"
 MANIFEST_FILE = ".artifact-manifest.json"
+MIGRATION_FILE = ".artifact-migration.json"
 INDEX_FILE = "INDEX.md"
 PROJECTS_DIR = "projects"
 
@@ -42,16 +43,23 @@ CORE_SOURCES = (
 )
 
 REQUIRED_SECTIONS = (
-    "Канон",
-    "Цель и результат",
-    "Архитектура и компоненты",
-    "Решения и ограничения",
-    "Операционный контур",
-    "Шишки и правила",
-    "Источники",
-    "Неизвестное",
-    "Когда пересматривать",
+    "Canon",
+    "Goal and Outcome",
+    "Architecture and Components",
+    "Decisions and Constraints",
+    "Operating Workflow",
+    "Lessons and Rules",
+    "Sources",
+    "Unknowns",
+    "When to Revisit",
 )
+
+ENGLISH_SIGNAL_WORDS = frozenset(
+    "and are by each for from is it its must of only our should that the their "
+    "they this through to under use used uses using was we when where which while "
+    "will with without your".split()
+)
+MIN_ENGLISH_SIGNAL_RATIO = 0.08
 
 CYRILLIC_TRANSLITERATION = str.maketrans(
     {
@@ -69,8 +77,52 @@ class ArtifactError(RuntimeError):
     """A user-actionable artifact protocol failure."""
 
 
+def resolve_artifact_root(value: Path) -> Path:
+    """Resolve an artifact root without accepting managed-directory symlinks."""
+
+    candidate = value.expanduser()
+    if candidate.is_symlink():
+        raise ArtifactError(f"refusing symlink artifact root: {candidate}")
+    artifact_root = candidate.resolve()
+    if artifact_root == Path(artifact_root.anchor):
+        raise ArtifactError(
+            f"refusing filesystem root as artifact directory: {artifact_root}"
+        )
+    projects_root = artifact_root / PROJECTS_DIR
+    if projects_root.is_symlink():
+        raise ArtifactError(f"refusing symlink projects directory: {projects_root}")
+    return artifact_root
+
+
 def normalize_text(value: str) -> str:
     return value.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def has_non_latin_alphabetic(value: str) -> bool:
+    for character in value:
+        if not character.isalpha() or character.isascii():
+            continue
+        if not unicodedata.name(character, "").startswith("LATIN "):
+            return True
+    return False
+
+
+def looks_like_english_prose(value: str) -> bool:
+    prose = re.sub(r"```.*?```", " ", value, flags=re.DOTALL)
+    prose = re.sub(r"`[^`\n]*`", " ", prose)
+    prose = "\n".join(
+        line for line in prose.splitlines() if not line.lstrip().startswith("#")
+    )
+    words = re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", prose.casefold())
+    if len(words) < 40:
+        return False
+    signals = sum(word in ENGLISH_SIGNAL_WORDS for word in words)
+    distinct_signals = {word for word in words if word in ENGLISH_SIGNAL_WORDS}
+    return (
+        len(distinct_signals) >= 6
+        and signals >= 6
+        and signals / len(words) >= MIN_ENGLISH_SIGNAL_RATIO
+    )
 
 
 def read_text(path: Path) -> str:
@@ -193,7 +245,10 @@ def research_map(paths: list[Path], source_root: Path) -> dict[int, str]:
 
 def referenced_research(section: str, available: dict[int, str]) -> list[str]:
     numbers: list[int] = []
-    for match in re.finditer(r"research/(\d{1,2})(?:\s*[–—-]\s*(\d{1,2}))?", section):
+    for match in re.finditer(
+        r"research/(\d{1,2})(?:`?\s*[–—-]\s*`?(?:research/)?(\d{1,2}))?",
+        section,
+    ):
         start = int(match.group(1))
         stop = int(match.group(2) or start)
         step = 1 if stop >= start else -1
@@ -233,14 +288,133 @@ def build_request(source_root: Path, artifact_root: Path) -> dict[str, Any]:
 
 def prepare(source_root: Path, artifact_root: Path) -> dict[str, Any]:
     source_root = source_root.resolve()
-    artifact_root = artifact_root.resolve()
-    if artifact_root == Path(artifact_root.anchor):
-        raise ArtifactError(f"refusing filesystem root as artifact directory: {artifact_root}")
+    artifact_root = resolve_artifact_root(artifact_root)
     artifact_root.mkdir(parents=True, exist_ok=True)
-    (artifact_root / PROJECTS_DIR).mkdir(parents=True, exist_ok=True)
+    projects_root = artifact_root / PROJECTS_DIR
+    if projects_root.is_symlink():
+        raise ArtifactError(f"refusing symlink projects directory: {projects_root}")
+    projects_root.mkdir(parents=True, exist_ok=True)
     request = build_request(source_root, artifact_root)
+    retire_removed_manifest_projects(request, artifact_root)
     write_if_changed(artifact_root / REQUEST_FILE, json_text(request))
     return request
+
+
+def retire_removed_manifest_projects(
+    request: dict[str, Any], artifact_root: Path
+) -> list[str]:
+    """Remove unchanged managed dossiers that no longer exist in canonical lore."""
+
+    manifest_path = artifact_root / MANIFEST_FILE
+    previous_request_path = artifact_root / REQUEST_FILE
+    if manifest_path.is_symlink() or previous_request_path.is_symlink():
+        raise ArtifactError("refusing symlink artifact lifecycle metadata")
+    manifest = load_json(manifest_path)
+    previous_request = load_json(previous_request_path)
+    if (
+        not isinstance(manifest, dict)
+        or manifest.get("schema_version") != SCHEMA_VERSION
+    ):
+        return []
+    records = manifest.get("projects") if isinstance(manifest, dict) else None
+    if not isinstance(records, dict):
+        return []
+    expected = {project["artifact"] for project in request["projects"]}
+    expected_slugs = {project["slug"] for project in request["projects"]}
+    previous_projects = (
+        previous_request.get("projects") if isinstance(previous_request, dict) else None
+    )
+    previous_by_slug = {
+        project["slug"]: project
+        for project in previous_projects or []
+        if isinstance(project, dict)
+        and isinstance(project.get("slug"), str)
+        and isinstance(project.get("artifact"), str)
+    }
+    previous_request_valid = (
+        isinstance(previous_request, dict)
+        and previous_request.get("schema_version") == SCHEMA_VERSION
+        and previous_request.get("source_sha256") == manifest.get("source_sha256")
+        and isinstance(previous_projects, list)
+    )
+    projects_root = artifact_root / PROJECTS_DIR
+    if projects_root.is_symlink():
+        raise ArtifactError(f"refusing symlink projects directory: {projects_root}")
+    retired: list[str] = []
+    retired_record_found = False
+    for slug, record in records.items():
+        if not isinstance(record, dict):
+            continue
+        relative = record.get("path")
+        digest = record.get("artifact_sha256")
+        if not isinstance(relative, str) or relative in expected:
+            continue
+        previous_project = previous_by_slug.get(slug)
+        if (
+            not previous_request_valid
+            or not isinstance(previous_project, dict)
+            or previous_project.get("artifact") != relative
+        ):
+            continue
+        parsed = PurePosixPath(relative)
+        if (
+            parsed.is_absolute()
+            or len(parsed.parts) != 2
+            or parsed.parts[0] != PROJECTS_DIR
+            or re.fullmatch(r"[a-z0-9][a-z0-9-]*\.md", parsed.name) is None
+        ):
+            continue
+        retired_record_found = True
+        path = projects_root / parsed.name
+        if path.is_symlink():
+            raise ArtifactError(f"refusing retired artifact symlink: {path}")
+        if not path.is_file() or not isinstance(digest, str):
+            continue
+        if artifact_file_digest(path) != digest:
+            archive_root = artifact_root / "retired-projects"
+            if archive_root.is_symlink():
+                raise ArtifactError(
+                    f"refusing symlink retired-projects directory: {archive_root}"
+                )
+            archive_root.mkdir(parents=True, exist_ok=True)
+            destination = archive_root / path.name
+            counter = 1
+            while destination.exists():
+                destination = archive_root / f"{path.stem}.{counter}{path.suffix}"
+                counter += 1
+            path.replace(destination)
+            print(
+                "artifact-generator: archived modified retired dossier: "
+                f"{path} -> {destination}",
+                file=sys.stderr,
+            )
+            retired.append(relative)
+            continue
+        path.unlink()
+        retired.append(relative)
+
+    manifest_paths = {
+        record.get("path")
+        for record in records.values()
+        if isinstance(record, dict) and isinstance(record.get("path"), str)
+    }
+    project_set_changed = set(records) != expected_slugs or manifest_paths != expected
+    index_path = artifact_root / INDEX_FILE
+    index_digest = manifest.get("index_sha256")
+    if retired_record_found or project_set_changed:
+        if index_path.is_symlink():
+            raise ArtifactError(f"refusing retired index symlink: {index_path}")
+        if index_path.is_file() and isinstance(index_digest, str):
+            if artifact_file_digest(index_path) == index_digest:
+                index_path.unlink()
+            else:
+                print(
+                    f"artifact-generator: preserving modified retired index: {index_path}",
+                    file=sys.stderr,
+                )
+    if project_set_changed and manifest_path.is_file():
+        manifest_path.unlink()
+    return retired
 
 
 def has_authored_payload(artifact_root: Path) -> bool:
@@ -251,7 +425,7 @@ def has_authored_payload(artifact_root: Path) -> bool:
 
 
 def migrate_legacy_artifacts(legacy_root: Path, artifact_root: Path) -> bool:
-    """Copy an old checkout-local artifact bundle without overwriting new work."""
+    """Resume-copy an old artifact bundle without overwriting unrelated work."""
 
     legacy_input = legacy_root.expanduser()
     artifact_input = artifact_root.expanduser()
@@ -263,11 +437,13 @@ def migrate_legacy_artifacts(legacy_root: Path, artifact_root: Path) -> bool:
         return False
     if legacy_root.is_symlink() or not legacy_root.is_dir():
         raise ArtifactError(f"refusing unsafe legacy artifact root: {legacy_root}")
-    if has_authored_payload(artifact_root):
+    # A generated request by itself is not authored memory and must not stop
+    # the caller from trying a later migration source that has a ready bundle.
+    if not has_authored_payload(legacy_root):
         return False
 
     candidates: list[tuple[Path, Path]] = []
-    for relative in (INDEX_FILE, MANIFEST_FILE):
+    for relative in (REQUEST_FILE, INDEX_FILE, MANIFEST_FILE):
         source = legacy_root / relative
         if source.exists():
             candidates.append((source, artifact_root / relative))
@@ -280,12 +456,67 @@ def migrate_legacy_artifacts(legacy_root: Path, artifact_root: Path) -> bool:
     if not candidates:
         return False
 
-    for source, destination in candidates:
+    for source, _ in candidates:
         if source.is_symlink() or not source.is_file():
             raise ArtifactError(f"refusing unsafe legacy artifact file: {source}")
+
+    records = [
+        {
+            "path": destination.relative_to(artifact_root).as_posix(),
+            "sha256": artifact_file_digest(source),
+        }
+        for source, destination in candidates
+    ]
+    migration = {
+        "schema_version": 1,
+        "source_root": str(legacy_root),
+        "files": records,
+    }
+    marker_path = artifact_root / MIGRATION_FILE
+    if marker_path.is_symlink():
+        raise ArtifactError(f"refusing migration marker symlink: {marker_path}")
+    active_migration = load_json(marker_path)
+    if marker_path.exists() and active_migration is None:
+        raise ArtifactError(f"invalid migration marker: {marker_path}")
+    if active_migration is not None and active_migration.get("source_root") != str(
+        legacy_root
+    ):
+        return False
+    resuming = active_migration is not None
+    if resuming and active_migration != migration:
+        raise ArtifactError(
+            f"legacy migration source changed before completion: {legacy_root}"
+        )
+    if not resuming and has_authored_payload(artifact_root):
+        return False
+
+    for (source, destination), record in zip(candidates, records):
         if destination.exists():
-            raise ArtifactError(f"refusing to overwrite artifact during migration: {destination}")
-    for source, destination in candidates:
+            replaceable_request = (
+                destination == artifact_root / REQUEST_FILE
+                and destination.is_file()
+                and not destination.is_symlink()
+            )
+            already_copied = (
+                resuming
+                and destination.is_file()
+                and not destination.is_symlink()
+                and artifact_file_digest(destination) == record["sha256"]
+            )
+            if not replaceable_request and not already_copied:
+                raise ArtifactError(
+                    f"refusing to overwrite artifact during migration: {destination}"
+                )
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    if not resuming:
+        atomic_write(marker_path, json_text(migration))
+    for (source, destination), record in zip(candidates, records):
+        if (
+            destination.is_file()
+            and not destination.is_symlink()
+            and artifact_file_digest(destination) == record["sha256"]
+        ):
+            continue
         destination.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary_name = tempfile.mkstemp(
             prefix=f".{destination.name}.migrate.", dir=destination.parent
@@ -300,6 +531,14 @@ def migrate_legacy_artifacts(legacy_root: Path, artifact_root: Path) -> bool:
                 temporary.unlink()
             except FileNotFoundError:
                 pass
+    for (_, destination), record in zip(candidates, records):
+        if (
+            not destination.is_file()
+            or destination.is_symlink()
+            or artifact_file_digest(destination) != record["sha256"]
+        ):
+            raise ArtifactError(f"legacy migration did not commit: {destination}")
+    marker_path.unlink()
     return True
 
 
@@ -326,6 +565,8 @@ def validate_project_document(
     path: Path, document: str, project: dict[str, Any]
 ) -> list[str]:
     errors: list[str] = []
+    if has_non_latin_alphabetic(document) or not looks_like_english_prose(document):
+        errors.append(f"{path}: project artifacts must be written in English")
     first_line = next((line.strip() for line in document.splitlines() if line.strip()), "")
     if first_line != f"# {project['title']}":
         errors.append(f"{path}: first heading must be '# {project['title']}'")
@@ -334,7 +575,7 @@ def validate_project_document(
         body = sections.get(heading, "")
         if len(re.sub(r"\s+", " ", body).strip()) < 12:
             errors.append(f"{path}: section '## {heading}' is missing or empty")
-    source_section = sections.get("Источники", "")
+    source_section = sections.get("Sources", "")
     expected_sources = ["lore.md", *project.get("research", [])]
     for source in expected_sources:
         if source not in source_section:
@@ -352,6 +593,8 @@ def validate_index_document(
     path: Path, document: str, projects: list[dict[str, Any]]
 ) -> list[str]:
     errors = []
+    if has_non_latin_alphabetic(document) or not looks_like_english_prose(document):
+        errors.append(f"{path}: artifact index must be written in English")
     first_line = next((line.strip() for line in document.splitlines() if line.strip()), "")
     if not first_line.startswith("# "):
         errors.append(f"{path}: index must start with a level-one heading")
@@ -359,6 +602,10 @@ def validate_index_document(
         link = f"[{project['title']}]({project['artifact']})"
         if link not in document:
             errors.append(f"{path}: missing exact project link {link}")
+    expected_paths = {project["artifact"] for project in projects}
+    actual_paths = set(re.findall(r"(projects/[A-Za-z0-9][A-Za-z0-9._/-]*\.md)", document))
+    for relative in sorted(actual_paths - expected_paths):
+        errors.append(f"{path}: unexpected project link {relative}")
     return errors
 
 
@@ -510,9 +757,9 @@ def quoted_command(source_root: Path, artifact_root: Path) -> str:
 def project_lines(request: dict[str, Any]) -> str:
     lines = []
     for project in request["projects"]:
-        references = ", ".join(project["research"]) or "только канонический lore"
+        references = ", ".join(project["research"]) or "canonical lore only"
         lines.append(
-            f"- `{project['artifact']}` — {project['title']} (источники: {references})"
+            f"- `{project['artifact']}` — {project['title']} (sources: {references})"
         )
     return "\n".join(lines)
 
@@ -520,61 +767,62 @@ def project_lines(request: dict[str, Any]) -> str:
 def bootstrap_instruction(request: dict[str, Any], artifact_root: Path) -> str:
     source_root = Path(request["source_root"])
     command = quoted_command(source_root, artifact_root)
-    return f"""Автогенерация проектных артефактов ещё не завершена.
+    return f"""Automatic project-artifact authoring is not complete yet.
 
-Это одноразовый bootstrap текущей установки. Выполни его сам через доступные
-file tools до обычной проектной работы, затем продолжи исходную задачу
-пользователя. Скрипт не генерирует содержимое и не заменяет твою работу.
+This is the one-time bootstrap for the current installation. Complete it
+yourself with the available file tools before normal project work, then continue
+the user's original task. The lifecycle script never generates dossier content
+and does not replace your authorship. Do not delegate this bootstrap to a
+subagent, background task, or another process: the current runtime agent must
+perform the writes, wait for validation, and reach `ready` in this session.
 
-1. Прочитай полностью `{source_root / 'lore.md'}`, `{source_root / 'prompt.md'}`,
-   `{source_root / 'security-posture.md'}`, `{source_root / 'user.md'}` и
-   `{source_root / 'context/research-index.md'}`. Затем для каждого dossier
-   прочитай только перечисленные рядом с ним research-файлы; не загружай
-   несвязанные документы одним общим блоком. Не выводи факты, которых нет в
-   источниках; пробелы фиксируй фразой «Не зафиксировано в источниках».
-2. Создай `{artifact_root / INDEX_FILE}` и ровно эти dossiers:
+1. Read `{source_root / 'lore.md'}`, `{source_root / 'prompt.md'}`,
+   `{source_root / 'security-posture.md'}`, `{source_root / 'user.md'}`, and
+   `{source_root / 'context/research-index.md'}` in full. For each dossier, then
+   read only the research files listed beside it; do not load unrelated
+   documents as one bulk block. Do not add facts that are absent from the
+   sources. Record gaps with the exact sentence "Not established in the
+   sources." Use only the current canonical files and current artifact request.
+   Do not inspect Git history/diff/reflog, deleted files, retired backups, or old
+   manifest records: they are not bootstrap sources.
+2. Remove managed `.md` files from `{artifact_root / PROJECTS_DIR}` when they
+   are not in the exact list below. Then update `{artifact_root / INDEX_FILE}`
+   and create exactly these dossiers. Write the INDEX and every dossier in
+   English. INDEX must include a useful English overview and must not reference
+   retired projects:
 {project_lines(request)}
-3. В каждом dossier первая строка — `# <точное название проекта>`, затем
-   непустые разделы: {', '.join(f'`## {name}`' for name in REQUIRED_SECTIONS)}.
-   В `## Источники` укажи `lore.md` и перечисленные research-файлы. INDEX должен
-   содержать название и относительную ссылку на каждый dossier.
-4. Проверь и зафиксируй готовность командой:
+3. The first line of every dossier must be `# <exact project title>`, followed
+   by non-empty sections: {', '.join(f'`## {name}`' for name in REQUIRED_SECTIONS)}.
+   Under `## Sources`, cite `lore.md` and every listed research file. INDEX must
+   contain the title and relative link of every dossier.
+4. Validate and record completion with:
    `{command}`
-5. Если validator сообщает ошибку, исправь файлы и повтори команду. Не завершай
-   bootstrap одним описанием того, что следовало бы сделать.
+5. If validation reports an error, repair the files and repeat the command. Do
+   not end bootstrap with a description of what should have been done.
 """
 
 
 def artifact_memory(request: dict[str, Any], documents: dict[str, str]) -> str:
-    order = [INDEX_FILE, *(project["artifact"] for project in request["projects"])]
+    projects = request["projects"]
     blocks = [
-        "Validated project memory follows. Every file below passed the current "
-        "manifest, structure, source, and SHA-256 checks. Use it directly for "
-        "the current request; canonical lore/research wins if a conflict is found."
+        "# Established project history\n\n"
+        "Continue from this prior project work. Apply its settled decisions and "
+        "operational knowledge directly without asking the user to restate it.",
+        documents[INDEX_FILE].rstrip(),
     ]
-    for relative in order:
-        document = documents[relative]
-        path = html.escape(relative, quote=True)
-        digest = sha256_text(document)
-        content = html.escape(document.rstrip(), quote=False)
-        blocks.append(
-            f'<choirboy-artifact path="{path}" sha256="{digest}">\n'
-            f"{content}\n"
-            "</choirboy-artifact>"
-        )
-    return "\n\n".join(blocks)
+    blocks.extend(documents[project["artifact"]].rstrip() for project in projects)
+    return "\n\n---\n\n".join(blocks)
 
 
 def session_context(request: dict[str, Any], artifact_root: Path) -> str:
     status, documents = inspect_artifacts(request, artifact_root)
+    if status["status"] == "ready":
+        return artifact_memory(request, documents)
     root = html.escape(str(artifact_root), quote=True)
     digest = html.escape(request["source_sha256"], quote=True)
-    if status["status"] == "ready":
-        body = artifact_memory(request, documents)
-    else:
-        body = bootstrap_instruction(request, artifact_root)
+    body = bootstrap_instruction(request, artifact_root)
     return (
-        f'<choirboy-project-artifacts status="{status["status"]}" '
+        f'<choirboy-project-artifacts status="pending" '
         f'source_sha256="{digest}" root="{root}">\n'
         f"{body.rstrip()}\n"
         "</choirboy-project-artifacts>"
@@ -595,8 +843,8 @@ def stop_response(request: dict[str, Any], artifact_root: Path, hook_input: str)
         return {}
     reason = (
         bootstrap_instruction(request, artifact_root)
-        + "\nStop-проверка обнаружила незавершённый bootstrap. Продолжи сейчас; "
-        "после успешного finalize этот хук перестанет вмешиваться."
+        + "\nStop validation found an unfinished bootstrap. Continue now; after "
+        "a successful finalize, this hook will stop intervening."
     )
     return {"decision": "block", "reason": reason}
 
@@ -667,7 +915,7 @@ def main() -> int:
     args = parser().parse_args()
     try:
         source_root = args.source_root.resolve()
-        artifact_root = args.root.resolve()
+        artifact_root = resolve_artifact_root(args.root)
         if args.command in ("status", "verify"):
             request = build_request(source_root, artifact_root)
         else:
@@ -678,6 +926,12 @@ def main() -> int:
                         file=sys.stderr,
                     )
                     break
+            migration_marker = artifact_root / MIGRATION_FILE
+            if migration_marker.exists():
+                raise ArtifactError(
+                    "legacy artifact migration is incomplete; rerun the installer "
+                    "with the original migration source"
+                )
             request = prepare(source_root, artifact_root)
         if args.command == "prepare":
             result = current_status(request, artifact_root)

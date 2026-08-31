@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Kimi 0.39.x discards SessionStart stdout. Use this event to prepare artifact
-# state and reset the once-per-session UserPromptSubmit delivery marker.
+# Kimi 0.39.x discards SessionStart/PreCompact stdout. Use these events to
+# prepare artifact state and reset the UserPromptSubmit delivery marker before
+# startup, resume, or compaction can build the next model context.
 set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -24,7 +25,7 @@ try:
     event = json.load(sys.stdin)
 except Exception:
     event = {}
-if event.get("hook_event_name") != "SessionStart":
+if event.get("hook_event_name") not in ("SessionStart", "PreCompact"):
     raise SystemExit(0)
 session_id = event.get("session_id") or event.get("sessionId")
 cwd = event.get("cwd", "")

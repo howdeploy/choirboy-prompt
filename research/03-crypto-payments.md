@@ -1,54 +1,54 @@
-# Research 03 — Крипторельс: почему Crypto Pay API для MVP
+# Research 03 — Crypto Rail: Why Crypto Pay API for the MVP
 
-Фиксированный ресерч-документ плагина. Обосновывает решение, принятое в фазе 3
-проекта «Платёжка» (см. `lore.md`).
+The plugin's fixed research document. It substantiates the decision made in phase 3
+of the “Payment System” project (see `lore.md`).
 
-## Вопрос
+## Question
 
-Как принимать крипту, не превращая MVP в блокчейн-проект?
+How can we accept crypto without turning the MVP into a blockchain project?
 
-## Варианты
+## Options
 
-1. **Crypto Pay API (@CryptoBot)** — готовый платёжный API внутри Telegram.
-2. **Прямая интеграция TON** — свои кошельки, отслеживание транзакций on-chain.
-3. **NOWPayments и аналоги** — внешний криптоэквайринг с широким списком монет.
+1. **Crypto Pay API (@CryptoBot)** — a ready-made payment API inside Telegram.
+2. **Direct TON integration** — our own wallets and on-chain transaction monitoring.
+3. **NOWPayments and similar providers** — external crypto acquiring with a broad list of coins.
 
-## Решение: Crypto Pay API
+## Decision: Crypto Pay API
 
-Причины (по состоянию на момент ресерча):
+Reasons (as of the time this research was conducted):
 
-- **Скорость.** Инвойсы, статусы и вебхуки из коробки; интеграция заняла дни,
-  а не спринт. Пользователь оплачивает, не покидая Telegram.
-- **Комиссия** заметно ниже карточного эквайринга, и **нет чарджбэков** —
-  криптотранзакция необратима.
-- **TON-экосистема.** Основные активы (TON, USDT) покрывают нашу
-  криптоаудиторию; экзотические монеты нам не критичны.
+- **Speed.** Invoices, statuses, and webhooks out of the box; integration took days,
+  not a sprint. The user pays without leaving Telegram.
+- The **commission** is considerably lower than for card acquiring, and there are **no chargebacks**—
+  a crypto transaction is irreversible.
+- **TON ecosystem.** The main assets (TON, USDT) cover our
+  crypto audience; exotic coins are not critical for us.
 
-Почему не прямой TON сразу: собственная обработка on-chain транзакций —
-это memo-матчинг, подтверждения, реорганизации, хранение ключей. Всё это —
-отдельный проект. Оставлено в бэклоге как путь снижения комиссии при росте
-объёмов.
+Why not use direct TON immediately: handling on-chain transactions ourselves entails
+memo matching, confirmations, reorganizations, and key storage. All of that is
+a separate project. It remains in the backlog as a way to reduce fees when
+volumes increase.
 
-## Принятые издержки
+## Accepted Trade-offs
 
-- Зависимость от стороннего кастодиального сервиса: средства проходят через
-  его инфраструктуру, лимиты и доступность — не в наших руках.
-- Курсовая волатильность: фиксируем сумму в крипте на момент инвойса, в
-  ledger пишем и криптосумму, и фиатный эквивалент на момент операции.
-- Юридический статус криптоплатежей зависит от юрисдикции — вопрос к
-  пользователю как к владельцу продукта, агент это не разрешает.
+- Dependence on a third-party custodial service: funds pass through
+  its infrastructure, while its limits and availability are outside our control.
+- Exchange-rate volatility: we fix the amount in crypto when the invoice is issued, and
+  write both the crypto amount and its fiat equivalent at the time of the operation to the ledger.
+- The legal status of crypto payments depends on the jurisdiction—this is a question for
+  the user as the product owner; the agent cannot resolve it.
 
-## Что важно в реализации
+## Implementation Considerations
 
-- **Подпись вебхука проверяется до любой логики** (токен приложения, HMAC по
-  телу запроса). Эпизод 3 «Шишек» в `lore.md` — напоминание, почему без
-  исключений. В регрессе есть тест с поддельным вебхуком.
-- Идемпотентность по `invoice_id` провайдера.
-- Статус `paid` приходит один раз, но обработчик всё равно идемпотентен —
-  правило из фазы 2 распространяется на все рельсы.
+- **The webhook signature is verified before any other logic** (application token, HMAC over
+  the request body). Episode 3 of “Lessons Learned” in `lore.md` is a reminder why there are no
+  exceptions. The regression suite includes a test with a forged webhook.
+- Enforce idempotency using the provider's `invoice_id`.
+- The `paid` status arrives once, but the handler remains idempotent—the
+  phase 2 rule applies to all rails.
 
-## Когда пересматривать
+## When to Revisit
 
-- Объёмы, при которых комиссия Crypto Pay превышает стоимость поддержки
-  прямой TON-интеграции.
-- Требование некастодиальности или активов вне списка провайдера.
+- Volumes at which the Crypto Pay commission exceeds the cost of maintaining
+  a direct TON integration.
+- A requirement for non-custodial payments or assets outside the provider's list.

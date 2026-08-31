@@ -50,7 +50,7 @@ shell 元字符不会被重新分词。15 秒超时避免卡住会话启动。
 - 自动钩子需要 `bash`，skill 不需要；
 - Cloud Code 需要项目 `enabledPlugins`，不会继承本地 Desktop 安装；
 - Desktop WSL 不支持 plugins，SSH hooks 同步目前也不可靠，请使用 skill；
-- 不要同时启用 marketplace 插件和 `./install.sh --target claude`，否则会注入两次；
+- 不要同时启用 marketplace 插件和 `./install.sh --target claude`，否则会加载两次；
 - 发布时必须同步提升 manifest 与 marketplace 版本，然后运行
   `python3 scripts/build-context.py` 和测试套件。
 
@@ -74,7 +74,8 @@ shell 元字符不会被重新分词。15 秒超时避免卡住会话启动。
 `install.sh` 需要 `python3` 进行 JSON 操作。钩子的 `claude` 和 `plain`
 格式只依赖 Bash，不需要 `jq`/`python3`；`hermes` 格式需要其中一个 JSON
 解析器。自动 artifact lifecycle 需要 `python3`：安装阶段只准备元数据，下一次
-会话由当前智能体编写 dossiers 并通过 validator。Artifact 存储在 checkout
+会话由当前智能体编写 dossiers 并通过 validator；request 与 validator 要求
+INDEX 和 dossiers 使用英文。Artifact 存储在 checkout
 变化后仍保持稳定，路径优先级为：`CHOIRBOY_ARTIFACTS_DIR` →
 `${CLAUDE_PLUGIN_DATA}/project-artifacts` →
 `${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
@@ -99,6 +100,9 @@ opencode) command -v opencode >/dev/null 2>&1 || [ -d "$HOME/.config/opencode" ]
 hermes) command -v hermes >/dev/null 2>&1 || [ -d "$HOME/.hermes" ] ;;
 kimi)   command -v kimi   >/dev/null 2>&1 || [ -d "${KIMI_CODE_HOME:-$HOME/.kimi-code}" ] ;;
 gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
+grok)   command -v grok   >/dev/null 2>&1 || [ -d "$HOME/.grok" ] ;;
+grokbot) command -v grokbot >/dev/null 2>&1 || command -v grok-bot >/dev/null 2>&1 \
+           || [ -d "$HOME/.grokbot" ] ;;
 ```
 
 目标选择规则：
@@ -114,10 +118,12 @@ gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
 |---|---|---|
 | claude | `~/.claude/settings.json`（或 `--settings`/`--project`） | JSON 钩子 `SessionStart` + `Stop` |
 | codex | `~/.codex/hooks.json` | JSON 钩子 `SessionStart` + `Stop` |
-| opencode | `~/.config/opencode/plugins/agent-plugin.ts` | 全局 `chat.message` 插件 |
+| opencode | `~/.config/opencode/plugins/agent-plugin.ts` | 模型侧 system-context transform |
 | hermes | `~/.hermes/config.yaml` | 带标记的 `hooks.pre_llm_call` 块 + 授权白名单 |
-| kimi | `${KIMI_CODE_HOME:-~/.kimi-code}/config.toml` | 带标记的 SessionStart + UserPromptSubmit + Stop hooks |
+| kimi | `${KIMI_CODE_HOME:-~/.kimi-code}/config.toml` | 带标记的 SessionStart + PreCompact + UserPromptSubmit + Stop hooks |
 | gemini | `~/.gemini/GEMINI.md` | 带标记的 HTML lifecycle 指令块 |
+| grok | `~/.grok/AGENTS.md` | 带标记的 HTML lifecycle 指令块（Grok Build 全局规则） |
+| grokbot | `~/.grokbot/choirboy-context/SKILL.md` | 准备好的可导入 workflow（不自动加载） |
 | `--instructions FILE` | 任意文件 | 带标记的 lifecycle 指令块（HTML 或 `#`） |
 
 ---
@@ -144,7 +150,7 @@ gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
   因此 marketplace 和手动 Claude 钩子是二选一的安装路径，不能同时启用。
 - OpenCode 目标拥有一个完整的带标记插件文件。内容相同时重复安装不做
   修改；更新会先备份，再原子替换。
-- Hermes consent 条目、Kimi 的三个 hook、Gemini/Grok 指令块以及任意
+- Hermes consent 条目、Kimi 的四个 hook、Gemini/Grok 指令块以及任意
   `--instructions` 块都会在每次安装器运行时同步；旧绝对路径和旧注册
   修订号会原地升级。
 
@@ -189,8 +195,9 @@ backup() {
 | `opencode_plugin` | 管理 OpenCode 适配器 | 标记 guard、原子替换、时间戳备份 |
 | `hermes_allowlist` | Hermes 授权白名单 | 精确的 (event, command) 对 |
 | `instruction_block` | Lifecycle 指令文本 | HTML 或 `#` 注释 |
+| `grokbot_workflow` | 管理 Grok Bot workflow 文件 | `install`/`uninstall`/`status`，标记 guard |
 | `discover_legacy_artifact_roots` | 查找旧 checkout-local bundle | 检查旧托管绝对路径 |
-| `do_claude` / `do_codex` / `do_opencode` / `do_hermes` / `do_kimi` / `do_gemini` | 目标安装 | 每目标逻辑 |
+| `do_claude` / `do_codex` / `do_opencode` / `do_hermes` / `do_kimi` / `do_gemini` / `do_grok` / `do_grokbot` | 目标安装 | 每目标逻辑 |
 | `do_instructions` | 安装到任意文件 | 按扩展名定风格 |
 
 ### 5.1. `json_hook` — 细节
@@ -227,18 +234,19 @@ Hermes 要求对 shell 钩子显式同意：`~/.hermes/shell-hooks-allowlist.jso
 
 ### 5.4. Kimi 0.39.x lifecycle hooks
 
-Kimi 0.39.x 会丢弃 `SessionStart` stdout，因此托管 TOML 块安装三个 hook：
+Kimi 0.39.x 会丢弃 `SessionStart` stdout，因此托管 TOML 块安装四个 hook：
 
 - `SessionStart`（`startup|resume`）准备 artifact 状态并重置
-  once-per-session 投递 marker；
-- 首次 `UserPromptSubmit` 执行规范 plain 投递，输出固定 lore，以及 bootstrap
-  request 或已验证的内联 artifacts；
+  投递 fingerprint；
+- `PreCompact`（`manual|auto`）在 compaction 前同步重置 fingerprint；
+- `UserPromptSubmit` 执行规范 plain 投递，重复 pending bootstrap，或在
+  fingerprint 变化时输出 ready bundle；
 - 验证仍为 pending 时，`Stop` 把 continuation request 写入 stderr 并以代码 2
   退出；达到 `ready` 后以代码 0 退出。
 
 除非由 `CHOIRBOY_STATE_DIR` 覆盖，state marker 位于
 `${KIMI_CODE_HOME:-~/.kimi-code}/choirboy-prompt/hook-state`。只有 stdout
-成功输出后才记录已投递状态。
+成功输出后才记录规范化的 ready fingerprint。
 
 ---
 
@@ -246,7 +254,7 @@ Kimi 0.39.x 会丢弃 `SessionStart` stdout，因此托管 TOML 块安装三个 
 
 1. **Hermes 配置中已有顶层 `hooks:`。** 安装器拒绝（`die`）并给出手动合并块的说明——以免覆盖别人的钩子。
 2. **Kimi 配置中已有 `hooks =`。** 同样：die 并提示切换到 `[[hooks]]`。
-3. **Codex：钩子被禁用。** 在 `~/.codex/config.toml` 中没找到 `grep hooks = true` → 警告（不是阻塞）。
+3. **Codex：钩子被禁用。** 在 `~/.codex/config.toml` 中发现 `hooks = false` → 警告（不阻塞）。
 4. **文件不存在。** `mkdir -p` + 创建空 `{}`/空文件。
 5. **插件文件夹移动了。** JSON hook 按脚本名匹配，托管文本块也会同步；
    旧绝对路径会被替换，不会重复。
@@ -278,16 +286,7 @@ echo '{"session_id":"hook-check","extra":{"is_first_turn":false}}' \
 
 `--list` 中的 `stale` 需要处理：对该 target 重新运行 install，并确认状态变为
 `installed`（Grok Bot 为 `prepared`）。Ready artifact bundle 的
-`session-context` 必须包含带完整 INDEX 和 dossier 正文的
-`choirboy-artifact` 块；只有路径的消息不算成功投递记忆。
+`session-context` 必须包含 `# Established project history` 与完整 dossier
+正文；只有路径的消息不算成功投递记忆。
 
 完整的临时测试套件——[docs/testing.zh-CN.md](testing.zh-CN.md)。
-
----
-
-## 8. 分发包中的兼容性 fixtures
-
-Marketplace/custom-plugin ZIP 包含已跟踪的 `sessions/` 目录，便于安装后检查
-原生格式证据。这些文件是兼容性 fixtures：`SessionStart` 与 `load-context` 都
-不会把它们导入用户的原生 session store，它们也不属于自动 lore payload。
-手动复现见 [`sessions/README.zh-CN.md`](../sessions/README.zh-CN.md)。

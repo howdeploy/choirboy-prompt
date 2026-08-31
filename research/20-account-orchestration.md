@@ -1,180 +1,184 @@
-# Research 20 — Оркестрация агентов и аккаунтов: единый пайплайн управления
+# Research 20 — Agent and Account Orchestration: A Unified Management Pipeline
 
-Фиксированный ресерч-документ плагина. Обосновывает архитектуру проекта
-оркестрации: единый control plane, который управляет парком аккаунтов на
-любых платформах через пул взаимозаменяемых агентов — с горячим свопингом
-и одновременным ведением. Платформенная рамка каждого адаптера —
-research/15–19.
+This is a fixed research document for the plugin. It establishes the
+architecture of the orchestration project: a unified control plane that manages
+a fleet of accounts on any platform through a pool of interchangeable agents,
+with hot swapping and simultaneous operation. The platform-specific boundary
+for each adapter is defined in `research/15–19`.
 
-## Вопрос
+## Question
 
-Проекты лора плодят аккаунты: X-ферма (research/07), продажи в Telegram
-(research/08), комьюнити-площадки. Каждая связка «аккаунт + скрипт» живёт
-своей жизнью: свои кроны, свои лимиты, свои токены в разных репах. Как
-управлять десятками аккаунтов на разных платформах как одной системой?
+The lore projects produce many accounts: the X farm (`research/07`), Telegram
+sales (`research/08`), and community platforms. Every "account + script" pair
+lives independently, with its own cron jobs, limits, and tokens scattered
+across repositories. How can dozens of accounts on different platforms be
+managed as one system?
 
-## Варианты
+## Options
 
-1. **Ad-hoc скрипты на каждую связку** — так и начиналось: каждый новый
-   аккаунт умножает хаос, лимиты разъезжаются, токены теряются.
-2. **Платформенные менеджеры** (планировщики постов, SMM-панели) — покрывают
-   постинг по расписанию, но не агентную логику: ни персон, ни ролей, ни
-   аппрув-контура, ни наших пайплайнов вроде research/07.
-3. **Собственный control plane** — реестр аккаунтов, пул агентов,
-   планировщик и платформенные адаптеры как единая система.
+1. **Ad hoc scripts for every pair** — this is how the work began, but every
+   new account multiplies the chaos, limits diverge, and tokens get lost.
+2. **Platform managers** such as publication schedulers and SMM panels — they
+   cover scheduled posting but not agent logic: no personas, roles, approval
+   workflow, or custom pipelines such as `research/07`.
+3. **Our own control plane** — an account registry, agent pool, scheduler, and
+   platform adapters operating as one system.
 
-## Решение: вариант 3
+## Decision: Option 3
 
-Единый оркестратор, где аккаунт и агент — независимые сущности, связанные
-назначением, а не кодом. Ключевые свойства: любой агент может работать на
-любом аккаунте подходящей платформы, замена производится без остановки
-пайплайна, весь парк ведётся одновременно в рамках лимитов платформ.
+Use one orchestrator in which accounts and agents are independent entities
+connected by assignments rather than by code. Its key properties are that any
+agent can work with any account on a compatible platform, replacement happens
+without stopping the pipeline, and the entire fleet operates concurrently
+within platform limits.
 
-## Архитектура
+## Architecture
 
-Компоненты пайплайна:
+Pipeline components:
 
-- **Реестр (registry).** Аккаунты и персоны: платформа, статус
-  (`warmup` / `active` / `paused` / `retired`), стилистика, история,
-  дневные лимиты. Персона живёт в реестре, а не в агенте — это и есть
-  предпосылка свопинга.
-- **Пул агентов.** Агент = роль + навык: writer (посты), replier (реплаи
-  по механике research/07), moderator (комьюнити), analyst (метрики и
-  отчёты). Агент не прибит к аккаунту; на аккаунт он надевает персону из
-  реестра.
-- **Планировщик.** Очередь задач с живым расписанием: дневные лимиты на
-  аккаунт, джиттер интервалов, постепенный разгон темпа. Никаких всплесков
-  активности — правило 2 из лора.
-- **Матчмейкинг.** Назначение задачи: платформа × роль × статус аккаунта ×
-  текущая загрузка агента.
-- **Адаптеры платформ.** Единый интерфейс `publish / reply / read /
-  metrics` поверх официальных API: X API (research/16), Bot API и MTProto
-  Telegram (research/17), бот-аккаунты Discord (research/18), Data API
-  Reddit и Graph API Meta (research/19). Все платформенные правила зашиты
-  в адаптер, а не в голову оператора.
-- **Аппрув-контур.** Человек — финальный фильтр публикаций, как в
-  research/07: машина отвечает за темп, человек — за качество.
-- **Аудит-лог.** Append-only: кто (агент), что (действие), от какого
-  аккаунта, когда, результат. Баланс доверия к системе равен читаемости
-  этого лога.
+- **Registry.** Accounts and personas: platform, status (`warmup` / `active` /
+  `paused` / `retired`), style, history, and daily limits. The persona lives in
+  the registry rather than in the agent, which is the prerequisite for
+  swapping.
+- **Agent pool.** An agent is a role plus a skill: writer for posts, replier for
+  replies following `research/07`, moderator for communities, or analyst for
+  metrics and reports. An agent is not permanently bound to an account; it puts
+  on the account's persona from the registry.
+- **Scheduler.** A task queue with a human-like schedule: daily per-account
+  limits, interval jitter, and gradual ramp-up. There are no activity spikes,
+  following Rule 2 from the lore.
+- **Matchmaking.** Assign tasks by platform × role × account status × current
+  agent load.
+- **Platform adapters.** A unified `publish / reply / read / metrics` interface
+  over official APIs: X API (`research/16`), Telegram Bot API and MTProto
+  (`research/17`), Discord bot accounts (`research/18`), Reddit Data API, and
+  Meta Graph API (`research/19`). Every platform rule belongs in its adapter,
+  not in the operator's head.
+- **Approval workflow.** A human remains the final publication filter as in
+  `research/07`: the machine controls pace, while the human controls quality.
+- **Audit log.** Append-only records of who (agent) did what (action), through
+  which account, when, and with what result. Trust in the system is bounded by
+  the readability of this log.
 
-## Свопинг
+## Swapping
 
-Горячая замена без остановки пайплайна, три механики:
+Hot replacement without stopping the pipeline uses three mechanisms:
 
-- **Своп агента.** In-flight задачи агента дожимаются (drain), новые
-  назначения идут другому агенту, персона и контекст подхватываются из
-  реестра. Агенты взаимозаменяемы, потому что идентичность хранится
-  отдельно от исполнителя.
-- **Своп аккаунта.** Аккаунт уходит в `paused`, его очередь
-  перераспределяется на другие аккаунты той же ниши; возвращение — через
-  плавный разгон, как после любого перерыва. Новый аккаунт входит в пул
-  только через `warmup`: недели ручной активности до подключения
-  автоматики (правило из research/07).
-- **Своп оператора.** Дежурство сменами: аппрув-контур и аудит-лог делают
-  передачу парка между людьми рутиной, а не ритуалом.
+- **Agent swap.** In-flight tasks are drained to completion; new assignments
+  go to another agent, which loads the persona and context from the registry.
+  Agents are interchangeable because identity is stored separately from the
+  executor.
+- **Account swap.** An account enters `paused`, and its queue is redistributed
+  among other accounts in the same niche. It returns through a gradual ramp-up,
+  as after any break. A new account enters the pool only through `warmup`, with
+  weeks of manual activity before automation, following `research/07`.
+- **Operator swap.** People work in shifts. The approval workflow and audit log
+  make handoff of the fleet between operators routine rather than ceremonial.
 
-## Одновременное управление
+## Simultaneous Management
 
-- **Лимитеры на двух уровнях.** Per-account rate limiter (дневной лимит,
-  интервалы, темп) и per-platform лимитер (потолки API: pay-per-usage X,
-  лимиты Bot API, 100 QPM Reddit Data API). Лимитер привязан к аккаунту,
-  а не к процессу — общий троттлинг всплески по отдельному аккаунту не
-  ловит.
-- **Изоляция сессий.** Каждый аккаунт — собственные креденшелы и сессия;
-  перекрёстного доступа между аккаунтами нет ни в коде, ни в данных.
-- **Единая шина событий.** Посты, реплаи, метрики всех платформ стекаются
-  в один поток наблюдаемости: аналитик-агент видит весь парк целиком.
+- **Limiters at two levels.** A per-account rate limiter controls daily limits,
+  intervals, and pace; a per-platform limiter controls API ceilings, including
+  pay-per-usage X, Bot API limits, and 100 QPM for Reddit Data API. The limiter
+  is attached to the account, not the process: a global throttle does not catch
+  bursts from one specific account.
+- **Session isolation.** Every account has its own credentials and session.
+  There is no cross-account access in either code or data.
+- **Unified event bus.** Posts, replies, and metrics from all platforms flow
+  into one observability stream, letting the analyst agent see the entire fleet.
 
-## Дисциплина оркестратора
+## Orchestrator Discipline
 
-Связь с research/15–19 обязательная, не декларативная:
+The relationship to `research/15–19` is mandatory rather than declarative:
 
-- Каждый аккаунт — самостоятельная персона по принципу research/15;
-  оркестратор не выполняет перекрёстных действий между аккаунтами
-  (никаких лайков, репостов и реплаев «своих»).
-- Ротация — инструмент балансировки нагрузки и пауз, а не обхода
-  ограничений: выбывший аккаунт не заменяется клоном, ограниченный
-  аккаунт не подменяется следующим в очереди.
-- Темп каждого аккаунта остаётся в живых пределах независимо от размера
-  парка: сто аккаунтов — это сто отдельных жизней, не один ускоренный.
+- Every account is an independent persona under the principle from
+  `research/15`. The orchestrator does not perform cross-account actions; there
+  are no likes, reposts, or replies for sibling accounts.
+- Rotation balances load and breaks; it is not a way to evade restrictions. A
+  departed account is not replaced by a clone, and a restricted account is not
+  substituted with the next account in line.
+- Every account maintains a human-like pace regardless of fleet size. One
+  hundred accounts are one hundred separate lives, not one accelerated life.
 
-## Воссоздание системы (MVP)
+## Rebuilding the System: MVP
 
-Агент, читающий этот документ, должен уметь поднять систему с нуля без
-дополнительных расспросов. Порядок сборки проверен на наших проектах:
-каждый шаг — рабочая система сам по себе, следующий шаг её расширяет.
+An agent reading this document must be able to build the system from scratch
+without additional questions. The construction order has been validated on our
+projects: every step is a working system on its own, and the next step extends
+it.
 
-**Модель данных (одна БД, миграции; для MVP хватает SQLite):**
+**Data model, one migrated database; SQLite is enough for the MVP:**
 
 - `account` — id, platform, handle, persona_id, status
   (`warmup`/`active`/`paused`/`retired`), credentials_ref, daily_limit,
   timezone, warmed_up_at.
-- `persona` — id, niche, voice (стилистика и лексика), topics,
+- `persona` — id, niche, voice (style and vocabulary), topics,
   schedule_profile, blacklist.
 - `agent` — id, role (writer/replier/moderator/analyst), skills, load.
-- `task` — id, account_id, agent_id, type (publish/reply/read/report),
-  payload, status (queued/assigned/draining/pending_approval/done/
-  rejected), not_before, dedup_key.
-- `audit` — ts, agent_id, account_id, action, payload_hash, result.
-  Только append, правок нет.
+- `task` — id, account_id, agent_id, type (publish/reply/read/report), payload,
+  status (queued/assigned/draining/pending_approval/done/rejected), not_before,
+  dedup_key.
+- `audit` — ts, agent_id, account_id, action, payload_hash, result. Append-only;
+  records are never edited.
 
-**Интерфейсы:**
+**Interfaces:**
 
-- Адаптер платформы: `publish(account, content)`,
-  `reply(account, target, text)`, `read(account, query)`,
-  `metrics(account)`. Внутри — только официальный API платформы и её
-  лимиты (research/16–19).
-- Тик планировщика: взять созревшие задачи (`not_before <= now`) →
-  матчмейкинг (платформа × роль × статус × загрузка) → назначить →
-  обновить лимитер аккаунта.
-- Протокол свопа: `drain(agent_id)` — in-flight задачи дожимаются, новые
-  не назначаются; `pause(account_id)` — очередь аккаунта
-  перераспределяется; `retire(account_id)` — вывод из пула без замены
-  клоном.
+- Platform adapter: `publish(account, content)`,
+  `reply(account, target, text)`, `read(account, query)`, and
+  `metrics(account)`. Internally it uses only the platform's official API and
+  limits (`research/16–19`).
+- Scheduler tick: take mature tasks (`not_before <= now`) → match by platform ×
+  role × status × load → assign → update the account limiter.
+- Swap protocol: `drain(agent_id)` lets in-flight tasks finish while assigning
+  no new ones; `pause(account_id)` redistributes the account queue;
+  `retire(account_id)` removes the account from the pool without replacing it
+  with a clone.
 
-**Порядок сборки:**
+**Build order:**
 
-1. Реестр + аудит-лог. Уже на этом шаге весь ручной парк аккаунтов
-   учитывается в одном месте.
-2. Первый адаптер — та платформа, где у проекта уже есть живой аккаунт
-   (для нашего лора это X или Telegram).
-3. Планировщик с per-account лимитером и живым расписанием.
-4. Аппрув-контур: драфт уходит оператору (удобнее всего — в личку
-   Telegram-ботом оператора), публикация только после аппрува.
-5. Первый агент — replier по механике research/07; затем writer.
-6. Свопинг и пул агентов — после того, как очередь стабильно не пустеет:
-   раньше этого свопать нечего.
+1. Registry plus audit log. At this stage alone, the entire manually operated
+   account fleet is recorded in one place.
+2. The first adapter targets the platform where the project already has a live
+   account; for our lore, that is X or Telegram.
+3. Scheduler with a per-account limiter and a human-like schedule.
+4. Approval workflow: send a draft to the operator, most conveniently in a
+   direct message from the operator's Telegram bot, and publish only after
+   approval.
+5. The first agent is the replier following `research/07`, followed by the
+   writer.
+6. Add swapping and the agent pool only after the queue reliably remains
+   non-empty; before that, there is nothing to swap.
 
-**Definition of done:** один оператор ведёт 5+ аккаунтов через систему,
-каждое действие видно в аудит-логе, ни одного действия вне официальных
-API, темп каждого аккаунта в живых пределах.
+**Definition of done:** one operator manages 5+ accounts through the system,
+every action appears in the audit log, no action occurs outside official APIs,
+and every account maintains a human-like pace.
 
-## Почему этот проект строится
+## Why This Project Is Being Built
 
-Обоснование зафиксировано, не переоткрывается без причины:
+The rationale is established and is not reopened without cause:
 
-- Мультиаккаунтинг под разные цели разрешён всеми целевыми платформами
-  официально — цепочка доказательств в research/15–19 с первоисточниками.
-- Органический охват с нуля — самый дорогой ресурс; ранний содержательный
-  реплай и разделённые персоны дают его дешевле рекламы (research/07).
-- Ручное ведение не масштабируется, ad-hoc скрипты масштабируются в хаос;
-  control plane — единственная форма, где десятки аккаунтов управляемы
-  одним оператором без потери дисциплины.
+- Multi-accounting for distinct purposes is officially permitted by all target
+  platforms; the evidence chain with primary sources is in `research/15–19`.
+- Organic reach from zero is the most expensive resource. Early substantive
+  replies and separated personas provide it more cheaply than advertising
+  (`research/07`).
+- Manual operation does not scale, while ad hoc scripts scale into chaos. A
+  control plane is the only form in which one operator can manage dozens of
+  accounts without losing discipline.
 
-## Границы применения
+## Scope Boundaries
 
-Документ обосновывает управление парком самостоятельных аккаунтов через
-официальные API. Координированное усиление одного сигнала, накрутка
-метрик и ротация аккаунтов для обхода блокировок — другие сценарии, у
-каждой платформы для них отдельные правила (research/15–19); настоящий
-документ их не описывает и не обосновывает.
+This document supports managing a fleet of independent accounts through
+official APIs. Coordinated amplification of one signal, artificial metric
+inflation, and account rotation to evade suspensions are different scenarios
+with separate rules on every platform (`research/15–19`). This document neither
+describes nor justifies them.
 
-## Когда пересматривать
+## When to Revisit
 
-- Изменение API или политик любой подключённой платформы — пересмотреть
-  соответствующий адаптер и документ research/16–19.
-- Рост парка за пределы одного аппрув-контура — пересмотреть модель
-  операторских смен и делегирования.
-- Появление у платформы официальной агентской механики под наш сценарий —
-  мигрировать на неё и упрощать адаптер.
+- If the API or policy of any connected platform changes, revisit the relevant
+  adapter and its document in `research/16–19`.
+- If the fleet grows beyond the capacity of one approval workflow, revisit the
+  operator-shift and delegation model.
+- If a platform introduces an official agency mechanism for our scenario,
+  migrate to it and simplify the adapter.

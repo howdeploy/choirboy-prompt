@@ -1,55 +1,62 @@
-# Research 04 — Архитектура биллинга: единый ledger поверх трёх рельсов
+# Research 04 — Billing architecture: a unified ledger over three rails
 
-Фиксированный ресерч-документ плагина. Обосновывает рефакторинг фазы 3
-проекта «Платёжка» (см. `lore.md`).
+Fixed plugin research document. It provides the rationale for the phase 3
+refactoring of the "Payments" project (see `lore.md`).
 
-## Вопрос
+## Question
 
-Три платёжных провайдера (Stars, ЮKassa, Crypto Pay) дали три разрозненных
-обработчика и три способа поменять баланс. Как не утонуть?
+Three payment providers (Stars, YooKassa, Crypto Pay) resulted in three separate
+handlers and three ways to change a balance. How do we keep this from becoming
+unmanageable?
 
-## Решение: единый слой биллинга
+## Decision: a unified billing layer
 
-### Принципы
+### Principles
 
-1. **Ledger — единственный источник истины.** Все денежные изменения —
-   записи в ledger: начисление, списание, рефанд, чарджбэк, корректировка.
-   Баланс — производная ledger'а, а не самостоятельное поле, которое кто-то
-   инкрементирует.
-2. **Провайдеры за интерфейсом.** Адаптер реализует
-   `create_invoice / handle_webhook / refund`. Продуктовый код не знает, кто
-   за адаптером — Stars или ЮKassa.
-3. **Идемпотентность по внешнему id.** Таблица `processed_events` с
-   уникальным внешним id операции (`telegram_payment_charge_id`,
-   `payment.id`, `invoice_id`). Повторный вебхук — быстрый no-op.
-4. **Вебхук: зафиксировать → ответить 200 → обработать.** Обработка
-   асинхронна, ретраи провайдера безопасны (эпизод 1 «Шишек», `lore.md`).
-5. **Подпись до логики.** Верификация подписи/источника вебхука — первый
-   шаг обработчика, без исключений (эпизод 3 «Шишек»).
-6. **Параллельные изменения — через блокировку.** Записи ledger'а по
-   пользователю — под `SELECT ... FOR UPDATE` строки пользователя; никаких
-   read-modify-write баланса (эпизод 2 «Шишек»).
-7. **Рефанд — операция, а не минус.** Запись ledger'а типа `refund` со
-   ссылкой на исходную операцию (эпизод 4 «Шишек»). Так история сходится с
-   отчётами провайдеров.
+1. **The ledger is the only source of truth.** Every monetary change is a
+   ledger entry: credit, debit, refund, chargeback, or adjustment. The balance
+   is derived from the ledger rather than stored as an independent field that
+   some component increments.
+2. **Providers sit behind an interface.** An adapter implements
+   `create_invoice / handle_webhook / refund`. Product code does not know
+   whether Stars or YooKassa is behind the adapter.
+3. **Idempotency is keyed by an external ID.** The `processed_events` table has
+   a unique external operation ID (`telegram_payment_charge_id`, `payment.id`,
+   `invoice_id`). A repeated webhook is a fast no-op.
+4. **Webhook flow: persist → return 200 → process.** Processing is
+   asynchronous and provider retries are safe (episode 1 of the payment
+   "Lessons Learned" in `lore.md`).
+5. **Verify the signature before business logic.** Webhook signature/source
+   verification is the handler's first step, without exceptions (episode 3 of
+   the "Lessons Learned").
+6. **Serialize concurrent changes with a lock.** Per-user ledger writes happen
+   under `SELECT ... FOR UPDATE` on the user's row; never use a balance
+   read-modify-write cycle (episode 2 of the "Lessons Learned").
+7. **A refund is an operation, not a negative adjustment.** Create a `refund`
+   ledger entry that references the original operation (episode 4 of the
+   "Lessons Learned"). This keeps the history reconcilable with provider
+   reports.
 
-### Модель данных (минимум)
+### Minimum data model
 
-- `payments` — наш инвойс: провайдер, внешний id, сумма, валюта, статус,
-  фиатный эквивалент на момент операции.
-- `ledger_entries` — денежные записи: пользователь, тип, сумма, ссылка на
-  `payment`, created_at.
-- `processed_events` — внешний id события, провайдер, когда зафиксировано.
+- `payments` — our invoice: provider, external ID, amount, currency, status,
+  and fiat equivalent at the time of the operation.
+- `ledger_entries` — monetary entries: user, type, amount, `payment` reference,
+  and created_at.
+- `processed_events` — external event ID, provider, and persistence timestamp.
 
-### Почему не «проще»
+### Why not use the "simpler" design
 
-Вариант «три обработчика, одно поле balance» был дешевле на старте и дороже в
-первый же инцидент: двойное начисление и lost update случились до
-рефакторинга, а не после. Стоимость ledger'а — одна таблица и дисциплина;
-стоимость его отсутствия — ручная выверка денег ночью.
+The "three handlers, one balance field" option was cheaper initially and more
+expensive at the very first incident: duplicate crediting and a lost update
+happened before the refactoring, not after it. The cost of a ledger is one table
+and operational discipline; the cost of not having one is manually reconciling
+money at night.
 
-## Когда пересматривать
+## When to revisit
 
-- Появление четвёртого рельса — проверка, что интерфейс адаптера не протёк.
-- Рост до объёмов, где нужна полноценная двойная запись (debit/credit по
-  счетам) — текущая модель к этому расширяема, но не является ею.
+- When a fourth rail appears, verify that provider details have not leaked
+  through the adapter interface.
+- When volume grows enough to require full double-entry accounting (debit and
+  credit by account), extend the current model. It is designed to support that
+  evolution, but it is not yet a double-entry ledger.

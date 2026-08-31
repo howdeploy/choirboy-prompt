@@ -1,5 +1,5 @@
 {
-  "description": "Inject fixed lore and drive one-time agent-authored project artifacts",
+  "description": "Load fixed lore and drive one-time agent-authored project artifacts",
   "hooks": {
     "SessionStart": [
       {

@@ -8,10 +8,13 @@ Hook、skills、installer、诊断与包检查。规范 runner 是
 ## 1. 原则
 
 - 每个检查都是独立的 bash 命令，带显式 PASS/FAIL。
-- 套件从仓库根运行；临时文件放在 `/tmp` 下，带 `choirboy-test.` 前缀。
+- 套件可从任意目录运行；临时文件放在 `/tmp` 下，带 `choirboy-test.` 前缀。
 - 运行后删除临时文件。设置 `CHOIRBOY_TEST_KEEP_TMP=1` 可保留这些文件并打印
   用于检查的精确目录。
 - payload **按运行时收到的确切形式**检查，而不是「凭感觉」。
+- 规范 context、research、INDEX 与 dossiers 必须使用英文；suite 会拒绝任何
+  model-facing Markdown 中的 Cyrillic/CJK，artifact validator 在运行时执行
+  同一规则。
 
 ---
 
@@ -64,7 +67,7 @@ bash hooks/session-start.sh --format plain | head -40
 
 预期：prompt → posture → lore → user → research 索引标题顺序正确，带 `---` 分隔符。
 
-### 2.5. Hermes：第一轮注入
+### 2.5. Hermes：第一轮投递
 
 ```bash
 SID="hook-check-$(date +%s)"
@@ -195,9 +198,11 @@ mv /path/to/plugin /path/to/plugin-moved
 
 预期：`OpenCode install, list, idempotent refresh, backup, and rollback` 与
 `OpenCode foreign-plugin guard` 都打印 `PASS`。生成的适配器必须使用
-`chat.message`、持久化会话历史、带 `synthetic: true` 技术标记的 text part、
-规范 plain 钩子以及
-fail-open 错误处理。
+模型侧 system-context transform，在 compaction 后重建规范 plain payload，
+暴露 pending→ready 与 freshness 变化，并保留 fail-open 错误处理。运行时过渡
+assertions 位于 `scripts/test-opencode-transition.ts`，由 `bun` 运行；当
+`bun` 不可用时，套件会在 stderr 打印 `SKIP OpenCode pending-to-ready runtime
+test (bun unavailable)` 而不是失败。
 
 ---
 
@@ -238,22 +243,3 @@ python3 scripts/package-plugin.py
 - 修改内容文件后——先运行 `python3 scripts/build-context.py`，再运行规范测试和
   §4（闭合、清理）。
 - 修改 `instruction_block` 后——在已安装文件中按标记 grep（见 [docs/installer.zh-CN.md](installer.zh-CN.md) §3.3）。
-
----
-
-## 7. Session fixtures
-
-规范测试会验证所有 JSON/JSONL 记录可解析、三种运行时示例的 ID/parent chain
-符合预期、Codex SQL 不含额外 thread，并确认发布 ZIP 包含 `sessions/`。
-
-单独检查 JSONL：
-
-```bash
-for file in sessions/claude/*.jsonl sessions/codex/*.jsonl \
-  sessions/kimi/session_*/agents/main/wire.jsonl; do
-  python3 -c 'import json,sys; [json.loads(line) for line in open(sys.argv[1], encoding="utf-8") if line.strip()]' "$file"
-done
-```
-
-每次修改 fixture 后都运行此检查，然后执行
-[docs/authoring.zh-CN.md](authoring.zh-CN.md) 中的发布 gate。

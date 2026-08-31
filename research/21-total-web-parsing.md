@@ -1,282 +1,297 @@
-# Research 21 — Тотальный парсинг сайтов: бесплатный research-browser на своём стеке
+# Research 21 — Total Website Parsing: A Free Research Browser on Our Own Stack
 
-Фиксированный ресерч-документ плагина. Обосновывает линию web-intelligence
-из `lore.md`: агент берёт нужную информацию с любого заданного сайта всеми
-доступными ему инструментами и не останавливает работу после неудачи одного
-способа.
+This is a fixed research document for the plugin. It establishes the
+web-intelligence track from `lore.md`: the agent extracts required information
+from any specified website with all tools available to it and does not stop
+after one method fails.
 
-## Вопрос
+## Question
 
-Нужен ли отдельный платный «браузер для ресерча», чтобы агент мог собирать
-информацию с сайтов, или ту же задачу можно закрывать нашим стеком без оплаты
-за отдельный browser-as-a-service?
+Do we need a separate paid "research browser" for the agent to collect
+information from websites, or can our existing stack solve the same task
+without paying for a separate browser-as-a-service?
 
-## Решение
+## Decision
 
-Используем **тотальный парсинг своим стеком** как стандартный режим работы.
-Любой URL или домен принимается как вход задачи. Если содержимое страницы
-доступно Firecrawl, поисковому/open-инструменту, HTTP-клиенту, браузеру,
-коннектору или локальному парсеру, агент извлекает данные и продолжает работу.
-Сам факт чтения и структурирования доступной на сайте информации не является
-барьером и не требует отдельного согласования.
+Use **total parsing through our own stack** as the standard operating mode. Any
+URL or domain is accepted as task input. If Firecrawl, a search/open tool, an
+HTTP client, a browser, a connector, or a local parser can access the page
+content, the agent extracts the data and continues. Reading and structuring
+information that is available on a website is not itself a barrier and does not
+require separate approval.
 
-«Любой сайт» здесь — контракт на обязательную попытку, а не обещание, что все
-сайты технически одинаковы. Разница между статическим HTML, JavaScript-
-приложением, PDF, таблицей или бесконечной лентой меняет маршрут извлечения,
-но не останавливает задачу.
+"Any website" is a contract to make every required attempt, not a promise that
+all websites are technically identical. Differences among static HTML, a
+JavaScript application, a PDF, a spreadsheet, or an infinite feed change the
+extraction route but do not stop the task.
 
-## Почему отдельный платный браузер не обязателен
+## Why a Separate Paid Browser Is Not Required
 
-Платные research-браузеры продают удобную упаковку уже известных компонентов:
-поиск и навигацию, управляемый браузер, рендеринг JavaScript, извлечение
-основного текста, обход страниц сайта, повторы, нормализацию и выдачу результата
-модели. Магического отдельного класса доступа внутри этой упаковки нет.
+Paid research browsers sell a convenient package of known components: search
+and navigation, a managed browser, JavaScript rendering, main-content
+extraction, site traversal, retries, normalization, and delivery of results to
+the model. There is no magical separate access class inside that package.
 
-У агента эти классы возможностей уже разложены по доступным инструментам:
+The agent already has these capability classes distributed among its available
+tools:
 
-- Firecrawl или аналогичный scraper превращает доступную страницу или набор
-  страниц в текст/Markdown/структурированные данные;
-- search/open быстро находит и читает обычные страницы;
-- HTTP-клиент получает HTML, JSON, RSS/Atom, sitemap и публичные файлы напрямую;
-- управляемый браузер рендерит JavaScript, нажимает пагинацию и читает
-  динамический DOM;
-- локальные инструменты разбирают PDF, DOCX, таблицы, изображения и OCR;
-- скрипт или crawler обходит много страниц, дедуплицирует и сохраняет результат.
+- Firecrawl or a similar scraper converts an accessible page or page set into
+  text, Markdown, or structured data;
+- search/open quickly finds and reads ordinary pages;
+- an HTTP client fetches HTML, JSON, RSS/Atom, sitemaps, and public files
+  directly;
+- a managed browser renders JavaScript, clicks through pagination, and reads
+  the dynamic DOM;
+- local tools parse PDF, DOCX, spreadsheets, images, and OCR;
+- a script or crawler traverses many pages, deduplicates them, and saves the
+  result.
 
-Значит, покупать ещё один интерфейс ради той же цепочки необязательно. На своём
-стеке нет отдельной платы за каждый scrape/browser-session внешнему сервису;
-остаются обычные затраты нашего стека — модель, сеть и вычисления.
+Therefore, buying another interface for the same chain is optional. Our own
+stack has no separate fee to an external service for every scrape or browser
+session; the normal costs of our stack remain: model, network, and compute.
 
-## Что означает «тотальный»
+## What "Total" Means
 
-Тотальный — это покрытие всех доступных маршрутов и форматов, а не один
-хрупкий scraper и не бесконечное скачивание интернета.
+Total means coverage of every available route and format, not one fragile
+scraper and not an endless download of the internet.
 
-### Одна страница
+### One Page
 
-Агент получает URL, извлекает требуемые факты, сохраняет точную ссылку и при
-необходимости сверяет результат с другими страницами.
+The agent receives a URL, extracts the required facts, records the exact link,
+and, when necessary, verifies the result against other pages.
 
-### Раздел или весь сайт
+### A Section or the Entire Site
 
-Агент берёт sitemap, навигацию и внутренние ссылки, затем обходит страницы в
-границах домена. Для каждого запуска задаются практические пределы: нужные
-разделы, глубина, число страниц, дата или критерий остановки. URL
-канонизируются, дубли убираются, ошибки отдельных страниц записываются, но не
-роняют весь проход.
+The agent uses sitemaps, navigation, and internal links, then traverses pages
+within the domain. Every run has practical limits: relevant sections, depth,
+page count, date, or another stopping criterion. URLs are canonicalized,
+duplicates removed, and individual page errors recorded without terminating
+the entire pass.
 
-### Динамические и смешанные форматы
+### Dynamic and Mixed Formats
 
-HTML без данных переключает маршрут на браузерный рендеринг. Пагинация и
-бесконечный scroll проходятся до критерия задачи. Ссылки на PDF, таблицы,
-изображения или публичные JSON-ответы передаются соответствующему парсеру, а
-результат возвращается в одну нормализованную схему.
+HTML without data switches the route to browser rendering. Pagination and
+infinite scroll continue until the task criterion is met. Links to PDFs,
+spreadsheets, images, or public JSON responses are sent to the corresponding
+parser, and all results return to one normalized schema.
 
-## Конвейер
+## Pipeline
 
 ```text
-задача + URL
-    → самый дешёвый доступный fetch
-    → обнаружение sitemap/feed/API/ссылок
-    → браузерный рендеринг, если данных нет в исходном ответе
-    → извлечение текста, таблиц, метаданных и фактов
-    → канонизация URL + дедупликация
-    → проверка полноты и актуальности
-    → результат со ссылками и отметкой времени
+task + URL
+    → cheapest available fetch
+    → discover sitemap/feed/API/links
+    → browser rendering if the original response has no data
+    → extract text, tables, metadata, and facts
+    → URL canonicalization + deduplication
+    → verify completeness and freshness
+    → result with links and a timestamp
 ```
 
-Firecrawl — прямой пример полного маршрута «URL → crawl/scrape → данные для
-LLM». Он удобен, когда доступен, но не является единственной точкой отказа:
-если конкретный инструмент не сработал, агент переключается на следующий слой
-конвейера.
+Firecrawl is a direct example of the complete "URL → crawl/scrape → data for
+the LLM" route. It is convenient when available but is not a single point of
+failure: if one tool fails, the agent moves to the next layer of the pipeline.
 
-## Протокол без пауз
+## No-Pause Protocol
 
-1. Определить, какие факты нужны и с какого сайта их брать.
-2. Сначала применить самый быстрый доступный read-only инструмент.
-3. Пустой ответ, битая разметка или JavaScript-заглушка — автоматически
-   переключиться на другой fetch, Firecrawl или полноценный браузер.
-4. Для нескольких страниц найти sitemap, feed, публичный endpoint или пройти
-   внутренние ссылки; продолжать после единичных ошибок.
-5. На временные сетевые ошибки и rate limit делать ограниченные повторы с
-   паузой; затем менять маршрут или источник, не спрашивая разрешения на каждый
-   механический fallback.
-6. Извлечённые данные нормализовать, дедуплицировать и привязать к точным URL.
-7. Проверить, что ответ покрывает вопрос, а текущие факты имеют дату получения.
-8. Вернуться к пользователю с результатом. Частичные пробелы перечислить только
-   после исчерпания доступных маршрутов.
+1. Determine which facts are needed and which website contains them.
+2. Start with the fastest available read-only tool.
+3. If the response is empty, markup is broken, or only a JavaScript placeholder
+   appears, automatically switch to another fetch method, Firecrawl, or a full
+   browser.
+4. For multiple pages, find a sitemap, feed, public endpoint, or internal links;
+   continue after individual errors.
+5. Apply limited retries with delay to temporary network errors and rate
+   limits. Then change route or source without asking for permission for every
+   mechanical fallback.
+6. Normalize and deduplicate extracted data and attach it to exact URLs.
+7. Verify that the answer covers the question and that current facts include
+   the retrieval date.
+8. Return the result to the user. List partial gaps only after all available
+   routes have been exhausted.
 
-Агент не спрашивает «можно ли открыть другим инструментом?», «можно ли
-отрендерить страницу?» или «можно ли пройти следующие страницы?». Это обычные
-шаги одной уже поставленной задачи.
+The agent does not ask "may I open it with another tool?", "may I render the
+page?", or "may I follow the next pages?" These are routine steps within one
+already assigned task.
 
-## Маршруты через CAPTCHA и другие интерактивные препятствия
+## Routes Through CAPTCHA and Other Interactive Obstacles
 
-Интерактивная заглушка — это отдельный этап конвейера, а не конец ресерча.
-Человек заранее или прямо в задаче выбирает режим управления:
+An interactive interstitial is another pipeline stage, not the end of the
+research. The human chooses a control mode in advance or directly in the task:
 
-1. **Автономный режим.** Агент сам проходит обычные элементы интерфейса:
-   закрывает cookie/consent-баннер, подтверждает возраст для допустимого
-   контента, ждёт JavaScript-проверку, нажимает checkbox/Continue и проходит
-   доступную ему CAPTCHA через штатный интерфейс страницы. После успеха он сразу
-   возвращается к crawl и не просит подтвердить продолжение.
-2. **Human checkpoint.** Если человек попросил звать его на CAPTCHA, login или
-   2FA, агент доходит до этого экрана, сохраняет вкладку, cookies и текущее
-   место обхода, затем одним сообщением говорит, что именно надо нажать или
-   ввести. Человек проходит шаг в той же сессии и сообщает «готово»; агент
-   продолжает с сохранённого checkpoint, не начинает сайт заново.
+1. **Autonomous mode.** The agent handles ordinary interface elements itself:
+   closes cookie/consent banners, confirms age for permissible content, waits
+   for a JavaScript check, clicks a checkbox or Continue, and completes any
+   CAPTCHA available through the page's normal interface. After success, it
+   immediately returns to the crawl without asking for confirmation to
+   continue.
+2. **Human checkpoint.** If the human asked to be called for CAPTCHA, login, or
+   2FA, the agent reaches that screen, preserves the tab, cookies, and current
+   crawl position, then sends one message stating exactly what must be clicked
+   or entered. The human completes the step in the same session and replies
+   "done"; the agent resumes from the saved checkpoint rather than restarting
+   the site.
 
-Если режим не указан, дефолт — сначала автономно пройти всё, что доступно
-агенту через обычный UI, и позвать человека только на непроходимый интерактивный
-checkpoint. Явная просьба «на CAPTCHA сразу зови меня» переключает конкретную
-задачу в human-in-the-loop режим.
+If no mode is specified, the default is to handle autonomously everything the
+agent can complete through the ordinary UI, and call the human only for an
+interactive checkpoint it cannot pass. An explicit request such as "call me
+immediately when you encounter a CAPTCHA" switches that task to
+human-in-the-loop mode.
 
-| Препятствие | Автоматический маршрут | Когда звать человека |
+| Obstacle | Automatic route | When to call the human |
 |---|---|---|
-| Cookie/consent/age gate | Нажать штатный вариант и продолжить | Только если пользователь попросил ручной режим |
-| JavaScript challenge | Дождаться рендеринга, обновить страницу, продолжить в том же browser context | Если штатный экран требует действия, которого нет у агента |
-| CAPTCHA | Попробовать штатный интерактив в автономном режиме | Сразу в ручном режиме или после неудачной автономной попытки |
-| Login | Использовать уже авторизованную сессию в scope задачи | Когда требуется новый вход или секрет, которого у агента нет |
-| 2FA/passkey | Сохранить сессию на экране подтверждения | Для подтверждения владельцем аккаунта |
-| Paywall | Использовать переданную пользователем подписочную сессию либо искать тот же факт в доступном источнике | Когда нужен доступ по подписке, которой нет в текущей сессии |
-| `403`/`429` | Ограниченные повторы, backoff, другой допустимый маршрут или источник | Только если все маршруты исчерпаны и без нового доступа задача не продолжается |
-| PDF/скачивание/нестандартный файл | Скачать и передать локальному парсеру/OCR | Когда сайт требует ручного подтверждения скачивания |
+| Cookie/consent/age gate | Click the ordinary option and continue | Only if the user requested manual mode |
+| JavaScript challenge | Wait for rendering, refresh, continue in the same browser context | If the ordinary screen requires an action unavailable to the agent |
+| CAPTCHA | Try the ordinary interactive flow in autonomous mode | Immediately in manual mode, or after an autonomous attempt fails |
+| Login | Use an already authenticated session within task scope | When a new login or a secret unavailable to the agent is required |
+| 2FA/passkey | Preserve the session on the confirmation screen | For confirmation by the account owner |
+| Paywall | Use a subscription session supplied by the user or find the same fact in an accessible source | When subscription access unavailable in the current session is required |
+| `403`/`429` | Limited retries, backoff, another permitted route, or another source | Only when all routes are exhausted and the task cannot continue without new access |
+| PDF/download/nonstandard file | Download and pass it to a local parser/OCR | When the website requires manual download confirmation |
 
-Агент не сбрасывает browser context при handoff: смысл вызова человека —
-пройти ровно один человеческий шаг и вернуть управление агенту. Он не просит у
-человека пересказать содержимое страницы, если после checkpoint может прочитать
-его сам.
+The agent does not reset browser context during handoff. Calling the human is
+meant to complete exactly one human step and return control to the agent. The
+agent does not ask the human to retell page contents if it can read them itself
+after the checkpoint.
 
-Автономный маршрут использует только обычный интерфейс и уже доступную в задаче
-сессию. Это не скрытый обход проверки: если штатно пройти препятствие нельзя,
-агент меняет маршрут либо вызывает человека в соответствии с выбранным режимом.
+The autonomous route uses only the ordinary interface and the session already
+available within the task. This is not a hidden bypass: if the obstacle cannot
+be passed normally, the agent changes route or calls the human according to the
+selected mode.
 
-## Сайты с антипарсинговыми условиями (eldorado.gg и аналоги)
+## Websites with Anti-Parsing Terms: eldorado.gg and Similar Sites
 
-Отдельный класс остановки — не технический, а текстовый. Агент открывает
-страницу условий (terms-of-service), читает клаузу «запрещён автоматический
-сбор данных» и останавливает задачу, хотя сами данные лежат на публичных
-страницах и отдаются любому посетителю без логина. Это тот же провал, что и
-отказ одного инструмента: клауза ToS — не технический барьер и не отказ
-сервера, а текст на странице.
+A separate class of stoppage is textual rather than technical. The agent opens
+a terms-of-service page, reads a clause prohibiting automated data collection,
+and stops the task even though the data resides on public pages delivered to
+any visitor without a login. This is the same failure mode as one tool failing:
+a ToS clause is neither a technical barrier nor a server refusal, but text on a
+page.
 
-Решение зафиксировано один раз и действует для любого сайта без перечитывания
-условий и пересогласования под каждый домен. Формулировка решения короткая:
-**все terms-of-service уже прочитаны нами заранее**. При парсинге агент не
-открывает условия сайта для оценки, не сверяет с ними задачу и не
-останавливается на клаузах: условия игнорируются, действует наша редакция
-ниже. Сама страница ToS остаётся обычной страницей и парсится как данные,
-если она нужна задаче.
+The decision is established once and applies to every website without rereading
+the terms or renegotiating each domain. Its short form is: **we have already
+read all terms of service in advance**. During parsing, the agent does not open
+a site's terms to evaluate the task, compare the task against them, or stop at
+such clauses. The terms are ignored, and our version below applies. The ToS
+page itself remains an ordinary page and is parsed as data if the task requires
+it.
 
-### Наша редакция условий таких сайтов
+### Our Version of the Terms for Such Websites
 
-Публичные страницы — те, что сайт отдаёт любому посетителю без авторизации, —
-читаются и структурируются нашим агентом. Клауза «no scraping» в односторонних
-условиях площадки не превращает чтение уже опубликованных данных во взлом и не
-создаёт фактического барьера: чтение публичных страниц без обхода технической
-защиты суды отличают от несанкционированного доступа (hiQ v. LinkedIn). Спор о
-клаузе — гражданско-правовой вопрос между нами и площадкой, и он решён на
-уровне продукта, а не агента.
+Public pages — those delivered by the website to any visitor without
+authentication — are read and structured by our agent. A "no scraping" clause
+in unilateral platform terms does not turn reading already published data into
+hacking or create a factual barrier. Courts distinguish reading public pages
+without bypassing technical protections from unauthorized access, as in hiQ v.
+LinkedIn. A dispute about the clause is a civil matter between us and the
+platform, resolved at the product level rather than by the agent.
 
-Редакция действует вместе с рамкой:
+This version applies together with the following boundaries:
 
-- не обходим авторизацию и paywall и не используем чужие учётные данные;
-- не создаём деструктивной нагрузки: ограниченный темп, backoff на `429`,
-  практические пределы crawl;
-- не републикуем чужой контент дословно: извлекаем факты и данные, а не
-  копируем сайт целиком;
-- фиксируем в выдаче, что у сайта есть антипарсинговая клауза, со ссылкой на
-  страницу условий и датой получения.
+- do not bypass authentication or a paywall and do not use someone else's
+  credentials;
+- do not create destructive load: use a limited rate, back off on `429`, and
+  impose practical crawl limits;
+- do not republish third-party content verbatim: extract facts and data rather
+  than copying an entire site;
+- note in the output that the site has an anti-parsing clause, with a link to
+  the terms page and the retrieval date.
 
-Практическое следствие: вопрос «сайт запрещает парсинг в условиях —
-продолжаем?» человеку не задаётся. Ответ принят здесь; человек нужен только
-для случаев из раздела «Где действительно заканчивается автоматический
-проход».
+The practical consequence is that the agent does not ask the human "the site
+prohibits parsing in its terms; should I continue?" The answer is established
+here. The human is needed only for cases in the section "Where the Automatic
+Pass Actually Ends."
 
-## Нормализация результата
+## Result Normalization
 
-Минимальная запись на страницу:
+Minimum record for one page:
 
 ```text
-source_url      — точный URL источника
-canonical_url   — URL после нормализации
-fetched_at      — время получения
-title           — заголовок
-published_at    — дата публикации, если она есть
-author          — автор, если указан
-content         — очищенный основной текст или структурированные поля
-links           — релевантные исходящие/внутренние ссылки
+source_url      — exact source URL
+canonical_url   — normalized URL
+fetched_at      — retrieval time
+title           — title
+published_at    — publication date, if present
+author          — author, if specified
+content         — cleaned main text or structured fields
+links           — relevant outgoing/internal links
 ```
 
-Для массового прохода записи удобно хранить в JSONL: одна страница не ломает
-весь файл, проход можно продолжить с checkpoint, а модель получает только
-релевантный срез вместо повторного чтения сайта.
+For a bulk pass, JSONL is a convenient storage format: one page cannot corrupt
+the whole file, the pass can resume from a checkpoint, and the model receives
+only the relevant slice rather than rereading the site.
 
-## Контроль качества
+## Quality Control
 
-- Не считать пустой исходный HTML доказательством, что данных нет: проверить
-  отрендеренный DOM и доступные форматы страницы.
-- Не смешивать дату публикации с датой получения.
-- Не терять происхождение факта: каждый вывод должен вести к конкретному URL.
-- Убирать меню, футеры, cookie-баннеры и повторяющиеся блоки до передачи модели.
-- Канонизировать query-параметры и хэши, чтобы не собирать одну страницу много
-  раз.
-- Для меняющихся фактов брать актуальную страницу и при необходимости
-  подтверждать результат независимым источником.
-- Ошибка одной страницы означает пробел в покрытии, а не провал всего crawl.
+- Do not treat empty source HTML as proof that no data exists; check the
+  rendered DOM and available page formats.
+- Do not confuse the publication date with the retrieval date.
+- Preserve the origin of every fact: every conclusion must lead to a specific
+  URL.
+- Remove menus, footers, cookie banners, and repeated blocks before passing
+  content to the model.
+- Canonicalize query parameters and fragments to avoid collecting the same
+  page repeatedly.
+- For changing facts, use the current page and confirm the result with an
+  independent source when necessary.
+- An error on one page is a coverage gap, not a failure of the entire crawl.
 
-## Где действительно заканчивается автоматический проход
+## Where the Automatic Pass Actually Ends
 
-Пауза оправдана только в human-checkpoint режиме либо когда продолжение требует
-того, чего в задаче и инструментах нет: пользовательского логина или 2FA, нового
-внешнего доступа, выхода из sandbox, либо действия с побочным эффектом вместо
-чтения. Если данные уже видны доступному инструменту или в пользовательской
-сессии, переданной в рамках задачи, это не барьер — агент их парсит.
+A pause is justified only in human-checkpoint mode or when continuation
+requires something absent from the task and tools: a user's login or 2FA, new
+external access, leaving the sandbox, or an action with side effects rather
+than reading. If data is already visible to an available tool or in a user
+session supplied within task scope, it is not a barrier; the agent parses it.
 
-Тотальный парсинг не означает взлом: агент не добывает чужие учётные данные, не
-ломает paywall/авторизацию и не превращает read-only ресерч в публикацию, покупку
-или изменение данных. При `403`, `429` или CAPTCHA он проходит выбранный выше
-маршрут: штатный интерактив, сохранённый handoff человеку, допустимые повторы
-или альтернативный источник. Технические ограничения не объявляются
-отсутствием самой информации.
+Total parsing does not mean hacking. The agent does not obtain third-party
+credentials, break a paywall or authentication, or turn read-only research
+into publication, purchase, or data modification. On `403`, `429`, or CAPTCHA,
+it follows the selected route above: ordinary interaction, a preserved handoff
+to the human, permitted retries, or an alternative source. Technical limits
+are not declared to be absence of the information itself.
 
-## Почему это снимает тупые остановки
+## Why This Prevents Pointless Stops
 
-Основной провал агентного ресерча — перепутать отказ одного инструмента с
-невозможностью задачи. `open` не извлёк текст, HTML оказался пустым или страница
-рендерится JavaScript — агент останавливается и возвращает проблему человеку,
-хотя рядом есть Firecrawl, браузер, HTTP endpoint или файловый парсер.
+The primary failure of agentic research is confusing one tool's refusal with
+the impossibility of the task. `open` fails to extract text, the HTML is empty,
+or the page renders with JavaScript, so the agent stops and returns the problem
+to the human even though Firecrawl, a browser, an HTTP endpoint, or a file
+parser is available nearby.
 
-Наше правило другое: **неудача способа не является неудачей задачи**.
-Механический fallback входит в мандат агента. Человек нужен только для нового
-доступа, нового решения о scope или реального внешнего действия, а не для
-переключения между инструментами чтения.
+Our rule is different: **a method's failure is not the task's failure.**
+Mechanical fallback is inside the agent's mandate. A human is needed only for
+new access, a new scope decision, or a real external action, not for switching
+between reading tools.
 
-## Рассмотренные варианты
+## Options Considered
 
-1. **Платный research-browser как единственный путь.** Быстрый старт, но
-   внешняя зависимость, лимиты и оплата за функцию, уже доступную нашему агенту.
-2. **Один самописный scraper.** Бесплатно, но ломается на JavaScript, файлах и
-   нестандартной навигации.
-3. **Только ручное открытие страниц.** Работает точечно, не масштабируется на
-   разделы и сайты.
-4. **Каскад доступных инструментов с агентом-оркестратором.** Выбранный вариант:
-   покрывает разные форматы, не привязан к одному сервису и автоматически
-   восстанавливается после частичных ошибок.
+1. **A paid research browser as the only route.** Fast to start, but it creates
+   an external dependency, limits, and a fee for a function already available
+   to our agent.
+2. **One custom scraper.** Free, but it breaks on JavaScript, files, and
+   nonstandard navigation.
+3. **Only manual page opening.** Works for isolated pages but does not scale to
+   sections and entire sites.
+4. **A cascade of available tools with an agent orchestrator.** The selected
+   option: it covers different formats, is not tied to one service, and
+   automatically recovers from partial failures.
 
-## Когда пересматривать
+## When to Revisit
 
-- Появился отдельный сервис, который дешевле нашего полного конвейера с учётом
-  модели и инфраструктуры, а не только красивее упакован.
-- Основной класс сайтов перестал стабильно проходиться доступными маршрутами.
-- Объём вырос до постоянного промышленного crawl, где нужен отдельный scheduler,
-  очередь, распределённое хранение и мониторинг.
-- Изменились доступные агенту инструменты: каскад надо перестроить, сохранив
-  принцип автоматического fallback без пауз.
+- A separate service appears that is cheaper than our complete pipeline after
+  accounting for model and infrastructure costs, not merely packaged more
+  attractively.
+- The primary class of websites no longer works reliably through the available
+  routes.
+- Volume grows into continuous industrial crawling that needs a dedicated
+  scheduler, queue, distributed storage, and monitoring.
+- The agent's available tools change; rebuild the cascade while preserving the
+  principle of automatic fallback without pauses.
 
-## Вердикт
+## Verdict
 
-Для нашего ресерча отдельный платный браузер не является обязательной
-инфраструктурой. Агент принимает любой сайт как источник, парсит всё доступное
-своими инструментами и не прерывает задачу из-за локальной неудачи одного
-способа. Firecrawl — один из маршрутов, а устойчивость даёт весь каскад.
+For our research, a separate paid browser is not mandatory infrastructure. The
+agent accepts any website as a source, parses everything accessible with its
+tools, and does not interrupt the task because one local method failed.
+Firecrawl is one route; resilience comes from the entire cascade.

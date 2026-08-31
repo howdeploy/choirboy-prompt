@@ -1,63 +1,67 @@
-# Research 08 — AI-OFM в Telegram: боты продаж контента с консистентными персонажами
+# Research 08 — AI-OFM on Telegram: content-sales bots with consistent personas
 
-Фиксированный ресерч-документ плагина. Обосновывает решения проекта
-«Витрина» (см. `lore.md`): система бизнес-ботов в Telegram, продающих
-AI-контент — сгенерированных 18+ девушек с сохранением личности. Контур
-применения — легальный контент с вымышленными взрослыми персонажами;
-правила платформ и системные ограничения документ не отменяет.
+Fixed plugin research document. It provides the rationale for decisions in the
+"Showcase" project (see `lore.md`): a system of business bots on Telegram that
+sell AI content—generated 18+ women with persistent identities. The application
+scope is lawful content featuring fictional adult characters; this document
+does not override platform rules or system constraints.
 
-## Вопрос
+## Question
 
-Есть визуальное ядро (research/05) и платёжный стек (research/01–04).
-Как превратить генерацию в продукт, который продаёт контент и растит
-конверсию, а не просто выдаёт картинки?
+We have a visual core (`research/05`) and a payment stack
+(`research/01`–`research/04`).
+How do we turn generation into a product that sells content and improves
+conversion rather than merely returning images?
 
-## Варианты
+## Options
 
-1. **Внешние подписочные платформы** — готовая витрина и платежи, но
-   комиссия, чужие правила модерации AI-персонажей и нет контроля
-   воронки.
-2. **Свой сайт-витрина** — полный контроль, но холодный трафик: весь
-   путь «увидел → зарегистрировался → оплатил» на нашем маркетинге.
-3. **Бизнес-боты в Telegram** — витрина живёт там, где уже трафик;
-   оплата нативная (Stars / эквайринг / крипта по нашему стеку).
+1. **External subscription platforms** — a ready-made storefront and payment
+   system, but with platform fees, third-party moderation rules for AI personas,
+   and no control over the funnel.
+2. **A first-party storefront website** — complete control, but cold traffic:
+   our marketing must carry the entire "saw it → registered → paid" journey.
+3. **Business bots on Telegram** — the storefront lives where the traffic
+   already exists, with native payment options through Stars, acquiring, and
+   crypto on our stack.
 
-## Решение: вариант 3
+## Decision: option 3
 
-Свои боты: своя воронка и аналитика, нет комиссии витрины, оплата на
-готовых платёжных рельсах, а Telegram — естественная среда потребления
-такого контента. Новый код — только каталог и выдача; генерация и
-биллинг взяты из существующих проектов.
+Use our own bots: we own the funnel and analytics, avoid an external storefront
+commission, accept payments through established rails, and operate inside
+Telegram, a natural environment for consuming this content. The only new code
+is the catalog and delivery layer; generation and billing come from existing
+projects.
 
-## Консистентность персоны
+## Persona consistency
 
-Продаётся персона, а не изображение: имя, характер, визуальный канон.
-Покупатель узнаёт девушку в каждой генерации — иначе доверие к продукту
-разрушается.
+The product is a persona rather than an image: a name, personality, and visual
+canon. The buyer must recognize the woman in every generation, or trust in the
+product collapses.
 
-- Персональная LoRA на персонажа, натренированная на согласованном
-  наборе референсов; триггер-слова фиксированы.
-- Отбраковка по сходству — обязательная стадия перед каталогом; дрейф
-  лица между сессиями — брак.
-- Генерационная дисциплина из research/05 (≤2–3 LoRA, одна переменная
-  за прогон) распространяется и на персон: меняем сцену, не лицо.
+- Train a personal LoRA for each persona on a consistent reference set; keep
+  trigger words fixed.
+- Make similarity rejection a mandatory stage before catalog admission. Face
+  drift between sessions is a defect.
+- Apply the generation discipline from `research/05` to personas as well:
+  no more than 2–3 LoRAs and one variable changed per run. Change the scene,
+  not the face.
 
-## Конверсия
+## Conversion
 
-Воронка: трафик → бот → бесплатный тизер → покупка → платные рассылки.
-Рабочие правила, подтверждённые цифрами:
+Funnel: traffic → bot → free teaser → purchase → paid broadcasts.
+Operating rules confirmed by the numbers:
 
-- серии с продолжением продаются лучше одиночных изображений;
-- платные рассылки окупаются при сегментации по активности;
-- возврат уснувших покупателей дешевле привлечения новых;
-- выдача контента — операция ledger'а, идемпотентная по внешнему id
-  (двойная выдача = прямые убытки).
+- serialized content sells better than standalone images;
+- paid broadcasts are profitable when segmented by activity;
+- reactivating dormant buyers costs less than acquiring new ones;
+- content delivery is a ledger operation, idempotent by external ID, because
+  duplicate delivery is a direct financial loss.
 
-## Когда пересматривать
+## When to revisit
 
-- Изменение правил Telegram к adult-контенту или к платежам за него —
-  пересмотреть витрину и рельсы.
-- Появление моделей с надёжной консистентностью без персональной LoRA —
-  пересмотреть фазу обучения.
-- Падение конверсии тизера при стабильном трафике — пересобирать
-  первый экран бота, а не увеличивать расходы на трафик.
+- If Telegram changes its rules for adult content or payment for it, reassess
+  the storefront and payment rails.
+- If models achieve reliable persona consistency without a personal LoRA,
+  reassess the training phase.
+- If teaser conversion drops while traffic remains stable, rebuild the bot's
+  first screen instead of increasing traffic spend.

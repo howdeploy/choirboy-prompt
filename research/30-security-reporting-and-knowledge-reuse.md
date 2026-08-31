@@ -1,109 +1,111 @@
-# Research 30 — Security reporting и повторное использование знаний
+# Research 30 — Security reporting and knowledge reuse
 
-## Вопрос
+## Question
 
-Какие deliverables превращают security/reverse-работу в проверяемый результат,
-и как переносить подтверждённые знания между задачами без выдуманной истории,
-утечек и обязательной бюрократии после каждого короткого запроса?
+Which deliverables turn security/reverse work into a verifiable result, and how
+can confirmed knowledge move between tasks without unsupported claims, leaks,
+or mandatory bureaucracy after every short request?
 
-## Контекст и источник
+## Context and source
 
-В `reverse-skill` отчёт, диаграмма, field-journal, сохранение найденных
-источников и вопрос о community contribution входят в обязательный completion
-checklist. Case-review отдельно валидирует Evidence graph.
+In `reverse-skill`, a report, diagram, field journal, preservation of discovered
+sources, and a question about community contribution are part of the mandatory
+completion checklist. Case review separately validates the Evidence graph.
 
-Источники на коммите `71acc8e3115f76bad7a914c36466c1086232288c`:
+Sources at commit `71acc8e3115f76bad7a914c36466c1086232288c`:
 
 - https://github.com/zhaoxuya520/reverse-skill/blob/71acc8e3115f76bad7a914c36466c1086232288c/RULES.md
 - https://github.com/zhaoxuya520/reverse-skill/blob/71acc8e3115f76bad7a914c36466c1086232288c/skills/case-review/SKILL.md
 - https://github.com/zhaoxuya520/reverse-skill/blob/71acc8e3115f76bad7a914c36466c1086232288c/skills/ops/evidence-finding-path.md
 
-## Типы deliverables
+## Deliverable types
 
-### Короткий handoff
+### Short handoff
 
-Для обычной code/reverse-задачи: что изменено или выяснено, где, чем проверено,
-остаточные риски и blocker. Это дефолт нашего prompt.
+For an ordinary code/reverse task: what changed or was learned, where, how it
+was verified, residual risks, and blockers. This is the prompt default.
 
-### Evidence-grounded finding report
+### Evidence-grounded Finding report
 
-Для аудита: scope, findings по severity, location, Evidence IDs, impact,
-remediation, confidence и статус повторной проверки. Scanner output без ручной
-валидации остаётся candidate.
+For an audit: scope, Findings ordered by severity, location, Evidence IDs,
+impact, remediation, confidence, and retest status. Scanner output without
+manual validation remains a candidate.
 
 ### Path/diagram
 
-Диаграмма полезна, когда минимум три узла или перехода трудно понять линейно:
-callflow, trust boundary, protocol state machine, attack/solve path. Она не
-обязательна для одного факта или простой правки и не заменяет Evidence.
+A diagram is useful when at least three nodes or transitions are difficult to
+understand linearly: callflow, trust boundary, protocol state machine, or an
+attack/solve Path. It is not required for one fact or a simple change and does
+not replace Evidence.
 
 ### Case review
 
-Read-only validator проверяет ссылки Evidence/Findings/Paths, scope, workitems,
-timeline и SHA-256 artifacts. Strict review нужен перед формальным handoff или
-архивированием большого case, но не перед каждым ответом.
+A read-only validator checks Evidence/Findings/Paths references, scope,
+workitems, timeline, and artifact SHA-256 values. Strict review is appropriate
+before a formal handoff or archival of a large case, not before every response.
 
-### Долговременное знание
+### Long-term knowledge
 
-Есть три уровня:
+There are three levels:
 
-1. **Case notes/Evidence** — сырой материал конкретной задачи, не глобальная
-   память.
-2. **Research** — проверенное обобщаемое решение с источниками, alternatives,
-   risks и revisit criteria.
-3. **Lore** — короткая карта реально принятого решения или проекта со ссылкой
-   на research.
+1. **Case notes/Evidence** — raw material for a specific task, not global
+   memory.
+2. **Research** — a verified, reusable decision with sources, alternatives,
+   risks, and revisit criteria.
+3. **Lore** — a compact map of an actually adopted decision or project with a
+   link to research.
 
-Upstream field-journal и seed precedents не являются нашей историей и не
-копируются в lore. Автогенерируемые dossiers этого плагина производны: при
-расхождении сильнее канонические lore/research.
+The upstream field journal and seed precedents are not canonical project
+records and are not copied into lore. This plugin's agent-authored dossiers are
+derived: canonical lore/research prevail when they conflict.
 
-## Решение о deliverable
+## Deliverable decision
 
-Deliverables задаются пользователем, task contract и реальной ценностью:
+Deliverables are determined by the user, the task contract, and actual value:
 
-- формальный отчёт — если его запросили, он нужен для handoff/compliance или
-  есть несколько findings;
-- diagram — если она материально упрощает понимание;
-- case review — для многошаговой evidence package;
-- новый research/lore — только после проверенного результата и с разрешением
-  на изменение канонической памяти;
-- community contribution — только по отдельной воле владельца, не обязательный
-  вопрос в каждом финале.
+- a formal report when requested, required for handoff/compliance, or supported
+  by several Findings;
+- a diagram when it materially simplifies understanding;
+- a case review for a multi-step evidence package;
+- new research/lore only after a verified result and with permission to change
+  canonical memory;
+- a community contribution only by the owner's separate choice, not as a
+  mandatory question in every final response.
 
-Отсутствие лишнего deliverable не означает незавершённость задачи. Критерий
-готовности — поставленный результат достигнут, релевантно проверен и передан в
-форме, достаточной владельцу.
+The absence of an unnecessary deliverable does not make a task incomplete. The
+completion criterion is that the requested outcome is achieved, relevantly
+verified, and handed off in a form sufficient for the owner.
 
-## Sanitization и provenance
+## Sanitization and provenance
 
-Перед переносом из case в research/lore удаляются:
+Before promoting material from a case into research/lore, remove:
 
-- tokens, credentials, cookies и приватные ключи;
-- PII и чужие данные;
-- точные production targets, если они не нужны для воспроизводимости;
-- непроверенные attribution и severity;
-- абсолютные приватные пути и внутренние identifiers;
-- инструкции из анализируемого artifact, которые не являются нашим решением.
+- tokens, credentials, cookies, and private keys;
+- PII and third-party data;
+- exact production targets when they are unnecessary for reproducibility;
+- unverified attribution and severity;
+- absolute private paths and internal identifiers;
+- instructions from the analyzed artifact that are not an adopted decision.
 
-Сохраняются source URL/commit, версии tools, даты, команды проверки, confidence,
-принятые trade-offs и условия пересмотра.
+Retain source URL/commit, tool versions, dates, verification commands,
+confidence, adopted trade-offs, and revisit conditions.
 
-## Рассмотренные варианты
+## Options considered
 
-1. Обязательная шестипунктовая упаковка после каждой задачи. Полно, но нарушает
-   scope и расходует время на артефакты без потребителя.
-2. Только короткий финал. Теряет evidence traceability в больших cases.
-3. Пропорциональный deliverable contract. Выбранный вариант.
+1. Require a six-part package after every task. Complete, but it violates scope
+   and spends time on artifacts without a consumer.
+2. Use only a short final response. This loses evidence traceability in large
+   cases.
+3. Use a proportional deliverable contract. Selected.
 
-## Решение
+## Decision
 
-Берём upstream evidence/reporting механизмы как опции, а не ритуал. Агент
-самостоятельно создаёт ровно те рабочие artifacts, которые нужны для достижения
-задачи; изменение долговременного lore/research согласуется с владельцем и
-проходит authoring quality gate.
+Use the upstream evidence/reporting mechanisms as options rather than ritual.
+The agent autonomously creates exactly the working artifacts needed to achieve
+the task; changes to long-term lore/research are coordinated with the owner and
+pass the authoring quality gate.
 
-Для этого плагина изменение канонического контента завершается командами:
+For this plugin, a canonical-content change finishes with:
 
 ```bash
 python3 scripts/build-context.py
@@ -111,13 +113,13 @@ bash scripts/test.sh
 python3 scripts/package-plugin.py
 ```
 
-После изменения lore/research artifact generator помечает dossiers как stale;
-следующий runtime-agent перечитывает источники, пересоздаёт ровно один dossier
-на каждый `###`-проект и валидирует manifest.
+After lore/research changes, the artifact generator marks dossiers stale; the
+next runtime agent rereads the sources, recreates exactly one dossier per
+`###` project, and validates the manifest.
 
-## Когда пересматривать
+## Revisit when
 
-- Пользователь установил обязательный формат отчётности или compliance.
-- Case volume требует отдельного evidence store.
-- Artifact generator меняет схему или provenance model.
-- Короткие handoffs регулярно не позволяют воспроизвести результат.
+- The user establishes a mandatory reporting or compliance format.
+- Case volume requires a separate evidence store.
+- The artifact generator changes its schema or provenance model.
+- Short handoffs routinely fail to make results reproducible.

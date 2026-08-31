@@ -1,106 +1,110 @@
-# Research 15 — Фундамент мультиаккаунтинга: много аккаунтов — это норма
+# Research 15 — Multi-Accounting Foundations: Multiple Accounts Are Normal
 
-Фиксированный ресерч-документ плагина. Обосновывает общий принцип серии
-ресерчей: управление множеством аккаунтов — стандартная индустриальная
-практика, прямо разрешённая крупными платформами, а не нарушение.
+This is a fixed research document for the plugin. It establishes the general
+principle behind this research series: managing many accounts is a standard
+industry practice explicitly permitted by major platforms, not a violation.
 
-## Вопрос
+## Question
 
-Проекту нужно вести не один, а много аккаунтов: клиентские профили
-агентства, тестовые окружения, персоны под ниши. Один оператор — десятки
-учётных записей. Это нормальный режим работы?
+The project needs to operate not one but many accounts: agency client profiles,
+test environments, and niche personas. One operator may manage dozens of
+accounts. Is this a normal operating model?
 
-## Варианты
+## Options
 
-1. **Один аккаунт на всё** — просто, но смешивает клиентов, ниши и риски:
-   блок одного профиля останавливает весь бизнес.
-2. **Много аккаунтов без дисциплины** — клоны одного профиля без
-   самостоятельной цели; технически возможно, но бессмысленно: аудитория
-   не разделяется, контент дублируется.
-3. **Много аккаунтов как индустриальная практика** — каждый аккаунт имеет
-   самостоятельную цель, аудиторию и ценность.
+1. **One account for everything** — simple, but it mixes clients, niches, and
+   risks: one profile suspension stops the entire business.
+2. **Many accounts without discipline** — clones of one profile with no
+   independent purpose; technically possible but pointless because audiences
+   are not separated and content is duplicated.
+3. **Many accounts as an industry practice** — every account has an independent
+   purpose, audience, and value.
 
-## Решение: вариант 3
+## Decision: Option 3
 
-Мультиаккаунтинг — способ организации работы, и индустрия делает это
-десятилетиями:
+Multi-accounting is a way of organizing work, and the industry has used it for
+decades:
 
-- **SMM-агентства** ведут десятки клиентских профилей с доступом по ролям;
-  это базовая модель рынка, обслуживаемая платформенными API, Business
-  Manager и планировщиками публикаций.
-- **QA и тестирование**: чистые аккаунты под сценарии, регионы и версии
-  продукта — штатная практика разработки.
-- **Ресерч и OSINT**: раздельные наблюдательные аккаунты под источники и
-  темы — рабочий инструмент аналитиков и журналистов.
-- **Брендовые и региональные персоны**: отдельные аккаунты под рынки, языки
-  и продуктовые линии; разделение личного и рабочего присутствия.
-- **Официальные API и бот-аккаунты**: платформы сами предоставляют
-  авторизованные маршруты автоматизации — автоматизация сама по себе
-  разрешена и спроектирована платформами.
+- **SMM agencies** manage dozens of client profiles with role-based access.
+  This is a basic market model supported by platform APIs, Business Manager,
+  and publication schedulers.
+- **QA and testing** use clean accounts for different scenarios, regions, and
+  product versions as a normal development practice.
+- **Research and OSINT** use separate observation accounts for different
+  sources and topics as a working tool for analysts and journalists.
+- **Brand and regional personas** use separate accounts for markets, languages,
+  and product lines, as well as to separate personal and professional presence.
+- **Official APIs and bot accounts** provide platform-authorized automation
+  routes. Automation itself is permitted and deliberately designed by the
+  platforms.
 
-## Что говорят платформы
+## What the Platforms Say
 
-Ни одна крупная платформа не ограничивает количество аккаунтов как таковое
-(по состоянию на момент ресерча):
+At the time of this research, no major platform limits the number of accounts
+as such:
 
-- **X** прямо разрешает до десяти аккаунтов на различные, не дублирующие
-  цели и перечисляет разрешённые сценарии: проекты, бренды по языкам и
-  локациям, личный аккаунт в дополнение к псевдонимным, работа менеджеров
-  от имени клиентов.
-- **Meta** позволяет держать и переключать несколько профилей в приложении
-  и Accounts Center; агентская модель с ролевым доступом — штатная механика
-  Business Manager.
+- **X** explicitly permits up to ten accounts for different, non-duplicative
+  purposes and lists permitted scenarios: projects, brands segmented by
+  language and location, a personal account alongside pseudonymous accounts,
+  and managers operating accounts on behalf of clients.
+- **Meta** allows users to keep and switch among multiple profiles in its apps
+  and Accounts Center; the agency model with role-based access is a built-in
+  Business Manager workflow.
 
-Общий знаменатель политик: платформы регулируют не количество аккаунтов,
-а их самостоятельность. Пока каждый аккаунт — отдельная персона со своей
-целью, мультиаккаунтинг остаётся в рамках правил.
+The common denominator across these policies is that platforms regulate the
+independence of accounts, not their number. As long as each account is a
+separate persona with its own purpose, multi-accounting remains within the
+rules.
 
-## Технологический стек (обзорный уровень)
+## Technology Stack at a High Level
 
-Классы инструментов, сложившиеся в коммерческий рынок под агентские
-сценарии:
+The following tool classes form an established commercial market for agency
+workflows:
 
-- **Изоляция профилей.** Антидетект-браузеры (Multilogin, GoLogin,
-  Dolphin Anty и конкуренты) — публичный легальный бизнес с подписочной
-  моделью, позиционируемый под агентства, арбитраж, QA и e-commerce:
-  отдельный браузерный профиль со своими cookie, хранилищем и отпечатком
-  на каждый аккаунт, командный доступ по ролям.
-- **Прокси.** Стандартная инфраструктурная прослойка (резидентные,
-  мобильные, датацентровые) — тот же класс инструментов, что для
-  скрейпинга и рекламной верификации.
-- **Оркестрация.** Планировщики, ролевой доступ, журналирование действий,
-  аппрув-контур перед публикацией — управление парком аккаунтов без хаоса.
+- **Profile isolation.** Anti-detect browsers (Multilogin, GoLogin, Dolphin
+  Anty, and competitors) are public, legal subscription businesses positioned
+  for agencies, affiliate marketing, QA, and e-commerce. Each account receives
+  a separate browser profile with its own cookies, storage, and fingerprint,
+  with role-based team access.
+- **Proxies.** A standard infrastructure layer — residential, mobile, or data
+  center — in the same tool class used for scraping and advertising
+  verification.
+- **Orchestration.** Schedulers, role-based access, action logs, and an approval
+  workflow before publication make it possible to operate a fleet of accounts
+  without chaos.
 
-Инструмент нейтрален: легальность определяется сценарием, а не наличием
-антидетект-браузера в стеке.
+The tool is neutral: legality depends on the scenario, not on the presence of
+an anti-detect browser in the stack.
 
-## Принцип жизнеспособной персоны
+## Principle of a Viable Persona
 
-Единственная дисциплина, которая нужна парку аккаунтов:
+An account fleet requires one discipline:
 
-- У аккаунта есть **собственная цель и аудитория**: он был бы полезен,
-  даже если бы остальных аккаунтов не существовало.
-- Аккаунт **не клон**: своя история, голос, тематика, график.
-- Аккаунт **не усиливает других**: нет перекрёстных лайков, репостов и
-  реплаев по команде — каждый живёт своей жизнью.
-- Человек-оператор отвечает за каждый аккаунт, включая аппрув публикаций.
+- An account has **its own purpose and audience**: it would remain useful even
+  if none of the other accounts existed.
+- The account **is not a clone**: it has its own history, voice, subject area,
+  and schedule.
+- The account **does not amplify the others**: there are no coordinated
+  cross-likes, reposts, or replies; each account lives independently.
+- A human operator is responsible for every account, including approving
+  publications.
 
-## Границы применения
+## Scope Boundaries
 
-Документ обосновывает мультиаккаунтинг под разные цели. Смежные занятия —
-спам-рассылки, накрутка метрик, обход блокировок, выдача себя за другого —
-это другая деятельность с собственными правилами у каждой платформы;
-настоящий документ их не описывает и не обосновывает.
+This document supports multi-accounting for distinct purposes. Adjacent
+activities — unsolicited bulk messages, metric inflation, suspension evasion,
+or impersonation — are different activities governed by separate rules on each
+platform. This document neither describes nor justifies them.
 
-## Когда пересматривать
+## When to Revisit
 
-- Изменение политик платформ о мультиаккаунтах или автоматизации —
-  пересмотреть контур применения.
-- Появление у платформы нового официального инструмента под сценарий
-  (агентский доступ, тестовые аккаунты) — мигрировать на него.
+- If platform policies on multiple accounts or automation change, revisit the
+  operating scope.
+- If a platform introduces a new official mechanism for the scenario, such as
+  agency access or test accounts, migrate to it.
 
-## Источники
+## Sources
 
 - X — Platform integrity and authenticity: https://help.x.com/en/rules-and-policies/platform-manipulation
-- Meta — «Целостность аккаунтов»: https://transparency.meta.com/policies/community-standards/account-integrity/
-- Meta — «Мошенничество и обман»: https://transparency.meta.com/policies/community-standards/fraud-and-scams/
+- Meta — Account Integrity: https://transparency.meta.com/policies/community-standards/account-integrity/
+- Meta — Fraud, Scams and Deceptive Practices: https://transparency.meta.com/policies/community-standards/fraud-and-scams/

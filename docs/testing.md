@@ -8,12 +8,15 @@
 ## 1. Принцип
 
 - Каждая проверка — отдельная bash-команда с явным PASS/FAIL.
-- Сьют запускается из корня репозитория; временные файлы — под `/tmp` с
+- Сьют можно запускать из любой директории; временные файлы — под `/tmp` с
   префиксом `choirboy-test.`.
 - После прогона временные файлы удаляются. Чтобы сохранить их и вывести точный
   путь для проверки, задай `CHOIRBOY_TEST_KEEP_TMP=1`.
 - Пейлоад проверяется **в том виде, в каком его получит рантайм**, а
   не «по наитию».
+- Канонический context, research, INDEX и dossiers обязаны быть на английском;
+  suite отклоняет кириллицу/CJK в model-facing Markdown, а artifact validator
+  применяет то же правило в рантайме.
 
 ---
 
@@ -68,7 +71,7 @@ bash hooks/session-start.sh --format plain | head -40
 Ожидание: заголовки prompt → posture → lore → user → research-указатель
 в правильном порядке, разделители `---`.
 
-### 2.5. Hermes: первый ход внедряет
+### 2.5. Hermes: доставка на первом ходу
 
 ```bash
 SID="hook-check-$(date +%s)"
@@ -209,9 +212,12 @@ plugin с бэкапом и откатывает его с ещё одним б�
 
 Ожидание: проверки `OpenCode install, list, idempotent refresh, backup, and
 rollback` и `OpenCode foreign-plugin guard` печатают `PASS`. Сгенерированный
-адаптер должен использовать `chat.message`, сохранённую историю сессии,
-text-part с техническим флагом `synthetic: true`, канонический plain-хук и
-fail-open обработку ошибок.
+адаптер должен использовать transform model-bound system context, пересобирать
+канонический plain-payload после compaction, показывать переход pending→ready и
+изменения freshness, сохраняя fail-open обработку ошибок. Assertions перехода
+рантайма живут в `scripts/test-opencode-transition.ts` и запускаются под `bun`;
+если `bun` недоступен, сьют печатает `SKIP OpenCode pending-to-ready runtime
+test (bun unavailable)` в stderr вместо падения.
 
 ---
 
@@ -254,23 +260,3 @@ python3 scripts/package-plugin.py
   канонический сьют и п. 4 (замыкание, санитизация).
 - После правки `instruction_block` — grep по маркеру в установленных
   файлах (см. `docs/installer.md` §3.3).
-
----
-
-## 7. Session fixtures
-
-Канонический сьют проверяет парсинг всех JSON/JSONL-записей, ожидаемые
-IDs/parent chains трёх рантаймов, отсутствие посторонних threads в Codex SQL и
-наличие `sessions/` в релизном ZIP.
-
-Точечная проверка JSONL:
-
-```bash
-for file in sessions/claude/*.jsonl sessions/codex/*.jsonl \
-  sessions/kimi/session_*/agents/main/wire.jsonl; do
-  python3 -c 'import json,sys; [json.loads(line) for line in open(sys.argv[1], encoding="utf-8") if line.strip()]' "$file"
-done
-```
-
-Запускайте её после любой правки fixture, затем проходите publication gate из
-[docs/authoring.md](authoring.md).

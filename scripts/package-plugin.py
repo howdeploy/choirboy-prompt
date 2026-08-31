@@ -22,6 +22,7 @@ REQUIRED = {
     "hooks/kimi-user-prompt.sh",
     "hooks/session-start.sh",
     "scripts/artifact-generator.py",
+    "scripts/test-opencode-transition.ts",
     "skills/load-context/SKILL.md",
     "skills/diagnose/SKILL.md",
 }

@@ -1,119 +1,124 @@
-# Research 25 — Карта reverse engineering-возможностей
+# Research 25 — Reverse engineering capability map
 
-## Вопрос
+## Question
 
-Какие reverse-маршруты должен видеть агент, как выбрать самый узкий из них и
-какой общий инвариант сохранить между разными форматами, платформами и tools?
+Which reverse routes should an agent see, how should it choose the narrowest
+one, and which shared invariant must hold across formats, platforms, and tools?
 
-## Контекст
+## Context
 
-Карта переносит capability taxonomy из `reverse-skill` на коммите
-`71acc8e3115f76bad7a914c36466c1086232288c`. Она дополняет существующий
-`research/14` про собственные офлайн-игры, но не расширяет его на multiplayer
-или чужие онлайн-системы.
+This map carries over the capability taxonomy from `reverse-skill` at commit
+`71acc8e3115f76bad7a914c36466c1086232288c`. It complements the existing
+`research/14` on owned offline games without extending that scope to
+multiplayer games or third-party online systems.
 
-Источник маршрутов:
+Route source:
 https://github.com/zhaoxuya520/reverse-skill/blob/71acc8e3115f76bad7a914c36466c1086232288c/skills/config/routing.json
 
-## Capability-группы
+## Capability groups
 
-### Общий и native binary
+### General and native binary
 
-- **R0 General reverse engineering** — triage неизвестного binary, anti-debug,
-  obfuscation, Unity/IL2CPP и fallback, когда точный формат ещё неизвестен.
-- **R6 IDA**, **R22 Ghidra**, **R7 radare2** — альтернативные аналитические
-  поверхности. Выбор зависит от реально доступного tool, лицензии, automation
-  API и формата, а не от привычки агента.
-- **R15 Binary diff/symbol migration** — сравнение версий, перенос имён и
-  границ функций, подтверждение изменившихся путей.
-- **R16 Patch diff/N-day** относится к security-анализу изменений и подробнее
-  ограничен в `research/27`.
+- **R0 General reverse engineering** — triage of an unknown binary, anti-debug,
+  obfuscation, Unity/IL2CPP, and fallback when the exact format is not yet
+  known.
+- **R6 IDA**, **R22 Ghidra**, **R7 radare2** — alternative analysis surfaces.
+  Selection depends on the tool actually available, its license, automation
+  API, and the format, not on agent habit.
+- **R15 Binary diff/symbol migration** — version comparison, transfer of names
+  and function boundaries, and confirmation of changed paths.
+- **R16 Patch diff/N-day** concerns security analysis of changes and is bounded
+  in more detail by `research/27`.
 
-### Mobile и managed runtimes
+### Mobile and managed runtimes
 
-- **R1 APK reverse** — APK, resources, manifest, DEX/smali, JNI, подпись и
-  наблюдаемое runtime-поведение в своём устройстве/эмуляторе.
-- **R2 Mobile reverse** — iOS/IPA и смешанные mobile-задачи; Android-only
-  запросы должны уходить в R1.
-- **R5 .NET reverse** — IL, metadata, managed resources и обфускация.
-- **R33 Go/Rust reverse** — runtime metadata, восстановление символов и
-  особенности stripped binaries.
+- **R1 APK reverse** — APK, resources, manifest, DEX/smali, JNI, signing, and
+  observable runtime behavior on an owned device/emulator.
+- **R2 Mobile reverse** — iOS/IPA and mixed mobile tasks; Android-only requests
+  should route to R1.
+- **R5 .NET reverse** — IL, metadata, managed resources, and obfuscation.
+- **R33 Go/Rust reverse** — runtime metadata, symbol recovery, and properties
+  of stripped binaries.
 
-### Web-клиент и расширения
+### Web client and extensions
 
-- **R3 JS/frontend reverse** — bundles, source maps, frontend signing,
-  protocol parameters и runtime наблюдение в браузере.
-- **R30 Browser-extension reverse** — CRX/XPI, manifest, permissions,
-  service worker/background, content scripts и message boundaries.
-- **R32 Thick-client security** из соседней карты применяется, когда desktop
-  приложение важнее языка реализации.
+- **R3 JS/frontend reverse** — bundles, source maps, frontend signing, protocol
+  parameters, and runtime observation in a browser.
+- **R30 Browser-extension reverse** — CRX/XPI, manifest, permissions, service
+  worker/background, content scripts, and message boundaries.
+- **R32 Thick-client security** from the adjacent map applies when the desktop
+  application matters more than the implementation language.
 
-### Специализированные форматы и устройства
+### Specialized formats and devices
 
-- **R4 DSL/custom VM reverse** — bytecode, opcode map, dispatcher и
-  воспроизводимая семантика виртуальной машины.
-- **R8 Firmware** — контейнер, filesystem, архитектура, конфигурация и
-  эмуляция/лабораторный runtime.
+- **R4 DSL/custom VM reverse** — bytecode, opcode map, dispatcher, and
+  reproducible virtual-machine semantics.
+- **R8 Firmware** — container, filesystem, architecture, configuration, and
+  emulation/laboratory runtime.
 - **R21 Protocol reverse** — PCAP, message framing, state machine, protobuf/
-  gRPC и проверяемый decoder/dissector.
+  gRPC, and a verifiable decoder/dissector.
 - **R31 macOS/Mach-O** — load commands, Objective-C/Swift metadata, signing,
-  entitlements и XPC в собственной среде.
-- **R34 Hardware/debug interfaces** — UART/JTAG/SWD, flash layout и USB device
-  analysis только на собственном лабораторном железе.
+  entitlements, and XPC in an owned environment.
+- **R34 Hardware/debug interfaces** — UART/JTAG/SWD, flash layout, and USB
+  device analysis only on owned laboratory hardware.
 
-## Общий workflow
+## Shared workflow
 
-Маршрут меняет инструменты и domain checklist, но не доказательную модель:
+The route changes the tools and domain checklist, but not the evidence model:
 
-1. определить artifact, формат, архитектуру, упаковку и фактический runtime;
-2. зафиксировать hashes и работать с производной копией;
-3. сформулировать минимальную гипотезу;
-4. получить статическое Evidence: imports, strings, metadata, CFG, resources;
-5. получить динамическое Evidence в собственном runtime, если это возможно и
-   нужно для уверенного вывода;
-6. связать адреса, offsets, symbols, запросы или hook points с наблюдением;
-7. построить `callflow` Path и оставить непроверенное как candidate;
-8. после трёх действий без нового Evidence сменить гипотезу, stage или tool.
+1. identify the artifact, format, architecture, packaging, and actual runtime;
+2. record hashes and work on a derived copy;
+3. formulate the smallest useful hypothesis;
+4. collect static Evidence: imports, strings, metadata, CFG, and resources;
+5. collect dynamic Evidence in an owned runtime when possible and necessary
+   for a confident conclusion;
+6. connect addresses, offsets, symbols, requests, or hook points to an
+   observation;
+7. build a `callflow` Path and leave unverified claims as candidates;
+8. after three actions without new Evidence, change the hypothesis, stage, or
+   tool.
 
-Декомпилятор — представление, а не источник истины. Runtime может показать
-другую ветвь, загруженный модуль или served artifact; расхождение фиксируется,
-а не заглаживается.
+A decompiler is a representation, not a source of truth. Runtime behavior may
+show another branch, loaded module, or served artifact; record the discrepancy
+instead of smoothing it over.
 
-## Выбор tool
+## Tool selection
 
-| Ситуация | Предпочтительный маршрут |
+| Situation | Preferred route |
 |---|---|
-| Нужна коммерческая глубокая интерактивная работа и лицензия есть | IDA/JEB |
-| Нужна воспроизводимая headless/opensource автоматизация | Ghidra/radare2 |
-| APK resources + DEX | jadx + apktool, затем runtime при необходимости |
-| Mobile instrumentation на своей среде | Frida/Objection после static anchor |
-| Protocol из трафика | Wireshark/dissector + replay в лаборатории |
-| Неизвестный firmware | hash → binwalk/layout → filesystem → lab/emulation |
+| Deep interactive commercial work is required and a license is available | IDA/JEB |
+| Reproducible headless/open-source automation is required | Ghidra/radare2 |
+| APK resources + DEX | jadx + apktool, then runtime when necessary |
+| Mobile instrumentation in an owned environment | Frida/Objection after a static anchor |
+| Protocol recovered from traffic | Wireshark/dissector + replay in a lab |
+| Unknown firmware | hash → binwalk/layout → filesystem → lab/emulation |
 
-Фактическая доступность определяется `research/24`; названия в этой таблице
-не являются обещанием установки.
+Actual availability is determined by `research/24`; names in this table are not
+installation promises.
 
-## Рассмотренные варианты
+## Options considered
 
-1. Один универсальный reverse skill. Проще, но теряет форматные инварианты.
-2. Один skill на каждый tool. Привязывает методику к приложению и плодит
-   дублирование.
-3. Capability по домену, tools выбираются внутри маршрута. Выбранный вариант.
+1. One universal reverse skill. Simpler, but it loses format-specific
+   invariants.
+2. One skill per tool. This couples methodology to an application and
+   duplicates guidance.
+3. Capabilities organized by domain, with tools selected inside each route.
+   Selected.
 
-## Решение и границы
+## Decision and boundaries
 
-Сохраняем доменные маршруты и общий Evidence workflow. Работа ведётся на своих
-артефактах, локальных samples, собственных устройствах и явно разрешённых
-окружениях. Для игр действует `research/14`; для активной security-проверки —
-`security-posture.md` и case contract из `research/23`.
+Retain domain routes and the shared Evidence workflow. Work is limited to owned
+artifacts, local samples, owned devices, and explicitly authorized
+environments. Games follow `research/14`; active security testing follows
+`security-posture.md` and the case contract in `research/23`.
 
-Не переносим upstream binaries, payload dumps или field-journal как часть
-памяти. Они могут быть отдельными внешними источниками после проверки, но не
-доказательством нашей истории или автоматически доверенным кодом.
+Do not carry upstream binaries, payload dumps, or the field journal into
+memory. They can be separate external sources after review, but they are not
+canonical project records or automatically trusted code.
 
-## Когда пересматривать
+## Revisit when
 
-- Появился новый формат, не покрываемый существующим PRIMARY.
-- Один tool стал недоступен или изменил automation API.
-- Статическая и динамическая картины систематически расходятся.
-- Нужен отдельный маршрут для engine/runtime, который сейчас перегружает R0.
+- A new format appears that no existing PRIMARY covers.
+- A tool becomes unavailable or changes its automation API.
+- Static and dynamic models diverge systematically.
+- An engine/runtime needs a dedicated route because it now overloads R0.

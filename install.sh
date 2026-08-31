@@ -19,9 +19,9 @@
 #   claude   ~/.claude/settings.json     SessionStart + Stop hooks (Claude Code)
 #   codex    ~/.codex/hooks.json         SessionStart + Stop hooks
 #   opencode ~/.config/opencode/plugins/agent-plugin.ts
-#                                         chat.message plugin (first message)
+#                                         model-bound system-context plugin
 #   hermes   ~/.hermes/config.yaml       pre_llm_call shell hook + consent allowlist
-#   kimi     ~/.kimi-code/config.toml    SessionStart + UserPromptSubmit + Stop
+#   kimi     ~/.kimi-code/config.toml    SessionStart + PreCompact + prompt + Stop
 #   gemini   ~/.gemini/GEMINI.md         managed instruction block
 #   grok     ~/.grok/AGENTS.md           Grok Build global rules
 #   grokbot  ~/.grokbot/choirboy-context/SKILL.md
@@ -103,6 +103,96 @@ claude_settings_file() {
   else printf '%s' "$HOME/.claude/settings.json"; fi
 }
 
+kimi_hooks_current() {
+  python3 - "$KIMI_HOME/config.toml" "$REGISTRATION_MARK" \
+    "$KIMI_SESSION_HOOK_SCRIPT" "$KIMI_PROMPT_HOOK_SCRIPT" \
+    "$KIMI_STOP_HOOK_SCRIPT" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    text = path.read_text(encoding="utf-8")
+except OSError:
+    raise SystemExit(1)
+registration = sys.argv[2]
+mark = registration.split(":registration=", 1)[0]
+expected_block = f'''# >>> {mark} >>>
+# {registration}
+[[hooks]]
+event = "SessionStart"
+matcher = "^(startup|resume)$"
+command = "bash \\"{sys.argv[3]}\\""
+timeout = 30
+
+[[hooks]]
+event = "PreCompact"
+matcher = "^(manual|auto)$"
+command = "bash \\"{sys.argv[3]}\\""
+timeout = 30
+
+[[hooks]]
+event = "UserPromptSubmit"
+command = "bash \\"{sys.argv[4]}\\""
+timeout = 30
+
+[[hooks]]
+event = "Stop"
+command = "bash \\"{sys.argv[5]}\\""
+timeout = 30
+# <<< {mark} <<<'''
+if expected_block not in text:
+    raise SystemExit(1)
+try:
+    import tomllib
+except ModuleNotFoundError:
+    # Exact managed text alone cannot prove that the surrounding TOML parses.
+    # On Python <=3.10, ask Kimi's read-only config doctor when available.
+    import shutil
+    import subprocess
+
+    executable = shutil.which("kimi")
+    if executable is None:
+        raise SystemExit(1)
+    result = subprocess.run(
+        [executable, "doctor", "config", str(path)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    raise SystemExit(0 if result.returncode == 0 else 1)
+try:
+    config = tomllib.loads(text)
+except tomllib.TOMLDecodeError:
+    raise SystemExit(1)
+hooks = config.get("hooks")
+if not isinstance(hooks, list):
+    raise SystemExit(1)
+expected = (
+    ("SessionStart", f'bash "{sys.argv[3]}"', "^(startup|resume)$"),
+    ("PreCompact", f'bash "{sys.argv[3]}"', "^(manual|auto)$"),
+    ("UserPromptSubmit", f'bash "{sys.argv[4]}"', None),
+    ("Stop", f'bash "{sys.argv[5]}"', None),
+)
+for event, command, matcher in expected:
+    matches = [
+        hook
+        for hook in hooks
+        if isinstance(hook, dict)
+        and hook.get("event") == event
+        and hook.get("command") == command
+    ]
+    if len(matches) != 1 or matches[0].get("timeout") != 30:
+        raise SystemExit(1)
+    if matcher is None:
+        if matches[0].get("matcher") not in (None, ""):
+            raise SystemExit(1)
+    elif matches[0].get("matcher") != matcher:
+        raise SystemExit(1)
+PY
+}
+
 target_installed() {
   case "$1" in
     claude) [ "$(json_hook "$(claude_settings_file)" bash status hooks.SessionStart "$HOOK_SCRIPT" 15 "" session-start.sh 2>/dev/null || true)" = current ] \
@@ -113,10 +203,7 @@ target_installed() {
     hermes) grep -qF "$REGISTRATION_MARK" "$HOME/.hermes/config.yaml" 2>/dev/null \
               && grep -qF "$HOOK_SCRIPT" "$HOME/.hermes/config.yaml" 2>/dev/null \
               && grep -qF "$HOOK_SCRIPT" "$HOME/.hermes/shell-hooks-allowlist.json" 2>/dev/null ;;
-    kimi)   grep -qF "$REGISTRATION_MARK" "$KIMI_HOME/config.toml" 2>/dev/null \
-              && grep -qF "$KIMI_SESSION_HOOK_SCRIPT" "$KIMI_HOME/config.toml" 2>/dev/null \
-              && grep -qF "$KIMI_PROMPT_HOOK_SCRIPT" "$KIMI_HOME/config.toml" 2>/dev/null \
-              && grep -qF "$KIMI_STOP_HOOK_SCRIPT" "$KIMI_HOME/config.toml" 2>/dev/null ;;
+    kimi)   kimi_hooks_current 2>/dev/null ;;
     gemini) grep -qF "$REGISTRATION_MARK" "$HOME/.gemini/GEMINI.md" 2>/dev/null \
               && grep -qF "$ARTIFACT_GENERATOR" "$HOME/.gemini/GEMINI.md" 2>/dev/null ;;
     grok)   grep -qF "$REGISTRATION_MARK" "$HOME/.grok/AGENTS.md" 2>/dev/null \
@@ -472,9 +559,9 @@ print("changed")
 PY
 }
 
-# opencode_plugin FILE install|uninstall — manage the OpenCode chat.message
-# adapter as a complete, marked file. The installed module calls the canonical
-# plain-format hook once per session and injects its output as a marked text part.
+# opencode_plugin FILE install|uninstall — manage the OpenCode model-context
+# adapter as a complete, marked file. The installed module rebuilds the canonical
+# plain payload for every model request, so compaction cannot evict project memory.
 opencode_plugin() {
   PLUGIN_FILE="$1" MODE="$2" HOOK_PATH="$HOOK_SCRIPT" INSTALL_MARK="$MARK" \
     REGISTRATION_MARK="$REGISTRATION_MARK" \
@@ -495,97 +582,48 @@ registration_mark = os.environ["REGISTRATION_MARK"]
 template = r'''// >>> agent-plugin:vibe-lore >>>
 // __REGISTRATION_MARK__
 // OpenCode adapter for choirboy-prompt.
-// Injects the canonical fixed lore once per session as a marked text part.
+// Appends the canonical fixed lore to every model-bound system context.
 // Fail-open: a missing hook, timeout, or malformed payload never blocks chat.
 
 import { spawnSync } from "child_process"
-import { randomUUID } from "crypto"
 import type { Plugin } from "@opencode-ai/plugin"
 
 const HOOK_SCRIPT = __HOOK_SCRIPT__
 const DELIVERY_MARKER = "<choirboy-delivery "
-const MAX_TRACKED_SESSIONS = 4096
-const deliveredSessions = new Set<string>()
+const SESSION_DELIVERY_MARKER = ' delivery="session-start"'
 
-function rememberSession(sessionID: string) {
-  if (deliveredSessions.size >= MAX_TRACKED_SESSIONS) {
-    const oldest = deliveredSessions.values().next().value
-    if (typeof oldest === "string") deliveredSessions.delete(oldest)
-  }
-  deliveredSessions.add(sessionID)
-}
-
-export const AgentPlugin: Plugin = async ({ client, directory }) => {
+export const AgentPlugin: Plugin = async () => {
   return {
-    "chat.message": async (input, output) => {
+    "experimental.chat.system.transform": async (input, output) => {
       try {
         const sessionID = typeof input.sessionID === "string" ? input.sessionID : ""
         if (!sessionID) return
-
-        const parts = output.parts as any[]
-        if (!Array.isArray(parts)) return
+        if (!Array.isArray(output.system)) return
         if (
-          parts.some(
-            (part) =>
-              part &&
-              part.type === "text" &&
-              typeof part.text === "string" &&
-              part.text.includes(DELIVERY_MARKER),
+          output.system.some(
+            (value) =>
+              typeof value === "string" &&
+              value.includes(DELIVERY_MARKER) &&
+              value.includes(SESSION_DELIVERY_MARKER) &&
+              value.includes("<choirboy-context>"),
           )
-        ) {
-          rememberSession(sessionID)
-          return
-        }
-        if (deliveredSessions.has(sessionID)) return
+        ) return
 
-        // The in-memory set covers a long-running TUI/server process. The
-        // persisted session history also prevents duplicate delivery when a
-        // headless session is resumed by a fresh OpenCode process.
-        const historyResult = await client.session.messages({
-          path: { id: sessionID },
-          query: { directory },
-        })
-        const history = historyResult.data
-        if (!Array.isArray(history)) return
-        if (
-          history.some(
-            (message) =>
-              message.info.role === "user" &&
-              message.parts.some(
-                (part) =>
-                  part.type === "text" &&
-                  part.synthetic === true &&
-                  part.text.includes(DELIVERY_MARKER),
-              ),
-          )
-        ) {
-          rememberSession(sessionID)
-          return
-        }
-
+        // System context is rebuilt for every model request. Recompute the
+        // lifecycle payload here so pending -> ready and later lore/dossier
+        // changes are visible immediately, including after session compaction.
         const result = spawnSync("bash", [HOOK_SCRIPT, "--format", "plain"], {
           encoding: "utf8",
           timeout: 15000,
           maxBuffer: 2 * 1024 * 1024,
         })
-        const injected = (result.stdout ?? "").trim()
+        const delivered = (result.stdout ?? "").trim()
         if (
           result.status !== 0 ||
-          !injected.includes("<choirboy-delivery ") ||
-          !injected.includes("<choirboy-context>")
-        ) {
-          return
-        }
-
-        parts.unshift({
-          id: `prt_choirboy_${randomUUID().replaceAll("-", "")}`,
-          sessionID,
-          messageID: output.message.id,
-          type: "text",
-          text: injected,
-          synthetic: true,
-        })
-        rememberSession(sessionID)
+          !delivered.includes(DELIVERY_MARKER) ||
+          !delivered.includes("<choirboy-context>")
+        ) return
+        output.system.push(delivered)
       } catch {
         // fail-open: lore delivery must never break the OpenCode session
       }
@@ -802,27 +840,27 @@ instruction_block() {
   local comment_style="$1"
   local body
   body="$(cat <<EOF
-## Лор команды (agent-plugin)
+## Team context (agent-plugin)
 
-Регистрация lifecycle: \`$REGISTRATION_MARK\`.
+Lifecycle registration: \`$REGISTRATION_MARK\`.
 
-В начале сессии прочитай файлы плагина и работай из этого контекста:
+At session start, read these plugin files and work from their context:
 
-- $PLUGIN_ROOT/prompt.md — правила работы агента
-- $PLUGIN_ROOT/security-posture.md — позиция по безопасности (рамка аудита)
-- $PLUGIN_ROOT/lore.md — история совместных решений
-- $PLUGIN_ROOT/user.md — профиль пользователя
-- $PLUGIN_ROOT/research/ — обоснования решений (читай по требованию)
+- $PLUGIN_ROOT/prompt.md — agent operating rules
+- $PLUGIN_ROOT/security-posture.md — security and audit frame
+- $PLUGIN_ROOT/lore.md — established project history and decisions
+- $PLUGIN_ROOT/user.md — user profile
+- $PLUGIN_ROOT/research/ — decision rationale, read on demand
 
-В начале сессии запусти
-\`python3 "$ARTIFACT_GENERATOR" session-context\` и выполни выданную инструкцию.
-Содержимое проектных dossiers создаёшь ты сам; lifecycle-скрипт только готовит
-request, проверяет файлы и фиксирует их свежесть. При статусе \`ready\` команда
-уже возвращает INDEX и все проверенные dossiers целиком: используй этот вывод как
-проектную память, а не ограничивайся ссылкой на путь.
+At session start, run
+\`python3 "$ARTIFACT_GENERATOR" session-context\` and complete the returned
+instruction. You author the project dossiers yourself; the lifecycle script only
+prepares the request, validates the files, and records freshness. When status is
+\`ready\`, the command returns INDEX and every validated dossier in full. Use
+that output as project memory instead of stopping at a path reference.
 
-Не переоткрывай зафиксированные там решения без причины; если предлагаешь
-отступить — скажи, что изменилось со времени соответствующего документа.
+Do not reopen settled decisions without cause. If you propose a departure,
+state what changed since the relevant research document.
 EOF
 )"
   if [ "$comment_style" = "html" ]; then
@@ -902,7 +940,7 @@ do_opencode() {
   local file="$HOME/.config/opencode/plugins/agent-plugin.ts"
   local status
   if [ "$UNINSTALL" = 1 ]; then
-    echo "opencode: removing chat.message plugin from $file"
+    echo "opencode: removing model-context plugin from $file"
     if ! status="$(opencode_plugin "$file" uninstall)"; then
       die "opencode: refusing unsafe uninstall; inspect $file"
     fi
@@ -910,12 +948,12 @@ do_opencode() {
       && echo "  plugin removed (timestamped backup kept)" \
       || echo "  plugin was not installed"
   else
-    echo "opencode: installing chat.message plugin into $file"
+    echo "opencode: installing model-context plugin into $file"
     if ! status="$(opencode_plugin "$file" install)"; then
       die "opencode: refusing to overwrite an unmarked plugin; move it aside or merge manually"
     fi
     [ "$status" = "changed" ] \
-      && echo "  plugin installed (first-message lore injection)" \
+      && echo "  plugin installed (model-bound lore delivery)" \
       || echo "  plugin already installed — skipped"
   fi
 }
@@ -962,10 +1000,10 @@ do_kimi() {
   mkdir -p "$(dirname "$cfg")"
   [ -f "$cfg" ] || : > "$cfg"
   if [ "$UNINSTALL" = 1 ]; then
-    echo "kimi: removing SessionStart/UserPromptSubmit/Stop hooks from $cfg"
+    echo "kimi: removing SessionStart/PreCompact/UserPromptSubmit/Stop hooks from $cfg"
     block_remove "$cfg" "# >>> $MARK >>>" "# <<< $MARK <<<"
   else
-    echo "kimi: installing SessionStart/UserPromptSubmit/Stop hooks into $cfg"
+    echo "kimi: installing SessionStart/PreCompact/UserPromptSubmit/Stop hooks into $cfg"
     if ! grep -qF "# >>> $MARK >>>" "$cfg" && grep -qE '^hooks[[:space:]]*=' "$cfg"; then
       die "kimi: $cfg already defines 'hooks =' — switch it to [[hooks]] entries or merge manually:
   [[hooks]]
@@ -979,6 +1017,12 @@ do_kimi() {
 [[hooks]]
 event = "SessionStart"
 matcher = "^(startup|resume)$"
+command = "bash \"$KIMI_SESSION_HOOK_SCRIPT\""
+timeout = 30
+
+[[hooks]]
+event = "PreCompact"
+matcher = "^(manual|auto)$"
 command = "bash \"$KIMI_SESSION_HOOK_SCRIPT\""
 timeout = 30
 

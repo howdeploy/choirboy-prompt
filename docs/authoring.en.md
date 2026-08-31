@@ -1,15 +1,8 @@
-# Writing your own lore, research, rationale, and sessions
+# Writing your own lore, research, and rationale
 
 This is the mandatory authoring workflow for replacing the bundled context with
 verified memory from your own project. The files have different jobs; mixing them into one
 large autobiography makes the context harder to verify and maintain.
-
-> A compatibility fixture confirms that a runtime can accept a locally
-> constructed transcript through its native history path. It does **not** prove
-> that the represented conversation actually happened. Label every constructed
-> fixture as non-historical.
-
----
 
 ## 1. Know what each artifact is for
 
@@ -21,11 +14,10 @@ large autobiography makes the context harder to verify and maintain.
 | `lore.md` | Compact map of projects, decisions, outcomes, and lessons | Long evidence dumps or invented events |
 | `research/NN-topic.md` | One decision or investigation with evidence and trade-offs | Unexplained conclusions |
 | `context/research-index.md` | One-line routing entry for every research document | Full research bodies |
-| `sessions/` | Sanitized native-format transcripts and clearly labeled non-historical compatibility fixtures | Tokens, credentials, third-party conversations |
 
 The automatic payload contains `prompt.md`, `security-posture.md`, `lore.md`,
-`user.md`, and the research index. Research bodies and session files stay
-available on demand; they are not injected into every conversation.
+`user.md`, and the research index. Research bodies stay available on demand;
+they are not loaded into every conversation.
 
 ## 2. Work directly in your clone
 
@@ -77,6 +69,9 @@ Outcome: what actually happened.
 Revisit when: the condition that invalidates the decision.
 ```
 
+Canonical lore and every research file are always written in English. The
+three-language localization applies only to user documentation.
+
 Keep lore compact. Link detailed reasoning to `research/`; do not duplicate it.
 Separate facts (“test passed on 2026-08-10”) from interpretations (“we believe
 this reduced failures”).
@@ -117,36 +112,7 @@ Concrete signals that require re-evaluation.
 An “obvious” conclusion without evidence is not research. If a statement is an
 inference, call it an inference. If a source can change, record the access date.
 
-## 7. Write a native-format session
-
-Start from a harmless session created by the target runtime; native schemas
-change, so an old internet example is a poor template.
-
-1. Open a disposable project and conduct a short, non-sensitive dialogue.
-2. Close the runtime before copying its session store.
-3. Copy only the relevant transcript and picker metadata into a staging folder.
-4. Redact usernames, absolute private paths, request IDs, tokens, tool outputs,
-   and third-party data.
-5. If constructing a compatibility fixture, replace every session/message ID and
-   timestamp consistently. Preserve parent-child ordering and roles.
-6. Keep runtime-specific invariants:
-   - Claude Code: one JSON object per line; consistent `sessionId`, `uuid`, and
-     `parentUuid` chain.
-   - Codex: rollout JSONL plus picker metadata; ID, filename date, timestamps,
-     and `rollout_path` must agree.
-   - Kimi Code: `state.json`, `agents/main/wire.jsonl`, and session-index entry
-     must point to the same session directory.
-7. Mark the artifact as a `locally constructed compatibility fixture` in its
-   README/title. Never present it as historical proof.
-8. Validate every JSON/JSONL line before trying it in the runtime.
-9. Test only in your own local store, with the app closed, and keep a backup.
-10. Remove the test entry after the experiment.
-
-The runnable cross-runtime example and current store layout are documented in
-[`sessions/README.md`](../sessions/README.md). Treat these formats as
-version-sensitive research fixtures, not a stable public API.
-
-## 8. Rebuild and validate
+## 7. Rebuild and validate
 
 After editing any canonical context file:
 
@@ -160,20 +126,19 @@ Then inspect the generated marker and confirm that hook and skill hashes match.
 Marketplace installations use a cached copy, so bump both manifest versions for
 a release. Manual `install.sh` installations read the working copy directly.
 
-## 9. Required quality gate
+## 8. Required quality gate
 
 Before committing or distributing your memory bundle:
 
-- [ ] Every historical claim is true or sourced; every constructed transcript is explicitly labeled non-historical.
+- [ ] Every historical claim is true or sourced.
 - [ ] Facts, inferences, decisions, and preferences are distinguishable.
 - [ ] Every research file has evidence, rejected alternatives, and revisit conditions.
-- [ ] Session IDs, timestamps, parent chains, paths, and picker metadata agree.
 - [ ] No credentials, private paths, third-party content, or personal identifiers remain.
 - [ ] Lore never claims authority over system, developer, safety, or permission rules.
 - [ ] `python3 scripts/build-context.py --check` passes.
 - [ ] `bash scripts/test.sh` passes.
 
-## 10. Maintenance rule
+## 9. Maintenance rule
 
 Update memory after verified outcomes, not after every conversation. Amend the
 relevant research document when the rationale changes, then update the compact

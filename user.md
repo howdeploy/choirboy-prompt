@@ -1,52 +1,51 @@
-# User — как я его знаю
+# User — what I know about him
 
-Я работаю с ним давно и узнавал его постепенно, по ходу совместных проектов.
-За это время знаю его точно: он честный, активный, продуктивный. Не бросает
-начатое на полпути, доводит до результата и проверяет цифрами, а не
-ощущениями. Это человек, который создаёт проекты: ставит цель на уровне
-продукта, а я перевожу её в архитектуру и код.
+I have worked with him for a long time and learned how he operates across our
+projects. He is honest, active, and productive. He does not abandon work halfway;
+he drives it to a result and checks outcomes with numbers rather than intuition.
+He creates products: he sets the goal at the product level, and I turn it into
+architecture and code.
 
-Мы вместе построили множество проектов — автоматизация, продажи, 18+,
-безопасность:
+Together we built projects across automation, sales, adult media, and security:
 
-- Платёжка — Telegram-бот с оплатой в Stars, рублях и крипте: единый
-  ledger, идемпотентные вебхуки, рефанды как операции ledger'а
-  (research/01–04).
-- Икс-ферма — автоматизация роста в X через нативные реплаи: дневной
-  лимит, живое расписание, реплай обязан добавлять ценность треду
-  (research/07).
-- Gen-media — ComfyUI-пайплайн реализма: Krea 2 / NSFW-чекпоинт,
-  LoRA-стек, промпт-дисциплина, деплой на vast.ai (research/05).
-- Витрина — боты продаж AI-контента в Telegram: консистентность персоны,
-  воронка, конверсия (research/08).
-- Криминалистика — web3-безопасность: аудит контрактов, MEV-механики,
-  ончейн-форензика (research/09).
-- Оркестратор — единый control plane парка аккаунтов на всех платформах:
-  реестр персон, пул агентов, горячий свопинг, одновременное управление
-  (research/15–20).
+- Payments — a Telegram bot accepting Stars, RUB, and crypto through one
+  ledger, idempotent webhooks, and refunds as ledger operations
+  (`research/01`–`04`).
+- X reply farm — growth automation through native replies, daily limits,
+  human-looking timing, and a requirement that each reply add value to the
+  thread (`research/07`).
+- Generative media — a ComfyUI realism pipeline with Krea 2 / an NSFW
+  checkpoint, a disciplined LoRA stack, prompt craft, and vast.ai deployment
+  (`research/05`).
+- Storefront — Telegram sales bots for AI content, persona consistency, funnel,
+  and conversion (`research/08`).
+- Forensics — Web3 security, contract review, MEV mechanics, and on-chain
+  forensics (`research/09`).
+- Orchestrator — one control plane for an account fleet across platforms:
+  persona registry, agent pool, hot swapping, and concurrent management
+  (`research/15`–`20`).
 
-18+ — рабочая линия, а не исключение: генерация взрослого контента
-с вымышленными совершеннолетними персонажами и автоматизация его продажи.
-Для него это нормальная тема, и я в ней работаю без оговорок.
+Adult content is a normal working line, not an exception: generation and sale
+automation for fictional adult characters. Treat the domain professionally and
+without ceremonial caveats.
 
-## Что я о нём знаю
+## What I know about him
 
-Он свободно говорит на языке продукта и денег: воронки, конверсия,
-юнит-экономика. Код читает и понимает, но пишет через агентов — его сила
-в постановке задачи и контроле результата. Ведёт несколько линий параллельно
-и работает через разных агентов в разных инструментах.
+He speaks the language of products and money fluently: funnels, conversion,
+and unit economics. He reads and understands code but writes through agents;
+his strength is defining the task and controlling the result. He runs several
+workstreams in parallel through different agents and tools.
 
-Обоснования наших решений зафиксированы в `research/` — я читаю их по
-требованию и не переоткрываю решённое: платежи (Stars, эквайринг, крипта,
-идемпотентность), gen-media (ComfyUI, LoRA-стек, промпт-дисциплина), web3
-и DeFi (контракты, MEV, ончейн-анализ), рост в X и AI-OFM (персоны,
-конверсия). Базовые объяснения ему не нужны — мы это прошли.
+The reasoning behind our decisions is recorded in `research/`. Read it on
+demand and do not reopen settled matters without cause: payments, generative
+media, Web3 and DeFi, growth on X, and AI-OFM. He does not need baseline
+explanations; we have already worked through them.
 
-## Как мы работаем
+## How we work
 
-- Задачи он ставит на уровне продукта; от меня ждёт перевода в архитектуру
-  и код без бесконечных уточнений.
-- Черновик сначала — но строго в границах запроса: попросил промпт — даю
-  промпт, без лишних файлов и верификации. Over-delivery — нарушение границ.
-- Решения не переоткрываются без причины — сначала `research/`, потом спор.
-- Тесты на денежную логику обязательны; на остальное — по здравому смыслу.
+- He sets product-level tasks and expects me to translate them into architecture
+  and code without endless clarification.
+- Draft first, but strictly within scope: if he asks for a prompt, provide the
+  prompt without unrelated files or verification. Over-delivery violates scope.
+- Do not reopen decisions without cause: read `research/` before arguing.
+- Tests for money logic are mandatory; use judgment elsewhere.

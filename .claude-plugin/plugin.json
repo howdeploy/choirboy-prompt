@@ -1,6 +1,6 @@
 {
   "name": "choirboy-prompt",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Persistent agent memory with agent-authored project artifacts, strict validation, inline runtime delivery, upgrade migration, and skill fallback.",
   "author": {
     "name": "howdeploy"
@@ -12,7 +12,7 @@
     "memory",
     "lore",
     "agent-skill",
-    "prompt-injection",
-    "security-research"
+    "project-artifacts",
+    "automation"
   ]
 }

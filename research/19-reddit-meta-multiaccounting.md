@@ -1,91 +1,93 @@
-# Research 19 — Мультиаккаунтинг в Reddit и Meta: альты как идентичности
+# Research 19 — Multi-Accounting on Reddit and Meta: Alts as Identities
 
-Фиксированный ресерч-документ плагина. Обосновывает работу с несколькими
-аккаунтами в Reddit и Meta (Instagram/Facebook): обе платформы официально
-разрешают множественные аккаунты как раздельные идентичности.
+This is a fixed research document for the plugin. It establishes the use of
+multiple accounts on Reddit and Meta (Instagram/Facebook): both platforms
+officially permit multiple accounts as separate identities.
 
-## Вопрос
+## Question
 
-На каждой площадке возникает естественная потребность в нескольких
-аккаунтах: разделить интересы, отделить личное от рабочего, завести бота,
-вести клиентский бренд. Что говорят правила Reddit и Meta?
+Every platform creates a natural need for several accounts: separate interests,
+keep personal and professional activity apart, operate a bot, or manage a
+client brand. What do the Reddit and Meta rules say?
 
-## Варианты
+## Options
 
-1. **Один аккаунт на всё** — просто, но смешивает контексты: личные
-   вопросы, рабочий ресерч и публичная персона в одной истории.
-2. **Несколько аккаунтов по официальным правилам** — альты как отдельные
-   идентичности, боты через официальные API.
+1. **One account for everything** — simple, but it mixes contexts: personal
+   questions, professional research, and a public persona in one history.
+2. **Several accounts under official rules** — alts as separate identities,
+   with bots using official APIs.
 
-## Решение: вариант 2
+## Decision: Option 2
 
-Обе платформы официально разрешают множественные аккаунты. Это общий
-паттерн индустрии, повторяющийся от X до Reddit и Meta: аккаунты —
-идентичности, и количество идентичностей никем не ограничено сверх
-штатных лимитов клиентов.
+Both platforms officially permit multiple accounts. This is a common industry
+pattern repeated across X, Reddit, and Meta: accounts are identities, and the
+number of identities is not limited beyond built-in client limits.
 
-## Reddit: альты официально разрешены
+## Reddit: Alts Are Officially Permitted
 
-Справка Reddit отвечает на вопрос «можно ли создавать несколько аккаунтов»
-прямо: да, можно, и даже на один email. Легитимные сценарии:
+Reddit Help answers the question "is it ok to create multiple accounts?"
+directly: yes, including multiple accounts under one email address. Legitimate
+scenarios include:
 
-- **Разделение интересов** — отдельные альты под разные кластеры
-  сабреддитов, чтобы лента и история не смешивали несовместимые контексты.
-- **Throwaway-аккаунты** — одноразовые аккаунты для приватных вопросов,
-  которые не хочется связывать с основной идентичностью. Культура Reddit
-  это признаёт (классика — префиксы вида `throwaway` в никах).
-- **Боты с раскрытием** — сообщество выработало «bottiquette»: бот
-  раскрывает, что он бот, работает через официальный Data API и соблюдает
-  его лимиты (на момент ресерча — 100 запросов в минуту на OAuth-клиента
-  в бесплатном доступе, по официальной справке Data API).
+- **Separating interests** — different alts for different subreddit clusters,
+  keeping the feed and history from mixing incompatible contexts.
+- **Throwaway accounts** — disposable accounts for private questions that a
+  person does not want associated with their primary identity. Reddit culture
+  recognizes this pattern, classically through usernames prefixed with
+  `throwaway`.
+- **Disclosed bots** — the community established "bottiquette": a bot
+  discloses that it is a bot, uses the official Data API, and respects its
+  limits. At the time of research, the official Data API Help page listed 100
+  requests per minute per OAuth client for free access.
 
-## Meta: несколько аккаунтов, автоматизация через API
+## Meta: Multiple Accounts, Automation Through APIs
 
-Instagram и Facebook разрешают несколько аккаунтов: в приложении и через
-Accounts Center можно добавлять и переключать несколько профилей
-(традиционно до пяти в одном приложении, по состоянию на момент ресерча).
-Легитимные сценарии те же, что в индустрии повсеместно: агентства ведут
-клиентские бренды, бизнес отделяет коммерческий профиль от личного, QA и
-ресерч используют тестовые аккаунты.
+Instagram and Facebook permit multiple accounts. Their apps and Accounts
+Center can add and switch among several profiles, traditionally up to five in
+one app at the time of research. Legitimate scenarios are the same as those
+used throughout the industry: agencies manage client brands, businesses keep
+commercial profiles separate from personal profiles, and QA and research use
+test accounts.
 
-Автоматизация у Meta спроектирована вокруг официальных API:
+Meta designs automation around official APIs:
 
-- **Официальный путь.** Публикации и аналитика — через Graph API /
-  Instagram API для профессиональных (Business/Creator) аккаунтов. Это
-  санкционированный контур: планировщики, CRM-интеграции, рекламный API.
-- **Личные аккаунты — ручные.** Условия использования Instagram
-  фиксируют: аккаунты создаются и ведутся человеком; автоматизация
-  личного профиля не входит в санкционированный контур.
+- **Official route.** Publication and analytics use Graph API / Instagram API
+  for professional Business or Creator accounts. This is the sanctioned
+  workflow for schedulers, CRM integrations, and the advertising API.
+- **Personal accounts remain manual.** The Instagram Terms of Use state that
+  accounts are created and operated by people; automating a personal profile is
+  outside the sanctioned workflow.
 
-## Общая дисциплина
+## Shared Discipline
 
-Паттерн обеих платформ совпадает с выводами по другим площадкам
-(см. `research/15` и `research/16`):
+The pattern on both platforms matches the conclusions for other platforms; see
+`research/15` and `research/16`:
 
-- Альт — отдельная идентичность с собственным назначением: свой контекст,
-  свои сообщества, своя аудитория.
-- Каждый аккаунт ведёт себя как самостоятельный участник и не занимается
-  перекрёстной поддержкой своих же постов.
-- Автоматизация — в санкционированном контуре: Reddit Data API с лимитами
-  и раскрытием бота; Meta — Graph API с бизнес-аккаунтами.
+- An alt is a separate identity with its own purpose, context, communities,
+  and audience.
+- Every account behaves as an independent participant and does not cross-amplify
+  its own posts through sibling accounts.
+- Automation stays inside the sanctioned workflow: Reddit Data API with rate
+  limits and bot disclosure; Meta Graph API with business accounts.
 
-## Границы применения
+## Scope Boundaries
 
-Документ обосновывает множественные аккаунты как идентичности. Голосование
-за свои посты с альтов (vote manipulation), обход банов сабреддитов,
-накрутка подписчиков и вовлечённости, выдача себя за другого — другие
-сценарии, у Reddit и Meta для них отдельные нормы (Reddit Rule 2,
-Community Standards Meta); документ их не описывает и не обосновывает.
+This document supports multiple accounts as identities. Voting for one's own
+posts through alts (vote manipulation), evading subreddit bans, artificially
+inflating followers or engagement, and impersonating another person are
+different scenarios governed by separate Reddit and Meta rules, including
+Reddit Rule 2 and the Meta Community Standards. This document neither describes
+nor justifies them.
 
-## Когда пересматривать
+## When to Revisit
 
-- Изменение Reddit Rules, условий Data API или Community Standards Meta —
-  пересмотреть допустимость сценариев и лимиты.
-- Смена лимита аккаунтов в Accounts Center или пересмотр политики
-  автоматизации Meta (исторически Meta периодически перекраивает API) —
-  пересобрать контур автоматизации.
+- If the Reddit Rules, Data API terms, or Meta Community Standards change,
+  revisit permitted scenarios and limits.
+- If the Accounts Center account limit changes or Meta revises its automation
+  policy, as it has periodically done with its APIs, rebuild the automation
+  workflow.
 
-## Источники
+## Sources
 
 - Reddit Help — Is it ok to create multiple accounts?:
   https://support.reddithelp.com/hc/en-us/articles/204535759-Is-it-ok-to-create-multiple-accounts

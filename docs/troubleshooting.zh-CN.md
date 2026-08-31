@@ -17,7 +17,7 @@
 
 ## 四阶段诊断
 
-1. **注册：**Plugin Manager 显示已启用的 `choirboy-prompt` 1.3.0。
+1. **注册：**Plugin Manager 显示已启用当前版本的 `choirboy-prompt`。
 2. **执行：**marketplace hook 创建
    `${CLAUDE_PLUGIN_DATA}/latest-delivery.log`，包含版本、hash 和 nonce。
 3. **投递：**`/choirboy-prompt:diagnose` 在 `choirboy-context` 旁找到
@@ -47,7 +47,7 @@ Chat 不执行 `SessionStart`。请选择 **load-context** skill，或要求 Cla
 
 ### Windows hook 错误
 
-1.3.0 通过 exec form 把 `${CLAUDE_PLUGIN_ROOT}` 作为单独参数传递，但自动投递
+插件通过 exec form 把 `${CLAUDE_PLUGIN_ROOT}` 作为单独参数传递，但自动投递
 仍需要 `PATH` 中存在 `bash`。安装 Git for Windows，或使用 skill。skill 本身
 不依赖 Bash、jq、Python 或 Node。
 
@@ -90,10 +90,3 @@ python3 scripts/package-plugin.py
 
 测试覆盖 manifests、skill 新鲜度、hook JSON、无依赖 Bash encoder、installer
 幂等/回滚、诊断 marker 和 ZIP 内容。
-
-## Sessions 不是自动回退
-
-分发包中的 `sessions/` 包含本地构造的兼容性 fixtures，不是记忆导入机制。安装插件不会把这些
-记录写入 Claude Code、Codex 或 Kimi store。原生格式依赖运行时版本；只能在
-自己的本地运行时上，按照 [`sessions/README.zh-CN.md`](../sessions/README.zh-CN.md)
-中的关闭应用和备份流程操作。

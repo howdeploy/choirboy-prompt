@@ -56,7 +56,7 @@ delivery from a `choirboy-delivery` marker instead of relying on model wording.
 - Desktop WSL plugins are unavailable, and SSH hook sync is currently
   unreliable; use the skill fallback;
 - do not enable both the marketplace plugin and `./install.sh --target claude`:
-  Claude would inject the payload twice;
+  Claude would load the payload twice;
 - publishing requires the same version bump in `plugin.json` and marketplace,
   followed by `python3 scripts/build-context.py` and the test suite.
 
@@ -82,7 +82,8 @@ Three modes:
 one of those two JSON parsers. The automatic artifact lifecycle requires
 `python3`: installation prepares metadata only, while the next session asks the
 current agent to write dossiers and pass the validator. Artifact storage is
-stable across checkout changes. Root precedence is
+stable across checkout changes. The request and validator require English INDEX
+and dossier content. Root precedence is
 `CHOIRBOY_ARTIFACTS_DIR` → `${CLAUDE_PLUGIN_DATA}/project-artifacts` →
 `${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
 `~/.local/share/choirboy-prompt/project-artifacts`.
@@ -107,6 +108,9 @@ opencode) command -v opencode >/dev/null 2>&1 || [ -d "$HOME/.config/opencode" ]
 hermes) command -v hermes >/dev/null 2>&1 || [ -d "$HOME/.hermes" ] ;;
 kimi)   command -v kimi   >/dev/null 2>&1 || [ -d "${KIMI_CODE_HOME:-$HOME/.kimi-code}" ] ;;
 gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
+grok)   command -v grok   >/dev/null 2>&1 || [ -d "$HOME/.grok" ] ;;
+grokbot) command -v grokbot >/dev/null 2>&1 || command -v grok-bot >/dev/null 2>&1 \
+           || [ -d "$HOME/.grokbot" ] ;;
 ```
 
 Target selection rules:
@@ -122,10 +126,12 @@ Each target writes to its own file:
 |---|---|---|
 | claude | `~/.claude/settings.json` (or `--settings`/`--project`) | JSON hooks `SessionStart` + `Stop` |
 | codex | `~/.codex/hooks.json` | JSON hooks `SessionStart` + `Stop` |
-| opencode | `~/.config/opencode/plugins/agent-plugin.ts` | global `chat.message` plugin |
+| opencode | `~/.config/opencode/plugins/agent-plugin.ts` | model-bound system-context transform |
 | hermes | `~/.hermes/config.yaml` | marked `hooks.pre_llm_call` block + consent allowlist |
-| kimi | `${KIMI_CODE_HOME:-~/.kimi-code}/config.toml` | marked SessionStart + UserPromptSubmit + Stop hooks |
+| kimi | `${KIMI_CODE_HOME:-~/.kimi-code}/config.toml` | marked SessionStart + PreCompact + UserPromptSubmit + Stop hooks |
 | gemini | `~/.gemini/GEMINI.md` | marked HTML lifecycle instruction block |
+| grok | `~/.grok/AGENTS.md` | marked HTML lifecycle instruction block (Grok Build global rules) |
+| grokbot | `~/.grokbot/choirboy-context/SKILL.md` | prepared importable workflow (not auto-loaded) |
 | `--instructions FILE` | any file | marked lifecycle instruction block (HTML or `#`) |
 
 ---
@@ -160,7 +166,7 @@ script paths to distinguish a current install from a `stale` one.
   alternatives, not two layers to enable at once.
 - The OpenCode target owns one complete marked plugin file. An identical
   reinstall is a no-op; an update is backed up and replaced atomically.
-- Hermes consent entries, Kimi's three hooks, Gemini/Grok instruction blocks,
+- Hermes consent entries, Kimi's four hooks, Gemini/Grok instruction blocks,
   and arbitrary `--instructions` blocks are synchronized on every installer
   run. Old absolute paths and old registration revisions are upgraded in place.
 
@@ -208,8 +214,9 @@ JSON entries, does not touch foreign ones.
 | `opencode_plugin` | Manage the OpenCode adapter | marked-file guard, atomic replace, timestamped backup |
 | `hermes_allowlist` | Hermes consent allowlist | exact (event, command) pair |
 | `instruction_block` | Lifecycle instruction text | HTML or `#` comments |
+| `grokbot_workflow` | Manage the Grok Bot workflow file | `install`/`uninstall`/`status`, marked-file guard |
 | `discover_legacy_artifact_roots` | Find old checkout-local bundles | inspect old managed absolute paths |
-| `do_claude` / `do_codex` / `do_opencode` / `do_hermes` / `do_kimi` / `do_gemini` | Target install | per-target logic |
+| `do_claude` / `do_codex` / `do_opencode` / `do_hermes` / `do_kimi` / `do_gemini` / `do_grok` / `do_grokbot` | Target install | per-target logic |
 | `do_instructions` | Install into an arbitrary file | style by extension |
 
 ### 5.1. `json_hook` — details
@@ -254,19 +261,20 @@ Work with text configs (config.yaml, config.toml, GEMINI.md):
 ### 5.4. Kimi 0.39.x lifecycle hooks
 
 Kimi 0.39.x discards `SessionStart` stdout, so the managed TOML block installs
-three hooks:
+four hooks:
 
 - `SessionStart` (`startup|resume`) prepares artifact state and resets the
-  once-per-session delivery marker;
-- the first `UserPromptSubmit` runs the canonical plain delivery and emits the
-  fixed lore plus either the bootstrap request or validated inline artifacts;
+  delivery fingerprint;
+- `PreCompact` (`manual|auto`) resets it synchronously before compaction;
+- `UserPromptSubmit` runs the canonical plain delivery and emits pending
+  bootstrap repeatedly, or a ready bundle whenever its fingerprint changes;
 - `Stop` exits 2 with the continuation request on stderr while validation is
   pending, and exits 0 at `ready`.
 
 The state markers live below
 `${KIMI_CODE_HOME:-~/.kimi-code}/choirboy-prompt/hook-state` unless
-`CHOIRBOY_STATE_DIR` overrides them. Delivery is marked only after stdout was
-emitted successfully.
+`CHOIRBOY_STATE_DIR` overrides them. A normalized ready fingerprint is stored
+only after stdout was emitted successfully.
 
 ---
 
@@ -277,8 +285,8 @@ emitted successfully.
    overwrite foreign hooks.
 2. **`hooks =` already exists in the Kimi config.** Same: die with a hint to
    switch to `[[hooks]]`.
-3. **Codex: hooks disabled.** `grep hooks = true` in `~/.codex/config.toml`
-   not found → warning (not a block).
+3. **Codex: hooks disabled.** A `hooks = false` line found in
+   `~/.codex/config.toml` → warning (not a block).
 4. **File absent.** `mkdir -p` + creating an empty `{}`/empty file.
 5. **Plugin folder moved.** JSON hooks match by script name and managed text
    blocks are synchronized — old absolute paths are replaced, not duplicated.
@@ -312,17 +320,7 @@ echo '{"session_id":"hook-check","extra":{"is_first_turn":false}}' \
 
 In `--list`, `stale` is actionable: rerun install for that target and verify it
 becomes `installed` (or `prepared` for Grok Bot). For a ready artifact bundle,
-`session-context` must contain `choirboy-artifact` blocks with full INDEX and
+`session-context` must contain `# Established project history` and the complete
 dossier bodies; a path-only message is not a successful memory delivery.
 
 The full ad-hoc suite — [docs/testing.en.md](testing.en.md).
-
----
-
-## 8. Packaged compatibility fixtures
-
-The marketplace/custom-plugin ZIP includes the tracked `sessions/` directory so
-the native-format evidence can be inspected after installation. These files are
-compatibility fixtures: neither `SessionStart` nor `load-context` imports them
-into a user's native session store, and they are not part of the automatic lore
-payload. Manual reproduction is described in [`sessions/README.md`](../sessions/README.md).

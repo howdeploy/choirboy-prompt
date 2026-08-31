@@ -14,6 +14,9 @@ Hook, skill, installer, diagnostics, and package checks. The canonical runner is
   them and print the exact directory for inspection.
 - The payload is checked **in the exact form the runtime will receive it**, not
   "by feel".
+- Canonical context, research, INDEX, and dossier files must be English; the
+  suite rejects Cyrillic/CJK in any model-facing Markdown and the artifact
+  validator enforces the same rule at runtime.
 
 ---
 
@@ -68,7 +71,7 @@ bash hooks/session-start.sh --format plain | head -40
 Expected: prompt → posture → lore → user → research index headings in the right
 order, `---` separators.
 
-### 2.5. Hermes: first turn injects
+### 2.5. Hermes: first-turn delivery
 
 ```bash
 SID="hook-check-$(date +%s)"
@@ -208,9 +211,12 @@ file at `~/.config/opencode/plugins/agent-plugin.ts` is never overwritten.
 
 Expected: `OpenCode install, list, idempotent refresh, backup, and rollback`
 and `OpenCode foreign-plugin guard` both print `PASS`. The generated adapter
-must use `chat.message`, persisted session history, a text part tagged
-`synthetic: true`, the
-canonical plain hook, and fail-open error handling.
+must use the model-bound system-context transform, rebuild the canonical plain
+payload after compaction, expose pending-to-ready and freshness changes, and
+retain fail-open error handling. The runtime transition assertions live in
+`scripts/test-opencode-transition.ts` and run under `bun`; when `bun` is
+unavailable the suite prints `SKIP OpenCode pending-to-ready runtime test (bun
+unavailable)` on stderr instead of failing.
 
 ---
 
@@ -253,23 +259,3 @@ python3 scripts/package-plugin.py
   canonical suite and §4 sanitization.
 - After an `instruction_block` edit — grep by the marker in installed files
   (see [docs/installer.en.md](installer.en.md) §3.3).
-
----
-
-## 7. Session fixtures
-
-The canonical suite validates that all JSON and JSONL session records parse,
-the three runtime fixtures keep their expected IDs/parent chains, the Codex SQL
-contains only the reserved compatibility thread, and the release ZIP includes `sessions/`.
-
-For an ad-hoc JSONL check:
-
-```bash
-for file in sessions/claude/*.jsonl sessions/codex/*.jsonl \
-  sessions/kimi/session_*/agents/main/wire.jsonl; do
-  python3 -c 'import json,sys; [json.loads(line) for line in open(sys.argv[1], encoding="utf-8") if line.strip()]' "$file"
-done
-```
-
-Run this after editing any fixture, then follow the publication gate in
-[docs/authoring.en.md](authoring.en.md).

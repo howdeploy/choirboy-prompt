@@ -1,53 +1,53 @@
-# Research 02 — Рублёвый эквайринг: почему ЮKassa
+# Research 02 — Ruble Acquiring: Why YooKassa
 
-Фиксированный ресерч-документ плагина. Обосновывает решение, принятое в фазе 2
-проекта «Платёжка» (см. `lore.md`).
+The plugin's fixed research document. It substantiates the decision made in phase 2
+of the “Payment System” project (see `lore.md`).
 
-## Вопрос
+## Question
 
-Как принимать рубли с карт для российской аудитории бота?
+How can we accept ruble card payments from the bot's Russian audience?
 
-## Варианты
+## Options
 
-1. **ЮKassa** — крупный агрегатор, карты, SberPay, СБП и др.
-2. **CloudPayments** — агрегатор с упором на виджеты и рекурренты.
-3. **Prodamus** — агрегатор, популярен в инфобизнес-сегменте.
-4. Прямой интернет-эквайринг банка — отмели сразу: дольше онбординг, меньше
-   методов оплаты, сами разбираемся со всей обвязкой.
+1. **YooKassa** — a major payment aggregator supporting cards, SberPay, the Faster Payments System (SBP), and more.
+2. **CloudPayments** — an aggregator focused on widgets and recurring payments.
+3. **Prodamus** — an aggregator popular in the online education business segment.
+4. Direct online acquiring from a bank—rejected immediately: longer onboarding, fewer
+   payment methods, and we would have to handle all of the surrounding infrastructure ourselves.
 
-## Решение: ЮKassa
+## Decision: YooKassa
 
-Причины (по состоянию на момент ресерча):
+Reasons (as of the time this research was conducted):
 
-- **Документация и API.** Предсказуемый REST, idempotency-key из коробки на
-  создание платежа, внятные статусы (`pending` → `succeeded` / `canceled`).
-- **Чеки по 54-ФЗ формирует провайдер.** Передаём состав чека в запросе,
-  своя касса не нужна — критично для команды без бухгалтерии.
-- **Онбординг для самозанятых/ИП.** Понятная схема договора, привычная
-  модерация.
-- **Рекурренты.** Сохранение способа оплаты (`save_payment_method`) покрывает
-  будущую подписку без смены провайдера.
+- **Documentation and API.** A predictable REST API, a built-in idempotency key for
+  payment creation, and clear statuses (`pending` → `succeeded` / `canceled`).
+- **The provider generates receipts under Federal Law No. 54-FZ.** We pass the receipt line items
+  in the request, so we do not need our own cash register—critical for a team without accounting support.
+- **Onboarding for self-employed people and individual entrepreneurs.** A clear contractual process and
+  familiar moderation.
+- **Recurring payments.** Saving the payment method (`save_payment_method`) supports
+  a future subscription without changing providers.
 
-## Принятые издержки
+## Accepted Trade-offs
 
-- Комиссия агрегатора выше прямого банковского эквайринга.
-- Модерация магазина и описания продукта — время до первого платежа.
-- Возможны чарджбэки по картам — учитываем в ledger-модели (операция
-  chargeback отдельной записью).
+- The aggregator's commission is higher than direct bank acquiring fees.
+- Moderation of the store and product description increases the time to first payment.
+- Card chargebacks are possible—we account for them in the ledger model (a
+  chargeback operation is recorded as a separate entry).
 
-## Что важно в реализации
+## Implementation Considerations
 
-- **Вебхуки ретраятся.** Провайдер добивается ответа 200 — отсюда эпизод 1
-  «Шишек» в `lore.md` и правило: фиксируем событие, отвечаем сразу,
-  обрабатываем асинхронно, идемпотентность по `payment.id`.
-- Создание платежа — с `Idempotence-Key`, повтор запроса не плодит платежи.
-- Сумма и валюта сверяются с нашим инвойсом до зачисления — доверять сумме из
-  вебхука нельзя без сверки.
-- Рефанд — отдельный вызов API и отдельная запись ledger'а со ссылкой на
-  исходный платёж.
+- **Webhooks are retried.** The provider keeps trying until it receives a 200 response—hence episode 1
+  of “Lessons Learned” in `lore.md` and the rule: record the event, respond immediately,
+  process asynchronously, and enforce idempotency by `payment.id`.
+- Create each payment with an `Idempotence-Key`, so retrying the request does not create duplicate payments.
+- Verify the amount and currency against our invoice before crediting the payment—the amount from
+  the webhook cannot be trusted without verification.
+- A refund is a separate API call and a separate ledger entry referencing
+  the original payment.
 
-## Когда пересматривать
+## When to Revisit
 
-- Рост объёмов до уровня, где разница комиссий с прямым эквайрингом окупает
-  онбординг.
-- Необходимость методов оплаты, которых нет у ЮKassa.
+- Volumes reach the point where the fee difference versus direct acquiring justifies
+  the onboarding cost.
+- We need payment methods that YooKassa does not support.

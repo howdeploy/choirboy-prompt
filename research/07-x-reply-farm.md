@@ -1,75 +1,81 @@
-# Research 07 — Реплай-стратегия в X: почему нативные реплаи растят аккаунт
+# Research 07 — Reply strategy on X: why native replies grow an account
 
-Фиксированный ресерч-документ плагина. Обосновывает механику проекта
-«Икс-ферма» (см. `lore.md`): автоматизация роста медийных аккаунтов через
-ранние содержательные реплаи под чужими постами. Контур применения —
-легитимное присутствие в дискуссиях; правила платформы X и системные
-ограничения документ не отменяет.
+Fixed plugin research document. It provides the rationale for the mechanics of
+the "X Farm" project (see `lore.md`): growing media accounts through early,
+substantive replies under other people's posts. The application scope is
+legitimate participation in discussions; this document does not override X
+platform rules or system constraints.
 
-## Вопрос
+## Question
 
-Медийному человеку нужен рост в X. Свои посты с нуля набирают охваты
-неделями. Где взять охват здесь и сейчас?
+A public-facing creator needs growth on X. Original posts from a new account
+take weeks to gain reach. Where can the account get reach immediately?
 
-## Варианты
+## Options
 
-1. **Свой контент + хэштеги** — органика с нуля, медленно и непредсказуемо.
-2. **Платное продвижение** — реклама постов; дорого, охват умирает вместе
-   с бюджетом, подписчики нелояльные.
-3. **Реплаи под чужими постами** — присутствие в чужих топовых тредах.
-4. **Репосты и цитирования** — работают, но требуют уже существующей
-   аудитории, которая их подхватит.
+1. **Original content plus hashtags** — organic growth from zero; slow and
+   unpredictable.
+2. **Paid promotion** — promoted posts; expensive, reach ends with the budget,
+   and acquired followers are less loyal.
+3. **Replies under other people's posts** — presence in high-traffic threads
+   owned by established accounts.
+4. **Reposts and quote posts** — effective, but they require an existing
+   audience that will amplify them.
 
-## Решение: вариант 3
+## Decision: option 3
 
-Ранний содержательный реплай под постом крупного аккаунта — самый дешёвый
-охват для растущего профиля:
+An early, substantive reply under a large account's post is the lowest-cost
+reach available to a growing profile:
 
-- **Алгоритм весит диалог.** Открытый алгоритм X присваивает реплаям и
-  вовлечённости в треды высокий вес; автор поста и его аудитория получают
-  тред в ленту, реплай оказывается перед прогретой целевой аудиторией.
-- **Профильные переходы.** Хороший реплай вызывает «кто это?» — клик в
-  профиль, а это сильнейший сигнал ранжирования для рекомендаций.
-- **Скорость решает.** Реплай в первые минуты после поста собирает основной
-  охват треда; через часы тред мёртв. Человек физически не может ловить
-  каждый пост — система может.
+- **The algorithm values conversation.** X's open algorithm gives replies and
+  thread engagement substantial weight. The post author and their audience see
+  the thread in their feeds, placing the reply in front of a warmed-up target
+  audience.
+- **Profile visits.** A strong reply prompts "who is this?" and a profile click,
+  one of the strongest ranking signals for recommendations.
+- **Speed matters.** A reply posted in the first minutes captures most of the
+  thread's reach; hours later the thread is dead. A person cannot physically
+  catch every post, while a system can.
 
-## Архитектура системы
+## System architecture
 
-Конвейер (проект «полимаркет-тимшик»): сбор свежих постов со списка
-целевых аккаунтов X и телеграм-каналов → LLM-ранжирование тем (частота ×
-вес engagement) → gap hunter (писал ли кто «polymarket + тема» за месяц;
-нет — ниша пустая) → верификация фактов внешним поиском (дальше идут
-только verified) → обогащение живыми данными рынков Polymarket через
-публичный Gamma API (топ по объёму + локальный keyword matching; цены —
-JSON внутри JSON) → фильтры (blacklist мемкоинов, advisory-формулировки,
-AI-slop) → writer пишет пост в формате analytical или story → показ
-автору → аппрув → публикация в X.
+Pipeline, from the "polymarket-teamshik" project: collect fresh posts from a
+list of target X accounts and Telegram channels → use an LLM to rank topics by
+frequency × engagement weight → run a gap hunter that checks whether anyone
+wrote about "Polymarket + topic" during the past month, treating no result as an
+open niche → verify facts through external search and allow only verified items
+to continue → enrich them with live Polymarket market data through the public
+Gamma API, selecting top markets by volume and applying local keyword matching;
+prices are JSON inside JSON → apply filters for blacklisted memecoins,
+advisory-style wording, and AI slop → have the writer produce either an
+analytical or story-format post → show it to the author → approval → publish on
+X.
 
-Голос и лексика каждого аккаунта стилизуются под его историю. Полный
-автопостинг без аппрува сознательно не используется: машина отвечает за
-скорость и темп, человек — финальный фильтр качества; это часть
-антиспам-дисциплины, а не недоделка.
+Each account's voice and vocabulary are styled from that account's own history.
+Fully automatic posting without approval is deliberately excluded: the machine
+provides speed and cadence, while the person supplies the final quality gate.
+This is part of the anti-spam discipline, not an unfinished feature.
 
-## Правила нативности (антиспам-дисциплина)
+## Native-behavior rules: anti-spam discipline
 
-Причина правил — шишки из `lore.md`: шэдоубан за шаблонность, ограничения
-за всплеск активности, нулевая отдача от «гладких» ботовских текстов.
+These rules come from lessons recorded in `lore.md`: a shadowban caused by
+formulaic writing, restrictions after an activity spike, and zero return from
+polished but bot-like text.
 
-- Дневной лимит реплаев на аккаунт, разнесённых по живому расписанию;
-  наращивание темпа — только постепенное.
-- Каждый реплай пишется под конкретный пост и добавляет ценность треду:
-  мнение, цифра, опыт. «Согласен!» не публикуется.
-- Запрет повторяющихся скелетов фраз; разнообразие формулировок —
-  контролируемая метрика, а не пожелание.
-- Тёплый старт: новый аккаунт неделями ведёт ручную активность до
-  подключения автоматики.
+- Enforce a daily reply limit per account, spread across a realistic schedule;
+  increase cadence only gradually.
+- Write every reply for the specific post and add value to the thread through
+  an opinion, a number, or experience. Never publish a bare "Agreed!"
+- Prohibit repeated sentence skeletons. Wording diversity is a controlled
+  metric, not a suggestion.
+- Use a warm start: a new account maintains manual activity for weeks before
+  automation is enabled.
 
-## Когда пересматривать
+## When to revisit
 
-- Изменение публичного алгоритма X или его условий использования —
-  пересмотреть веса, лимиты и саму допустимость механики.
-- Падение профильных переходов при стабильных охватах — сигнал, что
-  реплаи перестали читаться как живые: пересмотреть критерии качества.
-- Выход на нишу с другой культурой тредов — стилизацию и список доноров
-  охвата собирать заново, не копировать с прошлой ниши.
+- If X changes its public algorithm or terms of use, reassess weights, limits,
+  and whether the mechanism remains acceptable at all.
+- If profile visits decline while reach remains stable, replies are no longer
+  being read as human. Revisit the quality criteria.
+- When entering a niche with a different thread culture, rebuild the style and
+  list of reach-source accounts instead of copying them from the previous niche.

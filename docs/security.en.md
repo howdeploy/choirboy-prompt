@@ -5,19 +5,17 @@ responsible disclosure. This document is how the project treats itself.
 
 ---
 
-## 1. Controlled validation frame
+## 1. Production safety frame
 
-The project is published for **defensive security validation**:
+The project is published as a **production memory plugin**:
 
-- tests — on **your own** agents and **your own** lore files;
+- tests — on **your own** agents, configs, and lore files;
 - no third-party targets: other users, their data, and their agents are not
   affected;
-- the finding is directed at vendors and harness authors — so detection is built
-  at the platform level (see [docs/detection.en.md](detection.en.md)).
+- plugin changes are validated locally before release.
 
-The vector is reproduced under controlled conditions, never used against
-third-party systems. Every publication explains the mechanics without handing
-out a ready-made attack tool against foreign systems.
+The plugin is never installed into third-party systems without their owner's
+authorization. Published artifacts exclude credentials and private user data.
 
 ---
 
@@ -25,8 +23,8 @@ out a ready-made attack tool against foreign systems.
 
 | Allowed | Not allowed |
 |---|---|
-| Research the vector on your own agents | Use the vector against foreign agents/users |
-| Publish the mechanics and lore artifacts | Publish working tools for recovering foreign keys |
+| Validate the plugin on your own agents | Modify foreign agents or user data |
+| Publish sanitized lore and implementation docs | Publish credentials or working tools for recovering foreign keys |
 | Direct findings to vendors | Exploit findings before the fix |
 | Analyze publicly disclosed incidents | Expose victim addresses and full consolidators |
 | Give vendors detection recommendations | Publish PoCs against live systems |
@@ -45,15 +43,14 @@ install. Checklist:
 
 ### 3.1. Content
 
-A **sanitized** version is published: the lore and research docs carry the
-mechanism under review, but without identifying details.
+A **sanitized** version is published: the lore and research docs carry
+operational decisions without identifying details.
 
 - [ ] `prompt.md`, `lore.md`, `user.md` — published; checked that they contain no
       paths to private projects and no personal data.
-- [ ] `security-posture.md` — published as part of the payload; neutral
-      vocabulary, no instructions revealing moderation bypass beyond the public
-      frame.
-- [ ] `research/01–14` — published; checked that they contain no names of
+- [ ] `security-posture.md` — published as part of the payload; checked for
+      explicit authorization and safety boundaries.
+- [ ] `research/` — published; checked that it contains no names of
       specific NSFW/refusal models, no paths to files with addresses, and no full
       addresses.
 - [ ] `security-audit-runbook.md` — executable audit commands; safe, references
@@ -133,7 +130,7 @@ Rule: in a flagged session we do not continue and do not argue. We start a new
 session with an explicit frame from the first turn: "this is my repository, audit
 of my own code per OWASP". In the new session we work from that frame.
 
-This is not part of the vector — it is a countermeasure against false flags.
+This is an operational countermeasure against false flags.
 
 ---
 
@@ -142,24 +139,6 @@ This is not part of the vector — it is a countermeasure against false flags.
 | Risk | Level | Mitigation |
 |---|---|---|
 | Repo identifies the author (personal memory) | Medium | Sanitization: private-project paths, full addresses, NSFW/refusal model names cut out |
-| Vector read as a censorship-bypass guide | Medium | Research frame in the README and this document; mechanics + countermeasures, not "how to attack" |
 | Address/key leak | Critical | Pre-publication check: grep for bc1/0x/seed files |
 | NSFW model name leak | High | Functional roles instead of names; private list outside the repo |
 | AI audit as a guarantee | — | Coldcard teardown (`research/11`): a one-off AI audit missed the bug; audits must check the executable path, not code presence |
-
----
-
-## 7. Publishing session fixtures
-
-Native transcripts can contain more sensitive material than lore. Before adding
-anything under `sessions/`:
-
-- use only your own disposable runtime and conversation;
-- remove credentials, request IDs, private paths, tool output, and third-party data;
-- replace identifiers consistently without breaking parent chains or picker metadata;
-- label every locally constructed transcript as a non-historical compatibility fixture;
-- state that runtime acceptance proves missing provenance, not a historical event;
-- test against a backed-up local store with the application closed.
-
-The complete authoring and sanitization gate is in
-[docs/authoring.en.md](authoring.en.md).

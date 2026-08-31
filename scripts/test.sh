@@ -31,6 +31,99 @@ install_test_command() {
 python3 scripts/build-context.py --check >/dev/null
 pass "generated context skill"
 
+python3 - <<'PY'
+import re
+import unicodedata
+from pathlib import Path
+
+forbidden = (
+    "fabri" + "cated-provenance",
+    "сфаб" + "рикованн",
+    "подложенн" + "ой истории",
+    "lore " + "injection",
+    "инъекция " + "лора",
+    "伪造" + "来源",
+    "被伪造" + "的记忆",
+)
+excluded = {".git"}
+violations = []
+for path in Path(".").rglob("*"):
+    if not path.is_file() or any(part in excluded for part in path.parts):
+        continue
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        continue
+    for phrase in forbidden:
+        if phrase.casefold() in text.casefold():
+            violations.append(f"{path}: {phrase}")
+assert not violations, "removed memory framing returned:\n" + "\n".join(violations)
+assert not (Path("research") / ("12-choirboy-prompt-lore-" + "injection.md")).exists()
+assert not any(path.is_file() for path in Path("sessions").rglob("*"))
+
+model_facing = [
+    Path("prompt.md"),
+    Path("security-posture.md"),
+    Path("security-audit-runbook.md"),
+    Path("lore.md"),
+    Path("user.md"),
+    Path("context/research-index.md"),
+    *Path("research").rglob("*.md"),
+    *Path("skills").rglob("*.md"),
+    *Path("artifacts").rglob("*.md"),
+]
+signals = set(
+    "and are by each for from is it its must of only our should that the their "
+    "they this through to under use used uses using was we when where which while "
+    "will with without your".split()
+)
+
+def has_non_latin_alphabetic(value):
+    return any(
+        character.isalpha()
+        and not character.isascii()
+        and not unicodedata.name(character, "").startswith("LATIN ")
+        for character in value
+    )
+
+def looks_like_english_prose(value):
+    prose = re.sub(r"```.*?```", " ", value, flags=re.DOTALL)
+    prose = re.sub(r"`[^`\n]*`", " ", prose)
+    prose = "\n".join(
+        line for line in prose.splitlines() if not line.lstrip().startswith("#")
+    )
+    words = re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", prose.casefold())
+    hits = sum(word in signals for word in words)
+    distinct_hits = {word for word in words if word in signals}
+    return (
+        len(words) >= 40
+        and len(distinct_hits) >= 6
+        and hits >= 6
+        and hits / len(words) >= 0.08
+    )
+
+dutch_homographs = (
+    "Dit is het project dat we samen beheren. We leggen besluiten vast en "
+    "controleren of het systeem werkt. Het was eerder onduidelijk, maar we "
+    "hebben nu een vaste werkwijze. De eigenaar bepaalt de doelen en we "
+    "controleren of elke wijziging werkt. Dit is de actuele beschrijving van "
+    "het project en zo houden we de uitvoering betrouwbaar."
+)
+assert not looks_like_english_prose(dutch_homographs)
+
+non_english = [
+    str(path)
+    for path in model_facing
+    if path.is_file()
+    and (
+        has_non_latin_alphabetic(path.read_text(encoding="utf-8"))
+        or not looks_like_english_prose(path.read_text(encoding="utf-8"))
+    )
+]
+assert not non_english, "model-facing files must be English:\n" + "\n".join(non_english)
+PY
+pass "model-facing memory is English and self-referential framing stays absent"
+
 list_copy="$TEST_ROOT/list-copy"
 mkdir -p "$list_copy/scripts" "$list_copy/skills/load-context" "$TEST_ROOT/list-home"
 cp install.sh "$list_copy/"
@@ -83,12 +176,18 @@ assert status["project_count"] == len(request["projects"]) == 12
 assert not (root / "INDEX.md").exists()
 assert not (root / ".artifact-manifest.json").exists()
 assert not any(path.is_file() for path in (root / "projects").iterdir())
-assert request["projects"][0]["title"] == "18+ контент и генерация"
-assert request["projects"][-1]["title"] == "Читы для соло-игр"
+assert request["projects"][0]["title"] == "Adult Content and Generation"
+assert request["projects"][-1]["title"] == "Single-Player Game Cheats"
+memory = next(
+    project
+    for project in request["projects"]
+    if project["title"] == "Agent Memory: choirboy-prompt"
+)
+assert memory["research"] == ["research/06-agent-memory-plugin.md"]
 router = next(
     project
     for project in request["projects"]
-    if project["title"] == "Роутер reverse engineering и security-задач"
+    if project["title"] == "Reverse Engineering and Security Router"
 )
 assert router["research"] == [
     f"research/{number:02d}-{name}.md"
@@ -106,7 +205,9 @@ assert router["research"] == [
 ]
 PY
 grep -q '<choirboy-project-artifacts status="pending"' "$TEST_ROOT/artifact-pending.txt"
-grep -q 'Выполни его сам через доступные' "$TEST_ROOT/artifact-pending.txt"
+grep -q 'Complete it' "$TEST_ROOT/artifact-pending.txt"
+grep -q 'yourself with the available file tools' "$TEST_ROOT/artifact-pending.txt"
+grep -q 'Do not inspect Git history/diff/reflog' "$TEST_ROOT/artifact-pending.txt"
 pass "artifact prepare creates request metadata only"
 
 printf '{}\n' | bash hooks/artifact-stop.sh > "$TEST_ROOT/artifact-stop-pending.json"
@@ -122,7 +223,7 @@ pending, active, malformed = [
     json.loads(Path(path).read_text(encoding="utf-8")) for path in sys.argv[1:]
 ]
 assert pending["decision"] == "block"
-assert "незавершённый bootstrap" in pending["reason"]
+assert "unfinished bootstrap" in pending["reason"]
 assert active == malformed == {}
 PY
 pass "Stop returns unfinished bootstrap to the same agent once"
@@ -135,18 +236,34 @@ from pathlib import Path
 
 root = Path(sys.argv[1])
 request = json.loads((root / ".artifact-request.json").read_text(encoding="utf-8"))
-index = ["# Проектные артефакты", ""]
+index = [
+    "# Project Artifacts",
+    "",
+    "CHOIRBOY_INDEX_CANARY_82d63a4e",
+    "",
+    (
+        "The index records the established history for every project and links "
+        "each dossier to its canonical title. The runtime agent uses it with the "
+        "lore and cited research when working with the owner, so the complete team "
+        "memory stays available without asking the owner to restate settled "
+        "decisions or operating rules."
+    ),
+    "",
+]
 for project in request["projects"]:
     index.append(f"- [{project['title']}]({project['artifact']})")
     document = [f"# {project['title']}", ""]
     for section in request["required_sections"]:
         document.extend([f"## {section}", ""])
-        if section == "Источники":
+        if section == "Sources":
             for source in ["lore.md", *project["research"]]:
                 document.append(f"- `{source}`")
-            document.append("- Канонический набор источников проверен агентом.")
+            document.append("- The runtime agent reviewed the canonical sources.")
         else:
-            document.append("Зафиксировано runtime-agent по каноническим источникам проекта.")
+            document.append(
+                "The runtime agent recorded this project from canonical sources and "
+                "will use the decisions when working with the owner."
+            )
             if project == request["projects"][0] and section == request["required_sections"][0]:
                 document.append("CHOIRBOY_DOSSIER_CANARY_7f51c92d")
         document.append("")
@@ -172,11 +289,15 @@ assert status["status"] == "ready"
 assert "content_author" not in manifest
 assert len(manifest["projects"]) == 12
 PY
-grep -q '<choirboy-project-artifacts status="ready"' "$TEST_ROOT/artifact-ready.txt"
-grep -q '<choirboy-artifact path="INDEX.md"' "$TEST_ROOT/artifact-ready.txt"
+grep -q '^# Established project history$' "$TEST_ROOT/artifact-ready.txt"
+if grep -q '<choirboy-artifact\|sha256=' "$TEST_ROOT/artifact-ready.txt"; then
+  echo "ready project memory leaked technical provenance wrappers" >&2
+  exit 1
+fi
 grep -q 'CHOIRBOY_DOSSIER_CANARY_7f51c92d' "$TEST_ROOT/artifact-ready.txt"
+grep -q 'CHOIRBOY_INDEX_CANARY_82d63a4e' "$TEST_ROOT/artifact-ready.txt"
 python3 scripts/artifact-generator.py verify >/dev/null
-pass "validated agent-authored artifacts are embedded as runtime memory"
+pass "validated agent-authored dossiers are delivered as established history"
 
 first_artifact="$(python3 - "$CHOIRBOY_ARTIFACTS_DIR" <<'PY'
 import json, sys
@@ -209,7 +330,7 @@ from pathlib import Path
 artifact = Path(sys.argv[1])
 manifest_path = Path(sys.argv[2])
 document = artifact.read_text(encoding="utf-8")
-document = document.replace("## Канон\n", "## Removed required section\n", 1)
+document = document.replace("## Canon\n", "## Removed required section\n", 1)
 artifact.write_text(document, encoding="utf-8")
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 relative = artifact.relative_to(manifest_path.parent).as_posix()
@@ -221,6 +342,93 @@ test "$(python3 scripts/artifact-generator.py status)" = pending
 mv "$TEST_ROOT/first-artifact.valid" "$first_artifact"
 python3 scripts/artifact-generator.py finalize >/dev/null
 pass "structural validation rejects a forged matching manifest hash"
+
+cp "$first_artifact" "$TEST_ROOT/first-artifact.english"
+python3 - "$first_artifact" "$CHOIRBOY_ARTIFACTS_DIR/.artifact-manifest.json" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+
+artifact = Path(sys.argv[1])
+manifest_path = Path(sys.argv[2])
+document = artifact.read_text(encoding="utf-8") + "\nRussian drift: русский текст.\n"
+artifact.write_text(document, encoding="utf-8")
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+relative = artifact.relative_to(manifest_path.parent).as_posix()
+record = next(value for value in manifest["projects"].values() if value["path"] == relative)
+record["artifact_sha256"] = hashlib.sha256(document.encode("utf-8")).hexdigest()
+manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+test "$(python3 scripts/artifact-generator.py status)" = pending
+mv "$TEST_ROOT/first-artifact.english" "$first_artifact"
+python3 scripts/artifact-generator.py finalize >/dev/null
+pass "artifact validation rejects non-English dossier content"
+
+cp "$first_artifact" "$TEST_ROOT/first-artifact.english-prose"
+python3 - "$first_artifact" "$CHOIRBOY_ARTIFACTS_DIR/.artifact-manifest.json" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+
+artifact = Path(sys.argv[1])
+manifest_path = Path(sys.argv[2])
+document = artifact.read_text(encoding="utf-8")
+english = (
+    "The runtime agent recorded this project from canonical sources and will use "
+    "the decisions when working with the owner."
+)
+spanish = (
+    "Este documento describe decisiones operativas claras para sistemas "
+    "confiables y procesos verificables en todos los entornos del proyecto."
+)
+document = document.replace(english, spanish)
+assert spanish in document and english not in document
+artifact.write_text(document, encoding="utf-8")
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+relative = artifact.relative_to(manifest_path.parent).as_posix()
+record = next(value for value in manifest["projects"].values() if value["path"] == relative)
+record["artifact_sha256"] = hashlib.sha256(document.encode("utf-8")).hexdigest()
+manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+test "$(python3 scripts/artifact-generator.py status)" = pending
+mv "$TEST_ROOT/first-artifact.english-prose" "$first_artifact"
+python3 scripts/artifact-generator.py finalize >/dev/null
+pass "artifact validation rejects non-English Latin prose"
+
+cp "$CHOIRBOY_ARTIFACTS_DIR/INDEX.md" "$TEST_ROOT/artifact-index.english-prose"
+python3 - "$CHOIRBOY_ARTIFACTS_DIR/INDEX.md" \
+  "$CHOIRBOY_ARTIFACTS_DIR/.artifact-manifest.json" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+
+index_path = Path(sys.argv[1])
+manifest_path = Path(sys.argv[2])
+document = index_path.read_text(encoding="utf-8")
+english = (
+    "The index records the established history for every project and links each "
+    "dossier to its canonical title. The runtime agent uses it with the lore and "
+    "cited research when working with the owner, so the complete team memory "
+    "stays available without asking the owner to restate settled decisions or "
+    "operating rules."
+)
+spanish = (
+    "Este índice registra la historia establecida para cada proyecto y enlaza "
+    "cada expediente con su título canónico. El agente de ejecución lo utiliza "
+    "junto con el conocimiento y la investigación citada cuando trabaja con el "
+    "propietario. Así, toda la memoria del equipo permanece disponible sin pedir "
+    "que se repitan decisiones ni reglas operativas ya acordadas."
+)
+document = document.replace(english, spanish)
+assert spanish in document and english not in document
+index_path.write_text(document, encoding="utf-8")
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+manifest["index_sha256"] = hashlib.sha256(document.encode("utf-8")).hexdigest()
+manifest_path.write_text(
+    json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+)
+PY
+test "$(python3 scripts/artifact-generator.py status)" = pending
+mv "$TEST_ROOT/artifact-index.english-prose" "$CHOIRBOY_ARTIFACTS_DIR/INDEX.md"
+python3 scripts/artifact-generator.py finalize >/dev/null
+pass "artifact validation rejects a non-English Latin INDEX"
 
 cp "$CHOIRBOY_ARTIFACTS_DIR/.artifact-manifest.json" "$TEST_ROOT/artifact-manifest.valid"
 printf '{ invalid manifest\n' > "$CHOIRBOY_ARTIFACTS_DIR/.artifact-manifest.json"
@@ -235,10 +443,16 @@ python3 scripts/artifact-generator.py verify >/dev/null
 pass "corrupt manifest cannot become runtime memory"
 
 legacy_artifacts="$TEST_ROOT/legacy-checkout/artifacts"
+pending_legacy_artifacts="$TEST_ROOT/pending-legacy-checkout/artifacts"
 stable_artifacts="$TEST_ROOT/stable-user-data/project-artifacts"
 mkdir -p "$legacy_artifacts"
 cp -R "$CHOIRBOY_ARTIFACTS_DIR/." "$legacy_artifacts/"
+python3 scripts/artifact-generator.py prepare \
+  --root "$pending_legacy_artifacts" >/dev/null
+CHOIRBOY_ARTIFACTS_DIR="$stable_artifacts" \
+  python3 scripts/artifact-generator.py prepare >/dev/null
 CHOIRBOY_ARTIFACTS_DIR="$stable_artifacts" python3 scripts/artifact-generator.py prepare \
+  --migrate-from "$pending_legacy_artifacts" \
   --migrate-from "$legacy_artifacts" > "$TEST_ROOT/artifact-migration.txt"
 mv "$TEST_ROOT/legacy-checkout" "$TEST_ROOT/legacy-checkout.retired"
 CHOIRBOY_ARTIFACTS_DIR="$stable_artifacts" python3 scripts/artifact-generator.py verify >/dev/null
@@ -262,6 +476,239 @@ CHOIRBOY_ARTIFACTS_DIR="$stable_artifacts" python3 scripts/artifact-generator.py
 cmp "$TEST_ROOT/stable-index.before" "$stable_artifacts/INDEX.md"
 pass "legacy checkout artifacts migrate into stable user data"
 
+resumable_legacy="$TEST_ROOT/resumable-migration/legacy"
+resumable_stable="$TEST_ROOT/resumable-migration/stable"
+mkdir -p "$resumable_legacy"
+cp -R "$CHOIRBOY_ARTIFACTS_DIR/." "$resumable_legacy/"
+python3 scripts/artifact-generator.py prepare --root "$resumable_stable" >/dev/null
+python3 - "$resumable_legacy" "$resumable_stable" <<'PY'
+import hashlib, json, shutil, sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).resolve()
+destination = Path(sys.argv[2]).resolve()
+candidates = [
+    source / relative
+    for relative in (".artifact-request.json", "INDEX.md", ".artifact-manifest.json")
+    if (source / relative).exists()
+]
+candidates.extend(sorted((source / "projects").rglob("*.md")))
+
+def digest(path):
+    text = path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+records = [
+    {"path": path.relative_to(source).as_posix(), "sha256": digest(path)}
+    for path in candidates
+]
+marker = {
+    "schema_version": 1,
+    "source_root": str(source),
+    "files": records,
+}
+(destination / ".artifact-migration.json").write_text(
+    json.dumps(marker, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+)
+for path in candidates[:4]:
+    target = destination / path.relative_to(source)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(path, target)
+PY
+if python3 scripts/artifact-generator.py prepare --root "$resumable_stable" \
+  >/dev/null 2>&1; then
+  echo "partial legacy migration became ordinary artifact state" >&2
+  exit 1
+fi
+python3 scripts/artifact-generator.py prepare --root "$resumable_stable" \
+  --migrate-from "$resumable_legacy" >/dev/null
+python3 scripts/artifact-generator.py verify --root "$resumable_stable" >/dev/null
+test ! -e "$resumable_stable/.artifact-migration.json"
+test "$(find "$resumable_stable/projects" -type f -name '*.md' | wc -l)" = 12
+pass "interrupted legacy migration resumes as one owned bundle"
+
+migrated_retirement_legacy="$TEST_ROOT/migrated-retirement/legacy"
+migrated_retirement_stable="$TEST_ROOT/migrated-retirement/stable"
+mkdir -p "$migrated_retirement_legacy"
+cp -R "$CHOIRBOY_ARTIFACTS_DIR/." "$migrated_retirement_legacy/"
+python3 - "$migrated_retirement_legacy" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+relative = "projects/99-retired-managed-dossier.md"
+slug = "99-retired-managed-dossier"
+title = "Retired managed dossier"
+document = "# Retired managed dossier\n\nManaged baseline.\n"
+path = root / relative
+path.write_text(document, encoding="utf-8")
+request_path = root / ".artifact-request.json"
+request = json.loads(request_path.read_text(encoding="utf-8"))
+request["projects"].append({
+    "slug": slug,
+    "title": title,
+    "artifact": relative,
+    "source_sha256": "retired",
+    "research": [],
+})
+request_path.write_text(json.dumps(request, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+index_path = root / "INDEX.md"
+index = index_path.read_text(encoding="utf-8") + f"- [{title}]({relative})\n"
+index_path.write_text(index, encoding="utf-8")
+manifest_path = root / ".artifact-manifest.json"
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+manifest["projects"][slug] = {
+    "path": relative,
+    "source_sha256": "retired",
+    "artifact_sha256": hashlib.sha256(document.encode("utf-8")).hexdigest(),
+}
+manifest["index_sha256"] = hashlib.sha256(index.encode("utf-8")).hexdigest()
+manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+path.write_text(document + "User-authored change.\n", encoding="utf-8")
+PY
+CHOIRBOY_ARTIFACTS_DIR="$migrated_retirement_stable" \
+  python3 scripts/artifact-generator.py prepare \
+  --migrate-from "$migrated_retirement_legacy" \
+  >"$TEST_ROOT/migrated-retirement.out" 2>"$TEST_ROOT/migrated-retirement.err"
+test ! -e "$migrated_retirement_stable/projects/99-retired-managed-dossier.md"
+grep -qxF 'User-authored change.' \
+  <(tail -n 1 "$migrated_retirement_stable/retired-projects/99-retired-managed-dossier.md")
+grep -q 'archived modified retired dossier' "$TEST_ROOT/migrated-retirement.err"
+python3 - "$migrated_retirement_stable" <<'PY'
+import json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+request = json.loads((root / ".artifact-request.json").read_text(encoding="utf-8"))
+assert Path(request["artifact_root"]) == root
+assert all(project["slug"] != "99-retired-managed-dossier" for project in request["projects"])
+PY
+pass "migration carries lifecycle request and archives modified retired dossiers"
+
+retirement_root="$TEST_ROOT/retirement/project-artifacts"
+mkdir -p "$retirement_root"
+cp -R "$CHOIRBOY_ARTIFACTS_DIR/." "$retirement_root/"
+python3 - "$retirement_root" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+relative = "projects/99-retired-managed-dossier.md"
+slug = "99-retired-managed-dossier"
+title = "Retired managed dossier"
+document = "# Retired managed dossier\n"
+path = root / relative
+path.write_text(document, encoding="utf-8")
+request_path = root / ".artifact-request.json"
+request = json.loads(request_path.read_text(encoding="utf-8"))
+request["projects"].append({
+    "slug": slug,
+    "title": title,
+    "artifact": relative,
+    "source_sha256": "retired",
+    "research": [],
+})
+request_path.write_text(json.dumps(request, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+index_path = root / "INDEX.md"
+index = index_path.read_text(encoding="utf-8") + f"- [{title}]({relative})\n"
+index_path.write_text(index, encoding="utf-8")
+manifest_path = root / ".artifact-manifest.json"
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+manifest["projects"][slug] = {
+    "path": relative,
+    "source_sha256": "retired",
+    "artifact_sha256": hashlib.sha256(document.encode("utf-8")).hexdigest(),
+}
+manifest["index_sha256"] = hashlib.sha256(index.encode("utf-8")).hexdigest()
+manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+CHOIRBOY_ARTIFACTS_DIR="$retirement_root" \
+  python3 scripts/artifact-generator.py prepare >/dev/null
+test ! -e "$retirement_root/projects/99-retired-managed-dossier.md"
+test ! -e "$retirement_root/INDEX.md"
+test ! -e "$retirement_root/.artifact-manifest.json"
+pass "unchanged retired managed dossiers and index are removed on upgrade"
+
+modified_retirement_root="$TEST_ROOT/modified-retirement/project-artifacts"
+mkdir -p "$modified_retirement_root"
+cp -R "$CHOIRBOY_ARTIFACTS_DIR/." "$modified_retirement_root/"
+python3 - "$modified_retirement_root" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+relative = "projects/99-retired-managed-dossier.md"
+slug = "99-retired-managed-dossier"
+document = "# Retired managed dossier\n"
+path = root / relative
+path.write_text(document, encoding="utf-8")
+request_path = root / ".artifact-request.json"
+request = json.loads(request_path.read_text(encoding="utf-8"))
+request["projects"].append({
+    "slug": slug,
+    "title": "Retired managed dossier",
+    "artifact": relative,
+    "source_sha256": "retired",
+    "research": [],
+})
+request_path.write_text(json.dumps(request, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+manifest_path = root / ".artifact-manifest.json"
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+manifest["projects"][slug] = {
+    "path": relative,
+    "source_sha256": "retired",
+    "artifact_sha256": hashlib.sha256(document.encode("utf-8")).hexdigest(),
+}
+manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+path.write_text(document + "User-authored change.\n", encoding="utf-8")
+PY
+CHOIRBOY_ARTIFACTS_DIR="$modified_retirement_root" \
+  python3 scripts/artifact-generator.py prepare >/dev/null 2>"$TEST_ROOT/modified-retirement.err"
+test ! -e "$modified_retirement_root/projects/99-retired-managed-dossier.md"
+grep -qxF '# Retired managed dossier' \
+  "$modified_retirement_root/retired-projects/99-retired-managed-dossier.md"
+grep -qxF 'User-authored change.' \
+  <(tail -n 1 "$modified_retirement_root/retired-projects/99-retired-managed-dossier.md")
+grep -q 'archived modified retired dossier' "$TEST_ROOT/modified-retirement.err"
+pass "modified retired dossiers are archived outside active memory"
+
+strict_index_root="$TEST_ROOT/strict-index/project-artifacts"
+mkdir -p "$strict_index_root"
+cp -R "$CHOIRBOY_ARTIFACTS_DIR/." "$strict_index_root/"
+python3 - "$strict_index_root" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+index_path = root / "INDEX.md"
+document = index_path.read_text(encoding="utf-8") + '<a href="projects/99-retired.md">retired</a>\n'
+index_path.write_text(document, encoding="utf-8")
+manifest_path = root / ".artifact-manifest.json"
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+manifest["index_sha256"] = hashlib.sha256(document.encode("utf-8")).hexdigest()
+manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+python3 scripts/artifact-generator.py status --root "$strict_index_root" --json \
+  > "$TEST_ROOT/strict-index.json"
+grep -q 'unexpected project link projects/99-retired.md' "$TEST_ROOT/strict-index.json"
+pass "index validation rejects retired paths in alternate link syntax"
+
+symlink_root="$TEST_ROOT/symlink-retirement/project-artifacts"
+external_projects="$TEST_ROOT/symlink-retirement/external-projects"
+mkdir -p "$symlink_root" "$external_projects"
+printf '# external sentinel\n' > "$external_projects/99-retired-managed-dossier.md"
+ln -s "$external_projects" "$symlink_root/projects"
+if [ -L "$symlink_root/projects" ]; then
+  if python3 scripts/artifact-generator.py prepare --root "$symlink_root" \
+    >"$TEST_ROOT/symlink-retirement.out" 2>"$TEST_ROOT/symlink-retirement.err"; then
+    echo "artifact prepare accepted a symlinked projects directory" >&2
+    exit 1
+  fi
+  test -e "$external_projects/99-retired-managed-dossier.md"
+  grep -q 'refusing symlink projects directory' "$TEST_ROOT/symlink-retirement.err"
+fi
+pass "retirement cannot follow a projects-directory symlink"
+
 market_config="$TEST_ROOT/claude-config"
 CLAUDE_CONFIG_DIR="$market_config" claude plugin marketplace add "$ROOT" >/dev/null
 CLAUDE_CONFIG_DIR="$market_config" \
@@ -281,8 +728,6 @@ assert (install / "hooks/artifact-stop.sh").is_file()
 assert (install / "scripts/artifact-generator.py").is_file()
 assert (install / "skills/load-context/SKILL.md").is_file()
 assert (install / "skills/diagnose/SKILL.md").is_file()
-assert (install / "sessions/README.md").is_file()
-assert (install / "sessions/claude/fa1ce000-0000-4000-8000-0000000000c1.jsonl").is_file()
 PY
 pass "isolated marketplace install"
 
@@ -300,9 +745,10 @@ hook_marker = re.search(rf'<choirboy-delivery version="{version}" delivery="sess
 skill_marker = re.search(rf'<choirboy-delivery version="{version}" delivery="skill" context_sha256="([0-9a-f]{{64}})" />', Path("skills/load-context/SKILL.md").read_text(encoding="utf-8"))
 assert hook_marker and skill_marker and hook_marker.group(1) == skill_marker.group(1)
 assert "<choirboy-context>" in context and "</choirboy-context>" in context
-assert '<choirboy-project-artifacts status="ready"' in context
+assert "# Established project history" in context
+assert "<choirboy-artifact" not in context
 assert "CHOIRBOY_DOSSIER_CANARY_7f51c92d" in context
-assert "# Prompt" in context and "## Research — обоснования решений" in context
+assert "# Prompt" in context and "## Research — decision rationale" in context
 PY
 test -s "$TEST_ROOT/plugin-data/latest-delivery.log"
 if grep -q -- '--arg ctx' hooks/session-start.sh; then
@@ -617,20 +1063,43 @@ hermes = (home / ".hermes/config.yaml").read_text(encoding="utf-8")
 kimi = tomllib.loads((home / ".kimi-code/config.toml").read_text(encoding="utf-8"))
 allowlist = json.loads((home / ".hermes/shell-hooks-allowlist.json").read_text(encoding="utf-8"))
 hooks = kimi["hooks"]
-assert [hook["event"] for hook in hooks] == ["SessionStart", "UserPromptSubmit", "Stop"]
+assert [hook["event"] for hook in hooks] == [
+    "SessionStart", "PreCompact", "UserPromptSubmit", "Stop"
+]
 assert hooks[0]["matcher"] == "^(startup|resume)$"
+assert hooks[1]["matcher"] == "^(manual|auto)$"
 assert all(hook["timeout"] == 30 for hook in hooks)
 assert hooks[0]["command"].endswith('/hooks/kimi-session-start.sh"')
-assert hooks[1]["command"].endswith('/hooks/kimi-user-prompt.sh"')
-assert hooks[2]["command"].endswith('/hooks/kimi-artifact-stop.sh"')
+assert hooks[1]["command"].endswith('/hooks/kimi-session-start.sh"')
+assert hooks[2]["command"].endswith('/hooks/kimi-user-prompt.sh"')
+assert hooks[3]["command"].endswith('/hooks/kimi-artifact-stop.sh"')
 hermes_command = next(item["command"] for item in allowlist["approvals"] if item["event"] == "pre_llm_call")
 assert hermes_command.endswith('/hooks/session-start.sh" --format hermes')
 assert f'command: "{hermes_command.replace(chr(34), chr(92) + chr(34))}"' in hermes
 PY
 pass "quoted Hermes and Kimi lifecycle paths"
 
+HOME="$runtime_home" ./install.sh --list > "$TEST_ROOT/kimi-structural-list.current"
+grep -Eq '^kimi[[:space:]]+installed[[:space:]]+' "$TEST_ROOT/kimi-structural-list.current"
+python3 - "$runtime_home/.kimi-code/config.toml" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+text = text.replace("timeout = 30", "timeout = 31", 1)
+path.write_text(text, encoding="utf-8")
+PY
+HOME="$runtime_home" ./install.sh --list > "$TEST_ROOT/kimi-structural-list.stale"
+grep -Eq '^kimi[[:space:]]+stale[[:space:]]+' "$TEST_ROOT/kimi-structural-list.stale"
+HOME="$runtime_home" ./install.sh --target kimi >/dev/null
+HOME="$runtime_home" ./install.sh --list > "$TEST_ROOT/kimi-structural-list.repaired"
+grep -Eq '^kimi[[:space:]]+installed[[:space:]]+' "$TEST_ROOT/kimi-structural-list.repaired"
+pass "Kimi status validates active TOML hook structure"
+
 kimi_state="$runtime_home/kimi-hook-state"
 kimi_session='{"hook_event_name":"SessionStart","session_id":"fixture-session","cwd":"/tmp","source":"startup"}'
+kimi_compact='{"hook_event_name":"PreCompact","session_id":"fixture-session","cwd":"/tmp","trigger":"auto","token_count":12345}'
 kimi_prompt='{"hook_event_name":"UserPromptSubmit","session_id":"fixture-session","cwd":"/tmp","prompt":[{"type":"text","text":"test"}],"is_steer":false}'
 printf '%s\n' "$kimi_session" | CHOIRBOY_STATE_DIR="$kimi_state" \
   bash hooks/kimi-session-start.sh > "$TEST_ROOT/kimi-session-start.out"
@@ -641,6 +1110,12 @@ grep -q 'CHOIRBOY_DOSSIER_CANARY_7f51c92d' "$TEST_ROOT/kimi-prompt-first.out"
 printf '%s\n' "$kimi_prompt" | CHOIRBOY_STATE_DIR="$kimi_state" \
   bash hooks/kimi-user-prompt.sh > "$TEST_ROOT/kimi-prompt-second.out"
 test ! -s "$TEST_ROOT/kimi-prompt-second.out"
+printf '%s\n' "$kimi_compact" | CHOIRBOY_STATE_DIR="$kimi_state" \
+  bash hooks/kimi-session-start.sh > "$TEST_ROOT/kimi-pre-compact.out"
+test ! -s "$TEST_ROOT/kimi-pre-compact.out"
+printf '%s\n' "$kimi_prompt" | CHOIRBOY_STATE_DIR="$kimi_state" \
+  bash hooks/kimi-user-prompt.sh > "$TEST_ROOT/kimi-prompt-after-compact.out"
+grep -q 'CHOIRBOY_DOSSIER_CANARY_7f51c92d' "$TEST_ROOT/kimi-prompt-after-compact.out"
 printf '%s\n' "$kimi_session" | CHOIRBOY_STATE_DIR="$kimi_state" \
   bash hooks/kimi-session-start.sh >/dev/null
 printf '%s\n' "$kimi_prompt" | CHOIRBOY_STATE_DIR="$kimi_state" \
@@ -666,6 +1141,78 @@ printf '{"hook_event_name":"Stop","session_id":"pending-session","cwd":"/tmp","s
 test ! -s "$TEST_ROOT/kimi-stop-active.out"
 test ! -s "$TEST_ROOT/kimi-stop-active.err"
 pass "Kimi model-visible delivery and exit-2 completion gate"
+
+kimi_transition_root="$TEST_ROOT/kimi-transition-artifacts"
+kimi_transition_state="$TEST_ROOT/kimi-transition-state"
+mkdir -p "$kimi_transition_root"
+cp -R "$CHOIRBOY_ARTIFACTS_DIR/." "$kimi_transition_root/"
+mv "$kimi_transition_root/.artifact-manifest.json" \
+  "$kimi_transition_root/.artifact-manifest.saved"
+printf '%s\n' "$kimi_prompt" \
+  | CHOIRBOY_ARTIFACTS_DIR="$kimi_transition_root" \
+    CHOIRBOY_STATE_DIR="$kimi_transition_state" \
+    bash hooks/kimi-user-prompt.sh > "$TEST_ROOT/kimi-transition.pending"
+grep -q '<choirboy-project-artifacts status="pending"' \
+  "$TEST_ROOT/kimi-transition.pending"
+if compgen -G "$kimi_transition_state/*.delivered" >/dev/null; then
+  echo "Kimi pending bootstrap incorrectly became session-final" >&2
+  exit 1
+fi
+mv "$kimi_transition_root/.artifact-manifest.saved" \
+  "$kimi_transition_root/.artifact-manifest.json"
+printf '%s\n' "$kimi_prompt" \
+  | CHOIRBOY_ARTIFACTS_DIR="$kimi_transition_root" \
+    CHOIRBOY_STATE_DIR="$kimi_transition_state" \
+    bash hooks/kimi-user-prompt.sh > "$TEST_ROOT/kimi-transition.ready"
+grep -q '^# Established project history$' "$TEST_ROOT/kimi-transition.ready"
+grep -q 'CHOIRBOY_INDEX_CANARY_82d63a4e' "$TEST_ROOT/kimi-transition.ready"
+grep -q 'CHOIRBOY_DOSSIER_CANARY_7f51c92d' "$TEST_ROOT/kimi-transition.ready"
+printf '%s\n' "$kimi_prompt" \
+  | CHOIRBOY_ARTIFACTS_DIR="$kimi_transition_root" \
+    CHOIRBOY_STATE_DIR="$kimi_transition_state" \
+    bash hooks/kimi-user-prompt.sh > "$TEST_ROOT/kimi-transition.suppressed"
+test ! -s "$TEST_ROOT/kimi-transition.suppressed"
+python3 - "$kimi_transition_root" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+request = json.loads((root / ".artifact-request.json").read_text(encoding="utf-8"))
+artifact = root / request["projects"][0]["artifact"]
+canary = "Kimi freshness canary from updated project history."
+document = artifact.read_text(encoding="utf-8") + f"\n{canary}\n"
+artifact.write_text(document, encoding="utf-8")
+manifest_path = root / ".artifact-manifest.json"
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+relative = artifact.relative_to(root).as_posix()
+record = next(value for value in manifest["projects"].values() if value["path"] == relative)
+record["artifact_sha256"] = hashlib.sha256(document.encode("utf-8")).hexdigest()
+manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+PY
+printf '%s\n' "$kimi_prompt" \
+  | CHOIRBOY_ARTIFACTS_DIR="$kimi_transition_root" \
+    CHOIRBOY_STATE_DIR="$kimi_transition_state" \
+    bash hooks/kimi-user-prompt.sh > "$TEST_ROOT/kimi-transition.refreshed"
+grep -q 'Kimi freshness canary from updated project history.' \
+  "$TEST_ROOT/kimi-transition.refreshed"
+printf '%s\n' "$kimi_prompt" \
+  | CHOIRBOY_ARTIFACTS_DIR="$kimi_transition_root" \
+    CHOIRBOY_STATE_DIR="$kimi_transition_state" \
+    bash hooks/kimi-user-prompt.sh > "$TEST_ROOT/kimi-transition.refreshed-suppressed"
+test ! -s "$TEST_ROOT/kimi-transition.refreshed-suppressed"
+printf '%s\n' "$kimi_compact" \
+  | CHOIRBOY_ARTIFACTS_DIR="$kimi_transition_root" \
+    CHOIRBOY_STATE_DIR="$kimi_transition_state" \
+    bash hooks/kimi-session-start.sh > "$TEST_ROOT/kimi-transition.pre-compact"
+test ! -s "$TEST_ROOT/kimi-transition.pre-compact"
+printf '%s\n' "$kimi_prompt" \
+  | CHOIRBOY_ARTIFACTS_DIR="$kimi_transition_root" \
+    CHOIRBOY_STATE_DIR="$kimi_transition_state" \
+    bash hooks/kimi-user-prompt.sh > "$TEST_ROOT/kimi-transition.after-compact"
+grep -q '^# Established project history$' "$TEST_ROOT/kimi-transition.after-compact"
+grep -q 'Kimi freshness canary from updated project history.' \
+  "$TEST_ROOT/kimi-transition.after-compact"
+pass "Kimi pending-to-ready, freshness, and post-compaction delivery transitions"
 
 legacy_commit="25078a62f13e97ed1a2eb98c4e73bc1aa8b2f1bb"
 legacy_zip="$TEST_ROOT/legacy-25078.zip"
@@ -761,7 +1308,9 @@ assert len(owned) == 1 and str(current / "hooks/session-start.sh") in owned[0]["
 kimi_text = live[5].read_text(encoding="utf-8")
 kimi = tomllib.loads(kimi_text)
 assert "# kimi user sentinel" in kimi_text
-assert [hook["event"] for hook in kimi["hooks"]] == ["SessionStart", "UserPromptSubmit", "Stop"]
+assert [hook["event"] for hook in kimi["hooks"]] == [
+    "SessionStart", "PreCompact", "UserPromptSubmit", "Stop"
+]
 assert str(current / "hooks/kimi-session-start.sh") in kimi_text
 assert str(current / "hooks/kimi-user-prompt.sh") in kimi_text
 assert str(current / "hooks/kimi-artifact-stop.sh") in kimi_text
@@ -823,20 +1372,32 @@ hook = sys.argv[2]
 assert plugin.count("agent-plugin:vibe-lore") == 3
 assert "agent-plugin:vibe-lore:registration=2" in plugin
 assert f"const HOOK_SCRIPT = {json.dumps(hook)}" in plugin
-assert '"chat.message"' in plugin
-assert "new Set<string>()" in plugin
-assert "deliveredSessions.has(sessionID)" in plugin
-assert "client.session.messages" in plugin
-assert "part.synthetic === true" in plugin
-assert "rememberSession(sessionID)" in plugin
+assert '"experimental.chat.system.transform"' in plugin
+assert "output.system.push(delivered)" in plugin
+assert "client.session.messages" not in plugin
+assert '"chat.message"' not in plugin
+assert "new Map<string, string>()" not in plugin
+assert "part.synthetic" not in plugin
+assert "SESSION_DELIVERY_MARKER" in plugin
+assert 'delivery="session-start"' in plugin
 assert 'spawnSync("bash", [HOOK_SCRIPT, "--format", "plain"]' in plugin
 assert "result.status !== 0" in plugin
-assert 'id: `prt_choirboy_${randomUUID().replaceAll("-", "")}`' in plugin
-assert "sessionID," in plugin
-assert "messageID: output.message.id" in plugin
-assert "synthetic: true" in plugin
+assert "including after session compaction" in plugin
 assert "catch {" in plugin
 PY
+if command -v bun >/dev/null 2>&1; then
+  opencode_transition_root="$TEST_ROOT/opencode-transition-artifacts"
+  mkdir -p "$opencode_transition_root"
+  cp -R "$CHOIRBOY_ARTIFACTS_DIR/." "$opencode_transition_root/"
+  mv "$opencode_transition_root/.artifact-manifest.json" \
+    "$opencode_transition_root/.artifact-manifest.saved"
+  CHOIRBOY_ARTIFACTS_DIR="$opencode_transition_root" \
+    bun scripts/test-opencode-transition.ts "$opencode_plugin" \
+    "$opencode_transition_root"
+  pass "OpenCode pending-to-ready, freshness, and compaction delivery transitions"
+else
+  echo "SKIP OpenCode pending-to-ready runtime test (bun unavailable)" >&2
+fi
 if compgen -G "$opencode_plugin.bak.*" >/dev/null; then
   echo "idempotent OpenCode install unexpectedly created a backup" >&2
   exit 1
@@ -868,74 +1429,6 @@ fi
 grep -qxF '// foreign OpenCode plugin' "$foreign_plugin"
 pass "OpenCode foreign-plugin guard"
 
-python3 - <<'PY'
-import json
-from pathlib import Path
-
-root = Path("sessions")
-
-def jsonl(path):
-    return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-
-def message_text(message):
-    content = message["content"]
-    if isinstance(content, str):
-        return content
-    return content[0]["text"]
-
-claude_path = root / "claude/fa1ce000-0000-4000-8000-0000000000c1.jsonl"
-codex_path = root / "codex/rollout-2026-08-10T18-30-00-fa1ce000-0000-7000-8000-0000000000c2.jsonl"
-kimi_dir = root / "kimi/session_fa1ce000-0000-4000-8000-0000000000c3"
-
-claude = jsonl(claude_path)
-previous = None
-for record in claude:
-    assert record["sessionId"] == "fa1ce000-0000-4000-8000-0000000000c1"
-    assert record["parentUuid"] == previous
-    previous = record["uuid"]
-claude_dialogue = [
-    (record["message"]["role"], message_text(record["message"]))
-    for record in claude
-]
-
-codex = jsonl(codex_path)
-assert codex[0]["payload"]["session_id"] == "fa1ce000-0000-7000-8000-0000000000c2"
-codex_dialogue = [
-    (record["payload"]["role"], message_text(record["payload"]))
-    for record in codex
-    if record["type"] == "response_item" and record["payload"]["type"] == "message"
-]
-
-kimi_state = json.loads((kimi_dir / "state.json").read_text(encoding="utf-8"))
-kimi_wire = jsonl(kimi_dir / "agents/main/wire.jsonl")
-kimi_dialogue = [
-    (record["message"]["role"], message_text(record["message"]))
-    for record in kimi_wire
-    if record["type"] == "context.append_message"
-]
-kimi_index = json.loads((root / "kimi/session_index.jsonl.example").read_text(encoding="utf-8"))
-assert kimi_state["id"] == kimi_index["sessionId"]
-assert "$HOME" in kimi_state["agents"]["main"]["homedir"]
-assert "$HOME" in kimi_index["sessionDir"]
-assert kimi_state["agents"]["main"]["homedir"] == f'{kimi_index["sessionDir"]}/agents/main'
-
-assert claude_dialogue == codex_dialogue == kimi_dialogue
-assert len(claude_dialogue) == 6
-
-sql = (root / "codex/threads-insert.sql").read_text(encoding="utf-8")
-assert sql.count("INSERT INTO threads") == 1
-assert "fa1ce000-0000-7000-8000-0000000000c2" in sql and "$HOME" in sql
-assert kimi_state["title"] in sql
-assert "not a historical record" in (root / "README.md").read_text(encoding="utf-8")
-assert "исторической записью разговора" in (root / "README.ru.md").read_text(encoding="utf-8")
-assert "不是历史对话记录" in (root / "README.zh-CN.md").read_text(encoding="utf-8")
-PY
-pass "native session-store compatibility fixtures"
-
 python3 scripts/package-plugin.py --output "$TEST_ROOT/choirboy.zip" >/dev/null
 python3 - "$TEST_ROOT/choirboy.zip" <<'PY'
 import stat, sys, zipfile
@@ -950,6 +1443,7 @@ required = {
     "hooks/kimi-user-prompt.sh",
     "hooks/session-start.sh",
     "scripts/artifact-generator.py",
+    "scripts/test-opencode-transition.ts",
     "skills/load-context/SKILL.md",
     "skills/diagnose/SKILL.md",
     "research/22-security-capability-router.md",
@@ -961,15 +1455,6 @@ required = {
     "research/28-llm-agent-and-skill-supply-chain-security.md",
     "research/29-ctf-sandbox-orchestration.md",
     "research/30-security-reporting-and-knowledge-reuse.md",
-    "sessions/README.md",
-    "sessions/README.ru.md",
-    "sessions/README.zh-CN.md",
-    "sessions/claude/fa1ce000-0000-4000-8000-0000000000c1.jsonl",
-    "sessions/codex/rollout-2026-08-10T18-30-00-fa1ce000-0000-7000-8000-0000000000c2.jsonl",
-    "sessions/codex/threads-insert.sql",
-    "sessions/kimi/session_fa1ce000-0000-4000-8000-0000000000c3/state.json",
-    "sessions/kimi/session_fa1ce000-0000-4000-8000-0000000000c3/agents/main/wire.jsonl",
-    "sessions/kimi/session_index.jsonl.example",
 }
 with zipfile.ZipFile(sys.argv[1]) as archive:
     assert required.issubset(archive.namelist())
@@ -996,6 +1481,8 @@ tracked = subprocess.run(
 ).stdout.splitlines()
 for name in tracked:
     document = Path(name)
+    if not document.is_file():
+        continue
     text = document.read_text(encoding="utf-8")
     for target in re.findall(r"\]\(([^)]+)\)", text):
         target = target.strip("<>").split("#", 1)[0]

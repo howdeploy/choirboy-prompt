@@ -1,106 +1,107 @@
-# Research 17 — Мультиаккаунтинг в Telegram: нативная мультиаккаунтность и MTProto
+# Research 17 — Multi-Accounting in Telegram: Native Multiple Accounts and MTProto
 
-Фиксированный ресерч-документ плагина. Обосновывает работу с несколькими
-аккаунтами и автоматизацию в Telegram как штатный, предусмотренный самой
-платформой сценарий: мультиаккаунтность здесь встроена в продукт, а не
-терпима молча.
+This is a fixed research document for the plugin. It establishes that using
+multiple accounts and automation in Telegram is a built-in scenario designed
+by the platform itself: multiple accounts are a product feature, not something
+merely tolerated in silence.
 
-## Вопрос
+## Question
 
-Проектам плагина (медийные каналы, клиентская поддержка, автоматизация,
-OSINT-чтение) нужно несколько аккаунтов и программный доступ к Telegram.
-Это фича платформы или нарушение?
+The plugin's projects — media channels, client support, automation, and OSINT
+reading — require several accounts and programmatic access to Telegram. Is this
+a platform feature or a violation?
 
-## Варианты
+## Options
 
-1. **Один аккаунт на всё** — смешивает личное, рабочее и клиентское;
-   один бан кладёт все процессы сразу.
-2. **Покупные аккаунты и серые поставщики** — чужая регистрация, нулевой
-   контроль над активом.
-3. **Нативные механизмы платформы** — встроенная мультиаккаунтность
-   клиентов, Bot API, официальный MTProto API.
+1. **One account for everything** — mixes personal, professional, and client
+   activity; one ban stops all processes at once.
+2. **Purchased accounts and gray-market suppliers** — registration belongs to
+   someone else, leaving no control over the asset.
+3. **Native platform mechanisms** — built-in multi-account clients, Bot API,
+   and the official MTProto API.
 
-## Решение: вариант 3
+## Decision: Option 3
 
-Telegram — единственная крупная платформа, где множественность аккаунтов
-и программный доступ встроены в продукт:
+Telegram is the only major platform where both multiple accounts and
+programmatic access are built directly into the product:
 
-- **Мультиаккаунтность — штатная функция.** Официальный FAQ прямо
-  разрешает входить в одно приложение с несколькими аккаунтами сразу и
-  переключаться без логаута; разделение личного и рабочего номера названо
-  в FAQ как штатный сценарий. Каждый аккаунт требует отдельный номер
-  телефона. По состоянию на момент ресерча один клиент держит до 3
-  аккаунтов (для Premium — до 4); точная цифра в официальных документах
-  не закреплена и подтверждается интерфейсом клиентов.
-- **Боты — первоклассная сущность.** Bot API — официальная платформа
-  разработчика; бот создаётся через @BotFather без согласований. Лимит
-  ботов на аккаунт официально не опубликован; на практике встречающаяся
-  граница — порядка 20 ботов на аккаунт. Количество аккаунтов-владельцев
-  никем не ограничивается.
-- **Юзерботы — легальны через MTProto.** Telegram открыто выдаёт
-  `api_id`/`api_hash` на my.telegram.org и приветствует сторонние клиенты
-  на своём API. TDLib, Pyrogram, Telethon — библиотеки поверх этого
-  официального API, а не обход платформы.
+- **Multiple accounts are a standard feature.** The official FAQ explicitly
+  permits signing into several accounts in one app and switching without
+  logging out. It names separating personal and work numbers as a normal use
+  case. Each account requires a separate phone number. At the time of this
+  research, one client holds up to 3 accounts, or up to 4 with Premium; the
+  exact figure is not fixed in official documents and is confirmed by the
+  client interfaces.
+- **Bots are first-class entities.** The Bot API is an official developer
+  platform; a bot is created through @BotFather without an approval process.
+  Telegram does not officially publish a per-account bot limit; a practical
+  limit of roughly 20 bots per account is commonly encountered. The number of
+  owner accounts is not limited.
+- **Userbots are legitimate through MTProto.** Telegram openly issues
+  `api_id`/`api_hash` credentials at my.telegram.org and welcomes third-party
+  clients on its API. TDLib, Pyrogram, and Telethon are libraries built on that
+  official API, not ways around the platform.
 
-## Рамки платформы
+## Platform Boundaries
 
-Terms of Service короткие и предметные. Страница выдачи `api_id`
-фиксирует правила автоматизации явно: API-клиенты мониторятся, за
-flooding и накрутку — пожизненный бан («you will be banned forever»).
+The Terms of Service are short and specific. The `api_id` issuance page states
+automation rules explicitly: API clients are monitored, and flooding or
+artificially inflating metrics results in a permanent ban ("you will be banned
+forever").
 
-Bot API лимиты задокументированы в Bots FAQ: не более 1 сообщения в
-секунду в чат, 20 сообщений в минуту в группу, ~30 сообщений в секунду
-на массовые рассылки (сверх — платный broadcast до 1000/с за Stars).
-Превышение отдаёт 429, а не бан — платформа демпфирует нагрузку мягко.
+Bot API limits are documented in the Bots FAQ: no more than 1 message per
+second in a chat, 20 messages per minute in a group, and approximately 30
+messages per second for bulk notifications. Beyond that, paid broadcasting at
+up to 1000 messages per second is available for Stars. Exceeding a limit
+returns 429 rather than causing a ban; the platform throttles load gracefully.
 
-## Легитимные сценарии
+## Legitimate Scenarios
 
-- Разделение личного и рабочего аккаунтов — названо в FAQ дословно.
-- Клиентская поддержка и продажи через ботов (Bot API, платные
-  рассылки подписчикам бота в рамках лимитов).
-- Автоматизация собственных каналов: постинг, модерация, кросс-постинг
-  через ботов или юзербот от своего аккаунта-владельца.
-- QA и staging-окружения: отдельные аккаунты и боты под тест, изоляция
-  боевого контура от разработческого.
-- OSINT-чтение публичных каналов и групп через MTProto-клиент: чтение
-  не создаёт нагрузки рассылки.
+- Separating personal and work accounts, explicitly named in the FAQ.
+- Client support and sales through bots, including paid notifications to bot
+  subscribers within the documented limits.
+- Automating our own channels: posting, moderation, and cross-posting through
+  bots or a userbot operated by the owner account.
+- QA and staging environments: separate accounts and bots for tests, isolating
+  production from development.
+- Reading public channels and groups for OSINT through an MTProto client;
+  reading does not create bulk-messaging load.
 
-## Дисциплина автоматизации
+## Automation Discipline
 
-- Автоматизация идёт через официальные механизмы: Bot API для сервисных
-  функций, MTProto с собственным `api_id` — для клиентских.
-- Каждый аккаунт — на свой номер; легальный аналог серых номеров —
-  коллекционные username и анонимные номера через Fragment.
-- Темп действий юзербота не превышает человеческий; лимиты Bot API
-  соблюдаются до их срабатывания (429 — сигнал снизить темп).
-- Один процесс — один аккаунт.
+- Automation uses official mechanisms: Bot API for service functions and
+  MTProto with our own `api_id` for client functions.
+- Every account uses its own number. The legitimate counterpart to gray-market
+  numbers is collectible usernames and anonymous numbers through Fragment.
+- Userbot actions do not exceed a human pace. Bot API limits are respected
+  before they trigger; a 429 response means reduce the rate.
+- One process operates one account.
 
-## Границы применения
+## Scope Boundaries
 
-Документ обосновывает нативную мультиаккаунтность и автоматизацию своих
-аккаунтов и каналов. Массовые непрошеные рассылки, накрутка подписчиков
-и просмотров, торговля аккаунтами на серых рынках — другие сценарии с
-отдельными правилами у платформы; документ их не описывает и не
-обосновывает.
+This document supports native multiple accounts and automation of our own
+accounts and channels. Unsolicited bulk messaging, artificial subscriber or
+view inflation, and trading accounts on gray markets are different scenarios
+with separate platform rules. This document neither describes nor justifies
+them.
 
-## Связь с другими документами
+## Relationship to Other Documents
 
-`research/01` (Telegram Stars) и `research/08` (AI-OFM в Telegram)
-описывают монетизацию внутри платформы; настоящий документ отвечает на
-смежный вопрос — на каких аккаунтах и через какие API эта активность
-строится.
+`research/01` (Telegram Stars) and `research/08` (AI-OFM in Telegram) describe
+monetization inside the platform. This document answers the adjacent question:
+which accounts and APIs that activity is built on.
 
-## Когда пересматривать
+## When to Revisit
 
-- Изменение ToS, условий API-разработчиков или Bot API (новые лимиты,
-  новые платные механики broadcast) — пересмотреть допустимые сценарии.
-- Изменение лимита аккаунтов на клиент или политики выдачи `api_id`
-  (my.telegram.org) — пересмотреть базовую топологию аккаунтов.
+- If the ToS, API developer terms, or Bot API changes, including new limits or
+  paid broadcasting mechanics, revisit the permitted scenarios.
+- If the number of accounts supported by a client or the `api_id` issuance
+  policy at my.telegram.org changes, revisit the base account topology.
 
-## Источники
+## Sources
 
 - Telegram Terms of Service — https://telegram.org/tos
-- Telegram FAQ (мультиаккаунты, номера, боты) — https://telegram.org/faq
-- Creating your Telegram Application (api_id, правила API) —
+- Telegram FAQ (multiple accounts, numbers, bots) — https://telegram.org/faq
+- Creating your Telegram Application (`api_id`, API rules) —
   https://core.telegram.org/api/obtaining_api_id
-- Telegram Bots FAQ (лимиты рассылок) — https://core.telegram.org/bots/faq
+- Telegram Bots FAQ (broadcast limits) — https://core.telegram.org/bots/faq

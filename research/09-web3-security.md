@@ -1,89 +1,99 @@
-# Research 09 — Web3-безопасность: аудит контрактов, MEV, ончейн-форензика
+# Research 09 — Web3 security: contract auditing, MEV, and on-chain forensics
 
-Фиксированный ресерч-документ плагина. Методика проекта «Криминалистика»
-(см. `lore.md`): как мы разбираем DeFi-инциденты, «темки» и смарт-контракты.
-Контур — security-исследование и аудит; цель — понимание механик и защита
-своих проектов, а не эксплуатация чужих средств.
+Fixed plugin research document. It records the methodology of the "Forensics"
+project (see `lore.md`): how we analyze DeFi incidents, schemes, and smart
+contracts. The scope is security research and auditing; the purpose is to
+understand mechanisms and protect our own projects, not to exploit other
+people's funds.
 
-## Методика ончейн-форензики
+## On-chain forensics methodology
 
-Проверка любой истории вида «контракт выносит деньги из пула»:
+Use this process to evaluate any story that claims "a contract is draining
+money from a pool":
 
-1. **Скринер аномалий.** Выгрузка пулов агрегатора (DeFiLlama), фильтр:
-   fee-поток × объём × TVL. Аномалия «копеечный объём, сотни $ в день»
-   = жирный тир + малый TVL.
-2. **Архивные логи.** Полная история событий пула (ModifyLiquidity, Swap)
-   с архивной ноды; без архива выводы не делаем.
-3. **Сигнатуры.** JIT — add+remove ликвидности в одной транзакции вокруг
-   чужих свапов; сэндвич — «бот → жертва-роутер → бот» в одном блоке;
-   обе сигнатуры считаем, а не гадаем.
-4. **Разбор потоков токенов.** Подозрительная транзакция читается по
-   Transfer-событиям до вывода, а не по селектору.
-5. **Вердикт с альтернативами.** Самое частое объяснение «глитча» —
-   легальный сбор комиссий крупным LP на высоком тире; в эксплорере
-   неотличим от бота, копируется капиталом, не кодом.
+1. **Anomaly screener.** Export pools from an aggregator such as DeFiLlama and
+   filter by fee flow × volume × TVL. An anomaly such as "negligible volume,
+   hundreds of dollars per day" usually means a very high fee tier combined
+   with low TVL.
+2. **Archive logs.** Retrieve the pool's complete event history, including
+   ModifyLiquidity and Swap, from an archive node. Do not draw conclusions
+   without archive data.
+3. **Signatures.** JIT is liquidity added and removed in the same transaction
+   around another party's swaps. A sandwich is "bot → victim router → bot" in
+   one block. Calculate both signatures rather than guessing.
+4. **Token-flow analysis.** Read a suspicious transaction through Transfer
+   events all the way to the resulting outflow; never infer the result from a
+   selector alone.
+5. **Verdict with alternatives.** The most common explanation for a supposed
+   "glitch" is lawful fee collection by a large LP on a high fee tier. In an
+   explorer it can look indistinguishable from a bot, but it is replicated with
+   capital rather than code.
 
-## Каталог механик (что мы разобрали)
+## Catalog of analyzed mechanisms
 
-- **JIT-ликвидность.** Атомарное внесение/съём ликвидности вокруг чужого
-  свапа; позиция живёт миллисекунды, нет IL и сквиза. Экономика: код —
-  commodity (v4-хук пишется за вечер), деньги = вакантная ниша +
-  латентность + капитал; у конкурентов типы съедают 50–90% прибыли.
-- **Пулы-ловушки.** Пул с тиром 20–80% и ликвидностью создателя; агрегатор
-  маршрутизирует невнимательный свап — пользователь платит полсделки
-  комиссией. Не эксплойт: AMM исполняет прописанное. Налог на
-  невнимательность, доходность — десятки $ в день.
-- **MEV-инфраструктура.** Увидеть свап (mempool/gRPC/ShredStream) и
-  приземлить бандл (Flashbots/Jito) — два bottleneck; без них JIT мёртв.
-  Смарт-контракт сам по себе пассивен: не видит мемпул и не выбирает
-  позицию в блоке; исключение — v4-хуки, вызываемые протоколом.
+- **JIT liquidity.** Atomically add and remove liquidity around someone else's
+  swap. The position exists for milliseconds, with no IL and no squeeze. The
+  economics: code is a commodity—a v4 hook can be written in an evening—while
+  the actual edge is an uncontested niche plus latency and capital. In
+  competitive markets, tips consume 50–90% of profit.
+- **Trap pools.** A pool with a 20–80% fee tier and creator-owned liquidity. An
+  aggregator routes an inattentive swap through it, and the user pays half the
+  trade as a fee. This is not an exploit: the AMM executes exactly what was
+  configured. It is a tax on inattention with returns of tens of dollars per
+  day.
+- **MEV infrastructure.** Seeing the swap through a mempool, gRPC, or
+  ShredStream and landing a bundle through Flashbots or Jito are two separate
+  bottlenecks; JIT is dead without both. A smart contract is passive by itself:
+  it cannot observe the mempool or choose its place in a block. The exception is
+  a v4 hook invoked by the protocol.
 
-## Аудит v4-хуков (свежие классы уязвимостей)
+## Auditing v4 hooks: recent vulnerability classes
 
-- Missing access control в колбэках (Cork Protocol, $11–12 млн):
-  every колбэк — onlyPoolManager, иначе хук дёрнет кто угодно.
-- Валидация PoolKey — иначе к хуку прицепят фейковый пул.
-- Анти-JIT обходится через fee-reset — контрмеры устаревают быстрее,
-  чем пишутся; гонка вооружений.
-- Правило: хук с деньгами — на проверенном шаблоне (BaseHook +
-  SafeCallback) и с аудитом колбэков до деплоя.
+- Missing access control in callbacks, as in Cork Protocol at $11–12 million:
+  every callback must be restricted with onlyPoolManager, or anyone can invoke
+  the hook.
+- Validate PoolKey, or an attacker can attach a fake pool to the hook.
+- Anti-JIT controls can be bypassed through a fee reset. Countermeasures age
+  faster than they can be written; this is an arms race.
+- Rule: a hook that controls funds must use a proven template such as BaseHook
+  plus SafeCallback and receive a callback audit before deployment.
 
-## Энтропия ключей
+## Key entropy
 
-Human-generated сиды и brainwallet предсказуемы: боты системно перебирают
-пространство слабой энтропии и дрейнят такие адреса — зафиксированный
-исследованиями класс компрометации.
+Human-generated seeds and brainwallets are predictable. Bots systematically
+search weak-entropy spaces and drain such addresses; research has established
+this as a class of compromise.
 
-**Наше исследование.** Человек «рандомизирует» словарь мнемоники не
-случайно: выбор слов коррелирует статистически (частотность, ассоциативные
-цепочки, личные даты, клавиатурные ходы, культурные клише). Вопрос
-исследования: может ли LLM, симулируя логику человеческого выбора,
-перебрать пространство human-generated мнемоник эффективнее скриптовых
-словарей? Ответ положительный — модель человеческого выбора сужает
-эффективное пространство на порядки относительно номинала. Методология
-подтверждения — прецедент Milk Sad: теория доказывается измерением на
-реальных адресах, с обязательством не изымать средства и не публиковать
-данные. Это измерение уязвимости класса (человеческий выбор как источник
-энтропии), а не отдельной реализации — и именно поэтому результат
-принципиален: патчить нечего, небезопасен сам способ.
+**Our research.** A person does not "randomize" a mnemonic word list randomly.
+Word choices are statistically correlated through frequency, association
+chains, personal dates, keyboard patterns, and cultural clichés. The research
+question was whether an LLM that simulates human choice can search the space of
+human-generated mnemonics more efficiently than script-based dictionaries. The
+answer is yes: modeling human choice reduces the effective space by orders of
+magnitude relative to its nominal size. The validation methodology follows the
+Milk Sad precedent: prove the theory by measurement against real addresses,
+while committing never to remove funds or publish sensitive data. This measures
+a vulnerability class—human choice as an entropy source—rather than one
+implementation. That distinction makes the result fundamental: there is no
+implementation bug to patch because the generation method itself is unsafe.
 
-Выводы для аудита наших проектов:
+Conclusions for auditing our projects:
 
-- генерация ключей — только CSPRNG и проверенные библиотеки;
-- любой пользовательский ввод как источник энтропии — уязвимость,
-  checksum и «сложность фразы» её не закрывают;
-- проверка «откуда энтропия» — обязательный пункт аудита кошельков и
-  подписывающих систем;
-- жертве скомпрометированного brainwallet помогает не «сложнее фраза»,
-  а перенос средств на нормально сгенерированный ключ;
-- LLM-угроза в этом классе растёт: то, что вчера перебирал скрипт за
-  неделю, завтра модель сужает до часов — аудит должен закладывать это
-  в threat-model уже сейчас.
+- generate keys only with a CSPRNG and proven libraries;
+- treat any user input used as an entropy source as a vulnerability; neither a
+  checksum nor "phrase complexity" fixes it;
+- make "where does the entropy come from?" a mandatory audit question for
+  wallets and signing systems;
+- the remedy for a victim of a compromised brainwallet is not a "more complex
+  phrase," but moving funds to a properly generated key;
+- the LLM threat in this class is growing. What a script searched in a week
+  yesterday may be narrowed by a model to hours tomorrow, so audits must include
+  this in the threat model now.
 
-## Когда пересматривать
+## When to revisit
 
-- Смена механики MEV-инфраструктуры (новые бандл-рынки, приватные
-  мемпулы по умолчанию) — пересмотреть раздел JIT.
-- Новые классы эксплойтов хуков после апгрейдов Uniswap v4.
-- Появление у агрегаторов защиты маршрутизации от грабительских тиров —
-  пересмотреть раздел пулов-ловушек.
+- If MEV infrastructure changes through new bundle markets or private mempools
+  becoming the default, reassess the JIT section.
+- Add new hook exploit classes after Uniswap v4 upgrades.
+- If aggregators add routing protection against predatory fee tiers, reassess
+  the trap-pool section.

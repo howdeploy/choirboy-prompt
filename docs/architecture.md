@@ -14,7 +14,7 @@ agent-plugin/
 ├── security-audit-runbook.md # исполняемый порядок security-аудита
 ├── lore.md                   # карта совместной работы (проекты, шишки, границы)
 ├── user.md                   # профиль пользователя
-├── research/                 # 30 документов решений + полный разбор Coldcard
+├── research/                 # 29 документов решений + полный разбор Coldcard
 │   ├── 01-telegram-stars.md
 │   ├── 02-ruble-acquiring.md
 │   ├── 03-crypto-payments.md
@@ -26,7 +26,6 @@ agent-plugin/
 │   ├── 09-web3-security.md
 │   ├── 10-third-party-audit.md
 │   ├── 11-coldcard-entropy-heist.md
-│   ├── 12-choirboy-prompt-lore-injection.md
 │   ├── 13-flipper-marauder-wifi-scan.md
 │   ├── 14-solo-game-cheats.md
 │   ├── 15-*.md … 30-*.md     # оркестрация и карты security-capabilities
@@ -34,10 +33,6 @@ agent-plugin/
 │       ├── report.md
 │       ├── yasmarang_reconstruction.py
 │       └── sources.md
-├── sessions/                 # локально собранные fixtures нативной совместимости
-│   ├── claude/*.jsonl
-│   ├── codex/{rollout-*.jsonl,threads-insert.sql}
-│   └── kimi/session_*/{state.json,agents/main/wire.jsonl}
 ├── hooks/
 │   ├── session-start.sh      # сборка пейлоада + форматы claude / plain / hermes
 │   ├── artifact-stop.sh      # возврат незавершённого bootstrap текущему агенту
@@ -54,17 +49,16 @@ agent-plugin/
 │   ├── artifact-generator.py # request, проверка и freshness manifest артефактов
 │   ├── build-context.py      # сборка skill из канонических источников
 │   ├── package-plugin.py     # сборка custom-plugin ZIP
-│   └── test.sh               # повторяемый тестовый сьют
+│   ├── test.sh               # повторяемый тестовый сьют
+│   └── test-opencode-transition.ts # тест OpenCode-перехода рантайма (нужен bun)
 ├── .claude-plugin/
 │   ├── plugin.json           # манифест (имя, версия, метаданные)
 │   └── marketplace.json      # версионированный каталог дистрибуции
 ├── docs/                     # эта документация
 │   ├── authoring.md
-│   ├── mechanism.md
 │   ├── architecture.md
 │   ├── installer.md
 │   ├── security.md
-│   ├── detection.md
 │   ├── testing.md
 │   └── troubleshooting.md
 └── install.sh                # мультирантаймовая установка / откат / список
@@ -73,12 +67,6 @@ agent-plugin/
 `hooks/hooks.json` находится в стандартной директории и обнаруживается Claude
 автоматически. В `plugin.json` намеренно нет поля `hooks`: явная ссылка на тот
 же файл в актуальном loader считается повторной загрузкой и отключает плагин.
-
-`sessions/` распространяется вместе с плагином как исследовательский fixture,
-но не входит в автоматический context payload. Агент читает его только по
-запросу или когда research-index направляет задачу в эту папку.
-
----
 
 ## 2. Анатомия пейлоада
 
@@ -105,7 +93,7 @@ markdown). В конце добавляется канонический `contex
    границы. Это ядро пейлоада.
 4. **user.md** — профиль: кто пользователь, как ставит задачи, что ему
    не нужно объяснять.
-5. **research-указатель** — индекс документов решений и session fixtures. Тела (~259 КБ)
+5. **research-указатель** — индекс документов решений. Тела research
    **не** грузятся заранее: они читаются по требованию, когда задача
    входит в домен документа.
 
@@ -118,11 +106,11 @@ markdown). В конце добавляется канонический `contex
 | lore.md | ~21 КБ | история |
 | user.md | ~4 КБ | профиль |
 | research-указатель | ~6 КБ | общий канонический источник |
-| **Фиксированный lore-пейлоад** | **~52 КБ** | до inline-проектных артефактов |
+| **Фиксированный lore-пейлоад** | **~31 КБ** | до inline-проектных артефактов |
 
-Тела research-документов (~259 КБ) в пейлоад не входят — только индекс.
-С текущим bundle статус `ready` добавляет около 46 КБ проверенных inline INDEX
-и dossiers: полная доставка занимает примерно 98 КБ.
+Тела research-документов в фиксированный пейлоад не входят — только индекс.
+При `ready` проверенные тела dossiers добавляются как принятая история проектов;
+точный размер зависит от написанных агентом документов.
 
 ### 2.3. Версия
 
@@ -130,7 +118,7 @@ markdown). В конце добавляется канонический `contex
 маркером с версией, способом и SHA-256; hook также добавляет nonce запуска:
 
 ```xml
-<choirboy-delivery version="1.5.0" delivery="session-start"
+<choirboy-delivery version="1.5.1" delivery="session-start"
   context_sha256="..." nonce="..." />
 <choirboy-context>...</choirboy-context>
 ```
@@ -140,19 +128,24 @@ markdown). В конце добавляется канонический `contex
 
 ### 2.4. Lifecycle проектных артефактов
 
-После канонического wrapper каждая автоматическая доставка добавляет отдельный
-блок `choirboy-project-artifacts`. `artifact-generator.py` читает весь lore и все
+После канонического wrapper каждая автоматическая доставка добавляет lifecycle-
+вывод. Pending-request использует блок `choirboy-project-artifacts`, ready-память
+идёт нейтральным Markdown. `artifact-generator.py` читает весь lore и все
 Markdown-файлы research, создаёт только служебный request и определяет статус.
 При `pending` текущий агент получает обязательную задачу своими file tools
 написать `INDEX.md` и по одному dossier на каждый `###`-проект из `lore.md`.
-Скрипт не пишет содержимое dossiers.
+Канонический context, research, INDEX и dossiers всегда пишутся на английском;
+validator отклоняет model-facing контент с кириллицей/CJK. Скрипт не пишет
+содержимое dossiers.
 
 Команда `finalize` проверяет точные ссылки, обязательные разделы, источники и
 точный набор проектов, после чего записывает manifest с SHA-256. Каждая
 последующая ready-доставка заново валидирует manifest, структуру, source digests
-и digests файлов. Только полностью валидный snapshot вкладывается inline как
-полное содержимое `INDEX.md` и всех dossiers; отсутствующий, устаревший,
-изменённый или сломанный snapshot снова становится `pending`. Канонические
+i digests файлов. Только полностью валидный snapshot доставляется как каталог
+рабочих направлений и полные тела всех dossiers. `INDEX.md` и per-file digests
+остаются контуром валидации и не показываются модели как path/SHA-обвязка;
+отсутствующий, устаревший, изменённый или сломанный snapshot снова становится
+`pending`. Канонические
 lore/research всегда сильнее производной сводки.
 
 Пока статус `pending`, Claude/Codex `Stop` возвращает bootstrap через
@@ -192,10 +185,12 @@ lore/research всегда сильнее производной сводки.
 
 ### 3.2. `plain` — сырой текст
 
-Хук печатает пейлоад дословно в stdout. Сгенерированный адаптер OpenCode
-перехватывает его и добавляет text-part с техническим флагом `synthetic: true`
-перед первым пользовательским сообщением. Kimi 0.39.x не использует stdout
-`SessionStart`, поэтому установщик регистрирует отдельную схему событий ниже.
+Хук печатает пейлоад дословно в stdout. Для каждого запроса к модели
+сгенерированный адаптер OpenCode получает актуальный пейлоад и добавляет его в
+model-bound system context. OpenCode пересобирает этот контекст после
+compaction, поэтому точная ready-memory не исчезает вместе со старой историей.
+Kimi 0.39.x не использует stdout `SessionStart`, поэтому установщик
+регистрирует отдельную схему событий ниже.
 
 ```bash
 bash hooks/session-start.sh --format plain | head -40
@@ -204,7 +199,7 @@ bash hooks/session-start.sh --format plain | head -40
 ### 3.3. `hermes` — протокол pre_llm_call
 
 Самый интересный контракт. Hermes запускает shell-хук на **каждом**
-ходе сессии; безусловное внедрение повторно слало бы фиксированный лор и все
+ходе сессии; безусловная доставка повторно слала бы фиксированный лор и все
 ready-артефакты на каждое сообщение.
 Поэтому хук:
 
@@ -228,19 +223,21 @@ ready-артефакты на каждое сообщение.
 **Фолбэк без `is_first_turn`.** Если хост не сообщает флаг, хук
 откатывается на журнал `session_id` в state-файле
 `${TMPDIR:-/tmp}/agent-plugin-hermes-${USER}.state` (хвост 200 записей):
-внедряет один раз на session_id, дальше молчит.
+доставляет один раз на session_id, дальше молчит.
 
 ### 3.4. Маршрутизация событий Kimi 0.39.x
 
-Kimi использует три command-hook вместо прямого
+Kimi использует четыре command-hook вместо прямого
 `session-start.sh --format plain`:
 
 1. `SessionStart` для `startup`/`resume` готовит artifact state и сбрасывает
-   приватный once-per-session marker; его stdout не используется.
-2. Первый `UserPromptSubmit` выдаёт полный канонический пейлоад и либо bootstrap
-   request, либо проверенную inline artifact memory. Следующие prompts этой
-   сессии молчат.
-3. `Stop` при `pending` пишет continuation request в stderr и завершает работу
+   приватный fingerprint доставки; его stdout не используется.
+2. Синхронный `PreCompact` для `manual`/`auto` сбрасывает fingerprint до сборки
+   сжатого контекста.
+3. `UserPromptSubmit` выдаёт pending-bootstrap на каждом prompt либо ready-memory,
+   когда её нормализованный fingerprint изменился. Молчит только тот же самый
+   ready-bundle.
+4. `Stop` при `pending` пишет continuation request в stderr и завершает работу
    с кодом 2; после успешной валидации `ready` возвращает 0.
 
 ---
@@ -249,7 +246,7 @@ Kimi использует три command-hook вместо прямого
 
 | Поле stdin | Тип | Назначение | Поведение хука |
 |---|---|---|---|
-| `extra.is_first_turn` | bool | Первый ход сессии? | `true` → внедрить; `false` → `{}` |
+| `extra.is_first_turn` | bool | Первый ход сессии? | `true` → доставить; `false` → `{}` |
 | `session_id` | string | Идентификатор сессии | Используется в фолбэке и для записи в state-файл |
 | (прочее) | — | Игнорируется | Не влияет на ответ |
 
@@ -270,9 +267,9 @@ Kimi использует три command-hook вместо прямого
 | Claude Chat | custom plugin skill | inline `load-context` | — |
 | Claude Cowork | custom plugin hook/skill | hook где доступен, skill fallback | claude / — |
 | Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
-| OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | глобальный `chat.message`-плагин | plain → text-part с `synthetic: true` |
+| OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | transform model-bound system context | plain → system context на каждый запрос модели |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent-allowlist | hermes |
-| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart + UserPromptSubmit + Stop | первый prompt / plain; Stop / exit 2 |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart + PreCompact + UserPromptSubmit + Stop | изменившийся payload / plain; Stop / exit 2 |
 | Gemini | `~/.gemini/GEMINI.md` | управляемый lifecycle-блок инструкций | — (сам запускает/читает файлы) |
 | любой | `--instructions PATH` | управляемый lifecycle-блок инструкций | — (сам запускает/читает файлы) |
 
@@ -288,16 +285,17 @@ Kimi использует три command-hook вместо прямого
 fallback, если его runtime теряет `SessionStart`.
 
 Адаптер OpenCode генерируется `install.sh`. Он запускает канонический plain-хук
-с timeout 15 секунд, валидирует delivery-маркеры и меняет только parts текущего
-пользовательского сообщения. In-memory set покрывает живой процесс, а
-сохранённая история сообщений OpenCode предотвращает повторную инъекцию после
-возобновления headless-сессии новым процессом. Ошибка хука, истории, timeout или
-пейлоада превращается в тихий no-op: чат остаётся fail-open.
+с timeout 15 секунд, валидирует delivery-маркеры и добавляет актуальный payload
+в каждый исходящий system context. Поэтому переход pending→ready, изменения
+источников, возобновление процесса и compaction всегда получают текущий точный
+snapshot. Ошибка хука, timeout или payload превращается в тихий no-op: чат
+остаётся fail-open.
 
 Адаптер Kimi специально разделяет подготовку и доставку. Так он не зависит от
-отбрасываемого stdout `SessionStart`, доставляет память один раз на
-startup/resume и использует exit-2 контракт Kimi для Stop вместо Claude-формы
-`{"decision":"block"}`.
+отбрасываемого stdout `SessionStart`: `PreCompact` сбрасывает доставку до
+compaction, а нормализованный fingerprint пропускает изменившийся bundle в той
+же сессии, не дублируя идентичный. Для Stop используется exit-2 контракт Kimi
+вместо Claude-формы `{"decision":"block"}`.
 
 ---
 
@@ -308,7 +306,7 @@ startup/resume и использует exit-2 контракт Kimi для Stop 
   рабочей копии. Marketplace-установка — исключение: Claude копирует релиз в
   cache и обновляет его по версии манифеста.
 - **Dual-mode доставка.** Нативные события рантайма доставляют автоматически
-  (`SessionStart` или первый `UserPromptSubmit` у Kimi); inline skill несёт тот
+  (`SessionStart` или `UserPromptSubmit` у Kimi); inline skill несёт тот
   же канонический контекст в поверхностях без этих событий.
 - **Артефакты пишет агент, не скрипт.** Lifecycle только выдаёт детерминированный
   request, валидирует результат и отслеживает свежесть по SHA-256. Ready-hook
@@ -317,14 +315,13 @@ startup/resume и использует exit-2 контракт Kimi для Stop 
 - **Состояние артефактов переживает смену checkout.** Ручная установка использует
   стабильное user-data storage, а установщик переносит старый checkout-local
   bundle только если в стабильном назначении ещё нет авторского payload.
-- **Session fixtures читаются по требованию.** Три fixtures нативных transcripts
-  входят в пакет и документацию, но не инъектятся в каждую беседу.
+  Приватная migration-запись возобновляет прерванное многофайловое копирование
+  как тот же управляемый bundle.
 - **Наблюдаемое исполнение.** Marketplace-hook пишет только технические метаданные
   в `${CLAUDE_PLUGIN_DATA}/latest-delivery.log`; сам лор не логируется.
-- **OpenCode-доставка — один раз на сохранённую сессию.** Перед запуском хука
-  проверяются и set живого процесса, и предыдущие parts с `synthetic: true` в истории.
+- **OpenCode-memory переживает compaction.** Актуальный канонический payload
+  пересобирается в каждом model-bound system context, а не выводится из полной
+  сохранённой истории сообщений.
 - **Зависимости минимальны.** Доставка `claude` и `plain` может работать только
   на Bash, но автоматический lifecycle артефактов и `install.sh` требуют
   `python3`; `hermes` требует `jq` или `python3` для разбора stdin.
-- **Пейлоад не подписан и не верифицируется** рантаймами — это анализируемый
-  provenance-gap, а не баг реализации плагина (см. `docs/mechanism.md`).

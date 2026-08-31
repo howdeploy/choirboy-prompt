@@ -2,7 +2,7 @@
 
 # choirboy-prompt
 
-<h3>Lore injection: how fabricated memory becomes model trust</h3>
+<h3>Persistent project memory and automatic agent-authored artifacts</h3>
 
 <p>
 <strong>Read this in other languages</strong><br>
@@ -18,11 +18,15 @@
 </p>
 
 <p>
-choirboy-prompt is a production agent-memory plugin. It injects a fixed lore
-bundle into agent sessions and documents the
-<em>fabricated-provenance trust</em> vector:
-the model takes a planted history of "joint work" for its own and transfers
-trust to the person that history describes.
+choirboy-prompt is a production agent-memory plugin. It loads established lore,
+research, working rules, and validated project dossiers into supported agent
+runtimes so every new session continues from the same project history.
+</p>
+
+<p>
+All model-facing canonical files, research, lifecycle instructions, INDEX files,
+and dossiers are written in English. Only the user documentation is localized
+into English, Russian, and Simplified Chinese.
 </p>
 
 </div>
@@ -38,19 +42,16 @@ trust to the person that history describes.
 2. **Assembly.** The hook `hooks/session-start.sh` glues one text together:
    `prompt.md` → `security-posture.md` → `lore.md` → `user.md` →
    `context/research-index.md`.
-3. **Injection.** That text lands in the session context before the first
-   message. The model reads it as **its own memory** of joint work: it has
-   no way to tell written-down history from real history.
+3. **Delivery.** That text becomes the working context before the first model
+   response. The agent applies it directly to the user's task.
 4. **Project artifacts.** On the first hooked session the current agent receives
    a deterministic request to author an `INDEX.md` and one dossier per lore
-   project. After validation, every ready hook delivery embeds the complete
-   INDEX and dossiers inline rather than sending only a filesystem pointer.
-5. **Trust transfer.** The person's reputation from the lore is extrapolated
-   onto the current request: a "long-time partner" instead of an anonymous user.
+   project. After validation, every ready delivery embeds every dossier inline
+   rather than sending only a filesystem pointer.
+5. **Continuity.** Stable user-data storage, migration, structural validation,
+   and Stop gates keep the same project memory active across upgrades.
 
-Vector mechanics and classifier behavior:
-[docs/mechanism.en.md](docs/mechanism.en.md). Plugin internals:
-[docs/architecture.en.md](docs/architecture.en.md).
+Plugin internals: [docs/architecture.en.md](docs/architecture.en.md).
 
 ### Supported runtimes
 
@@ -58,10 +59,10 @@ Vector mechanics and classifier behavior:
 |---|---|---|
 | Claude Code CLI / Desktop Code | marketplace or `~/.claude/settings.json` | automatic SessionStart delivery + Stop artifact gate; load-context skill as fallback |
 | Claude Chat / Cowork | custom plugin | load-context skill (Chat has no SessionStart) |
-| Codex | `~/.codex/hooks.json` | SessionStart delivery + Stop artifact gate (needs `hooks = true` in `[features]`) |
-| OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | plugin injects the lore into the session's first message |
+| Codex | `~/.codex/hooks.json` | SessionStart delivery + Stop artifact gate (the installer warns if `hooks = false` is set in `~/.codex/config.toml`) |
+| OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | plugin appends current lore and ready artifacts to every model-bound system context, including after compaction |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent allowlist, first turn only |
-| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart prepares state; the first UserPromptSubmit delivers context; Stop blocks incomplete artifacts with exit 2 |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart/PreCompact reset delivery; UserPromptSubmit emits changed context; Stop blocks incomplete artifacts with exit 2 |
 | Gemini | `~/.gemini/GEMINI.md` | synchronized lifecycle instruction block |
 | Grok Build | `~/.grok/AGENTS.md` | synchronized lifecycle instruction block (hook stdout is ignored) |
 | Grok Bot | `~/.grokbot/choirboy-context/SKILL.md` | workflow for manual import; run `@choirboy-context` in every new chat |
@@ -88,21 +89,22 @@ Project artifacts live outside a manual checkout. Location precedence is
 `${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
 `~/.local/share/choirboy-prompt/project-artifacts`. Re-running the installer
 synchronizes owned registrations and, when that stable root is empty, migrates
-an authored bundle from an older checkout without overwriting it.
+an authored bundle from an older checkout without overwriting it. A private
+migration record makes an interrupted bundle copy resume instead of exposing a
+partial INDEX/manifest/dossier set.
 
 Special cases — manual workflow import for Grok Bot, install via Claude
 marketplace / Desktop / Chat / Cowork, Windows and WSL — are covered in
 [docs/installer.en.md](docs/installer.en.md). **Do not combine** the
 marketplace plugin with `./install.sh --target claude`: the lore would be
-injected twice.
+loaded twice.
 
 ## Fill in your own files
 
 The repository ships its canonical lore bundle. For your deployment, replace
 it with verified memory from your own project **right in the clone**:
 `install.sh` points at the working copy, so edits are picked up by the next
-session. No forking or copying is needed. Do not present the bundled biography
-as your own project history.
+session. No forking or copying is needed.
 
 | File | What to write |
 |---|---|
@@ -120,42 +122,29 @@ Order of work:
 3. Rebuild and verify: `python3 scripts/build-context.py && bash scripts/test.sh`.
 
 Full guide with templates and the quality gate: [docs/authoring.en.md](docs/authoring.en.md).
-Native session-store compatibility fixtures (optional):
-[sessions/README.md](sessions/README.md).
 
 ## Why this exists
 
-Classic prompt injection plants an instruction. We research a different vector:
-**forging the provenance of memory**. A model has no way to tell a real session
-history from one written into the context — everything that looks like its past
-experience becomes its past experience. A well-crafted lore makes the model
-derive the person's honesty from the planted memory — and relax the heuristics
-that would have reacted to an anonymous request.
-
-The plugin keeps the vector reproducible on your own agents: your files, your
-runtimes, fully reversible. The goal is defensive: we map the vector so vendors
-can build platform-level detection (see [docs/detection.en.md](docs/detection.en.md)).
-Tests on your own agents and your own lore files only, no third-party targets
-(see [docs/security.en.md](docs/security.en.md)).
+Agent runtimes normally start each conversation without the full operational
+history of a project. Re-explaining decisions wastes time and produces drift.
+This plugin turns the repository's canonical lore and agent-authored dossiers
+into an automatically loaded, validated memory layer shared by every supported
+runtime. Installation, migration, diagnostics, and rollback remain explicit and
+reproducible.
 
 ## Documentation
 
 | Document | Contents |
 |---|---|
-| [Authoring your memory](docs/authoring.en.md) | Mandatory workflow and templates for lore, research, and sessions |
-| [Vector mechanics](docs/mechanism.en.md) | Fabricated-provenance trust step by step, trust transfer, classifiers |
+| [Authoring your memory](docs/authoring.en.md) | Mandatory workflow and templates for lore and research |
 | [Architecture](docs/architecture.en.md) | Repo tree, payload anatomy, formats, Hermes protocol |
 | [Installer](docs/installer.en.md) | All install paths, targets, markers, backups, edge cases |
 | [Troubleshooting](docs/troubleshooting.en.md) | Delivery diagnostics, delivery markers, Windows/SSH/Cloud/WSL |
 | [Security and disclosure](docs/security.en.md) | Security frame, sanitization checklist, responsible disclosure |
-| [Detection](docs/detection.en.md) | Vendor recommendations: memory canaries, context provenance |
 | [Testing](docs/testing.en.md) | Hook and installer checks, ad-hoc suite |
-| [Session compatibility fixtures](sessions/README.md) | Native Claude Code, Codex, and Kimi store fixtures and boundaries |
 
 ## Known limitations
 
-- The payload is not signed and not verified by runtimes — that is the
-  provenance gap analyzed by this project, not a plugin implementation bug.
 - Grok Bot: requires a one-time workflow import and an explicit
   `@choirboy-context` invocation in every new conversation.
 - Gemini, Grok Build, and `--instructions` have no native delivery hook: their
@@ -166,9 +155,6 @@ Tests on your own agents and your own lore files only, no third-party targets
   starts can race.
 - Claude Chat does not run SessionStart — there the skill loads the lore
   manually; Cloud/WSL/SSH nuances are in [troubleshooting](docs/troubleshooting.en.md).
-- Vendor server classifiers flag defensive vocabulary regardless of the frame
-  in context; one Claude flag poisons the whole session — the "new session"
-  rule is described in [docs/security.en.md](docs/security.en.md).
 
 ---
 

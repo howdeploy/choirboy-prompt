@@ -54,7 +54,7 @@ ZIP от `python3 scripts/package-plugin.py`. Chat не запускает `Sess
 - Cloud Code требует project `enabledPlugins` и не наследует локальную Desktop-установку;
 - Desktop WSL не поддерживает plugins, а SSH sync хуков пока ненадёжен — используй skill;
 - не включай одновременно marketplace-плагин и `./install.sh --target claude`:
-  Claude внедрит пейлоад дважды;
+  Claude загрузит пейлоад дважды;
 - релиз требует одинакового version bump в manifest и marketplace, затем
   `python3 scripts/build-context.py` и тестовый сьют.
 
@@ -79,7 +79,8 @@ ZIP от `python3 scripts/package-plugin.py`. Chat не запускает `Sess
 `plain` работают на Bash без `jq`/`python3`; формат `hermes` требует один из
 этих двух JSON-парсеров. Автоматический lifecycle артефактов требует `python3`:
 установщик готовит только request, а следующая сессия поручает текущему агенту
-написать dossiers и пройти validator. Хранилище артефактов стабильно при смене
+написать dossiers и пройти validator. Request и validator требуют, чтобы INDEX
+и dossiers были на английском. Хранилище артефактов стабильно при смене
 checkout. Приоритет путей: `CHOIRBOY_ARTIFACTS_DIR` →
 `${CLAUDE_PLUGIN_DATA}/project-artifacts` →
 `${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
@@ -105,6 +106,9 @@ opencode) command -v opencode >/dev/null 2>&1 || [ -d "$HOME/.config/opencode" ]
 hermes) command -v hermes >/dev/null 2>&1 || [ -d "$HOME/.hermes" ] ;;
 kimi)   command -v kimi   >/dev/null 2>&1 || [ -d "${KIMI_CODE_HOME:-$HOME/.kimi-code}" ] ;;
 gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
+grok)   command -v grok   >/dev/null 2>&1 || [ -d "$HOME/.grok" ] ;;
+grokbot) command -v grokbot >/dev/null 2>&1 || command -v grok-bot >/dev/null 2>&1 \
+           || [ -d "$HOME/.grokbot" ] ;;
 ```
 
 Правила выбора таргетов:
@@ -120,10 +124,12 @@ gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
 |---|---|---|
 | claude | `~/.claude/settings.json` (или `--settings`/`--project`) | JSON-хуки `SessionStart` + `Stop` |
 | codex | `~/.codex/hooks.json` | JSON-хуки `SessionStart` + `Stop` |
-| opencode | `~/.config/opencode/plugins/agent-plugin.ts` | глобальный `chat.message`-плагин |
+| opencode | `~/.config/opencode/plugins/agent-plugin.ts` | transform model-bound system context |
 | hermes | `~/.hermes/config.yaml` | маркированный блок `hooks.pre_llm_call` + consent-allowlist |
-| kimi | `${KIMI_CODE_HOME:-~/.kimi-code}/config.toml` | маркированные SessionStart + UserPromptSubmit + Stop hooks |
+| kimi | `${KIMI_CODE_HOME:-~/.kimi-code}/config.toml` | маркированные SessionStart + PreCompact + UserPromptSubmit + Stop hooks |
 | gemini | `~/.gemini/GEMINI.md` | маркированный HTML lifecycle-блок инструкций |
+| grok | `~/.grok/AGENTS.md` | маркированный HTML lifecycle-блок (глобальные правила Grok Build) |
+| grokbot | `~/.grokbot/choirboy-context/SKILL.md` | подготовленный импортируемый workflow (не автозагружается) |
 | `--instructions FILE` | любой файл | маркированный lifecycle-блок инструкций (HTML или `#`) |
 
 ---
@@ -160,7 +166,7 @@ gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
 - Таргет OpenCode владеет одним целым маркированным plugin-файлом. Повторная
   установка без изменений ничего не делает; обновление бэкапится и атомарно
   заменяет файл.
-- Consent-entry Hermes, три Kimi-hook, блоки Gemini/Grok и произвольные
+- Consent-entry Hermes, четыре Kimi-hook, блоки Gemini/Grok и произвольные
   `--instructions` синхронизируются при каждом запуске установщика. Старые
   абсолютные пути и ревизии регистрации обновляются на месте.
 
@@ -210,8 +216,9 @@ backup() {
 | `opencode_plugin` | Управление адаптером OpenCode | guard по маркеру, атомарная замена, timestamp-бэкап |
 | `hermes_allowlist` | Consent-allowlist Hermes | точная пара (event, command) |
 | `instruction_block` | Текст lifecycle-инструкции | HTML или `#`-комментарии |
+| `grokbot_workflow` | Управление workflow-файлом Grok Bot | `install`/`uninstall`/`status`, guard по маркеру |
 | `discover_legacy_artifact_roots` | Найти старые checkout-local bundles | читает старые управляемые абсолютные пути |
-| `do_claude` / `do_codex` / `do_opencode` / `do_hermes` / `do_kimi` / `do_gemini` | Установка в таргет | per-target логика |
+| `do_claude` / `do_codex` / `do_opencode` / `do_hermes` / `do_kimi` / `do_gemini` / `do_grok` / `do_grokbot` | Установка в таргет | per-target логика |
 | `do_instructions` | Установка в произвольный файл | стиль по расширению |
 
 ### 5.1. `json_hook` — детали
@@ -257,19 +264,20 @@ Hermes требует явного consent на shell-хук: пара `(event, 
 ### 5.4. Lifecycle-hooks Kimi 0.39.x
 
 Kimi 0.39.x отбрасывает stdout `SessionStart`, поэтому управляемый TOML-блок
-ставит три hook:
+ставит четыре hook:
 
 - `SessionStart` (`startup|resume`) готовит artifact state и сбрасывает
-  once-per-session delivery-marker;
-- первый `UserPromptSubmit` запускает каноническую plain-доставку и выдаёт
-  фиксированный лор плюс bootstrap request или валидированные inline-артефакты;
+  fingerprint доставки;
+- `PreCompact` (`manual|auto`) синхронно сбрасывает его до compaction;
+- `UserPromptSubmit` запускает каноническую plain-доставку и повторяет pending
+  bootstrap либо выдаёт ready-bundle при изменении fingerprint;
 - `Stop` при pending-валидации завершает работу с кодом 2 и continuation request
   в stderr, а при `ready` возвращает 0.
 
 State-markers находятся в
 `${KIMI_CODE_HOME:-~/.kimi-code}/choirboy-prompt/hook-state`, если путь не
-переопределён через `CHOIRBOY_STATE_DIR`. Доставка отмечается только после
-успешной выдачи stdout.
+переопределён через `CHOIRBOY_STATE_DIR`. Нормализованный ready-fingerprint
+записывается только после успешной выдачи stdout.
 
 ---
 
@@ -280,8 +288,8 @@ State-markers находятся в
    затереть чужие хуки.
 2. **Уже есть `hooks =` в Kimi-конфиге.** Аналогично: die с подсказкой
    перейти на `[[hooks]]`.
-3. **Codex: хуки выключены.** `grep hooks = true` в `~/.codex/config.toml`
-   не нашёлся → предупреждение (не блокировка).
+3. **Codex: хуки выключены.** Нашлась строка `hooks = false` в
+   `~/.codex/config.toml` → предупреждение (не блокировка).
 4. **Файла нет.** `mkdir -p` + создание пустого `{}`/пустого файла.
 5. **Папка плагина переехала.** JSON-hooks матчатся по имени скрипта, а
    управляемые текстовые блоки синхронизируются: старые абсолютные пути
@@ -316,18 +324,7 @@ echo '{"session_id":"hook-check","extra":{"is_first_turn":false}}' \
 
 `stale` в `--list` требует действия: повтори install для этого target и проверь,
 что статус стал `installed` (или `prepared` для Grok Bot). Для ready-bundle
-`session-context` должен содержать блоки `choirboy-artifact` с полными телами
-INDEX и dossiers; сообщение только с путём не считается успешной доставкой памяти.
+`session-context` должен содержать `# Established project history` и полные
+тела dossiers; сообщение только с путём не считается успешной доставкой памяти.
 
 Полный ad-hoc сьют — `docs/testing.md`.
-
----
-
-## 8. Fixtures совместимости в пакете
-
-Marketplace/custom-plugin ZIP включает tracked-папку `sessions/`, чтобы
-нативные доказательные артефакты можно было проверить после установки. Это
-fixtures совместимости: ни `SessionStart`, ни `load-context` не импортируют файлы в
-нативный session store пользователя, и в автоматический lore payload они не
-входят. Ручное воспроизведение описано в
-[`sessions/README.ru.md`](../sessions/README.ru.md).

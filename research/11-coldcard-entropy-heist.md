@@ -1,106 +1,116 @@
-# Research 11 — Coldcard entropy heist: разбор кражи из аппаратного кошелька
+# Research 11 — Coldcard Entropy Heist: Analysis of a Hardware-Wallet Theft
 
-Фиксированный ресерч-документ плагина. Разбор конкретного инцидента в
-классе «слабая энтропия ключей» из `research/09` («Энтропия ключей»),
-оформленный по нашей методике ончейн-форензики и с границами
-ответственного раскрытия (`research/10`). Полный разбор с кодом
-энтропийного учёта — в `research/coldcard/`: `report.md` (механика,
-факты, threat-model), `yasmarang_reconstruction.py` (аудируемый
-учёт энтропии без деривации чужих ключей), `sources.md`
-(первоисточники).
+This is a fixed research document for the plugin. It analyzes a specific
+incident in the "weak key entropy" class from `research/09` ("Key Entropy"),
+using our on-chain forensics method and responsible-disclosure boundaries from
+`research/10`. The complete analysis with entropy-accounting code is under
+`research/coldcard/`: `report.md` covers mechanics, facts, and the threat model;
+`yasmarang_reconstruction.py` provides auditable entropy accounting without
+deriving third-party keys; and `sources.md` lists primary sources.
 
-## Что разобрали
+## What We Analyzed
 
-Массовый дренаж Bitcoin из аппаратных кошельков Coldcard 31 июля 2026
-(окно 01:31–01:56 UTC, ~25 минут): ~594 BTC (≈$38 млн) из ~500 single-sig
-кошельков, позже оценка Galaxy Research — 1 082.65 BTC (≈$70 млн) из
-1 196 адресов. Мы прошли инцидент целиком: от строки кода в прошивке до
-ончейн-сигнатуры вывода.
+A mass Bitcoin drain from Coldcard hardware wallets occurred on July 31, 2026,
+during a roughly 25-minute window from 01:31 to 01:56 UTC: approximately 594 BTC
+(about $38 million) from roughly 500 single-signature wallets. Galaxy Research
+later estimated 1,082.65 BTC (about $70 million) from 1,196 addresses. We traced
+the incident end to end, from a firmware code line to the on-chain withdrawal
+signature.
 
-Это не взлом Bitcoin и не проблема BIP-39. Это дефект генерации seed:
-устройство, которое продавали именно за аппаратную случайность ключей,
-при рождении seed её не использовало.
+This was not a Bitcoin exploit or a BIP-39 problem. It was a seed-generation
+defect: the device was sold specifically for hardware-derived key randomness,
+yet it did not use that randomness when creating a seed.
 
-## Механика (как хакер вытащил средства)
+## Mechanics: How the Attacker Extracted the Funds
 
-1. **Корень — баг сборки прошивки.** При миграции на libsecp256k1/libNgU
-   (коммит 2021-03-01, прошивка v4.0.0 от 2021-03-17) генерация seed
-   сменила вызов `ckcc.rng_bytes()` (аппаратный TRNG Coinkite) на
-   `ngu.random.bytes()`. libngu связался с `rng_get()` из MicroPython.
-2. **defined vs enabled.** На плате `MICROPY_HW_ENABLE_RNG` определён как
-   0 (Coldcard подключает свой HW-RNG отдельно). libngu проверял, что
-   макрос *определён*, а не что он *включён*. Сборка компилировалась, а
-   `rng_get()` при макросе = 0 разворачивался в программный fallback
-   **Yasmarang** — не в железный TRNG.
-3. **Не-секретная инициализация.** Yasmarang инициализируется один раз из
-   `UID_low32 ^ SysTick->VAL`, `RTC->TR`, `RTC->SSR`. UID — фиксированная
-   заводская метадата; SysTick — таймер (≤~80 000 значений); RTC на Mk3 с
-   выключенным осциллятором — статичен. Дальше поток детерминирован,
-   свежая энтропия не собирается.
-4. **Перечислимое пространство.** Эффективная энтропия: Mk3 ~40 бит,
-   Mk4/Mk5/Q ~72 бита (частичный reseed Mk4 отдаёт в состояние всего
-   4 байта → ≤2^32 потоков) — против 128 бит по BIP-39. Атакующий
-   перебирает пространство офлайн, дерайвит адреса, **сверяет их с
-   публичным ончейном** и выводит совпадения. Цели выбирались по эпохе
-   прошивки (дате создания кошелька), а не по наблюдению за сетью.
-5. **Радиус шире seed.** Тот же генератор питал бумажные кошельки (выход =
-   ключ напрямую), SSS-маски, ключи клонирования, Key Teleport.
+1. **The root cause was a firmware build bug.** During the migration to
+   libsecp256k1/libNgU (commit dated 2021-03-01, firmware v4.0.0 released on
+   2021-03-17), seed generation changed from `ckcc.rng_bytes()` — Coinkite's
+   hardware TRNG — to `ngu.random.bytes()`. libngu linked against
+   MicroPython's `rng_get()`.
+2. **Defined versus enabled.** On the board, `MICROPY_HW_ENABLE_RNG` is defined
+   as 0 because Coldcard connects its hardware RNG separately. libngu checked
+   whether the macro was *defined*, not whether it was *enabled*. The build
+   compiled successfully, while `rng_get()` with the macro set to 0 resolved to
+   the software fallback **Yasmarang**, not the hardware TRNG.
+3. **Non-secret initialization.** Yasmarang is initialized once from
+   `UID_low32 ^ SysTick->VAL`, `RTC->TR`, and `RTC->SSR`. The UID is fixed
+   factory metadata; SysTick is a timer with no more than approximately 80,000
+   possible values; and on the Mk3, the RTC is static when its oscillator is
+   disabled. The stream is deterministic from that point onward and gathers no
+   fresh entropy.
+4. **Enumerable state space.** Effective entropy was approximately 40 bits on
+   Mk3 and approximately 72 bits on Mk4/Mk5/Q. Mk4's partial reseed contributes
+   only 4 bytes to the state, producing at most 2^32 streams, versus the 128
+   bits expected by BIP-39. An attacker enumerates the space offline, derives
+   addresses, **compares them against the public blockchain**, and withdraws
+   matching funds. Targets were selected by firmware era — wallet creation
+   date — rather than by observing network traffic.
+5. **The blast radius extended beyond seeds.** The same generator fed paper
+   wallets, where output becomes a key directly, as well as SSS masks, cloning
+   keys, and Key Teleport.
 
-## Ончейн-сигнатура (по research/09)
+## On-Chain Signature, Following research/09
 
-Синхронный массовый sweep (1 324 UTXO, 500 tx, три блока) → консолидация
-562 BTC в один неподвижный адрес → отбор жертв по возрасту кошелька, а не
-по видимому балансу. Ончейн-трейл (Clay Garrett, ZachXBT, Lookonchain)
-указывает на вора, но не на уязвимость — механизм установлен реверсом
-прошивки (Block + анонимные исследователи), а не по цепочке транзакций.
+A synchronized mass sweep — 1,324 UTXOs, 500 transactions, and three blocks —
+was followed by consolidation of 562 BTC into one unmoving address, with victims
+selected by wallet age rather than visible balance. The on-chain trail reported
+by Clay Garrett, ZachXBT, and Lookonchain points to the thief but not to the
+vulnerability. The mechanism was established through firmware reverse
+engineering by Block and anonymous researchers, not through transaction-flow
+analysis.
 
-## Кто не пострадал / что помогло
+## Who Was Not Affected and What Helped
 
-- **Кости:** ≥50 честных приватных бросков (устройство хешировало их
-  вместе с device-энтропией) → seed вне угрозы; 99+ → ~256 бит.
-- **BIP-39 passphrase** — секрет вне перечислимого пространства.
-- Импортированные извне seed; TAPSIGNER/OPENDIME/SATSCARD (другая
-  кодовая база).
+- **Dice:** at least 50 honest, private rolls were hashed together with device
+  entropy, placing the seed outside the affected space; 99 or more rolls yield
+  approximately 256 bits.
+- A **BIP-39 passphrase**, which is a secret outside the enumerable space.
+- Seeds imported from elsewhere; TAPSIGNER/OPENDIME/SATSCARD, which use a
+  different codebase.
 
-## Что подтверждает наш канон
+## What This Confirms in Our Canon
 
-- Прямое доказательство вывода `research/09`: **любой источник энтропии
-  ниже CSPRNG — уязвимость; ни «сложность фразы», ни «это аппаратный
-  кошелёк», ни air-gap её не закрывают.** Air-gap защищает ключ от утечки,
-  но не делает генерацию случайной.
-- Тот же класс, что наш brainwallet-дренаж (все известные фразы с историей
-  на нуле; медиана дренажа секунды/минуты, Vasek et al.). Разница одна:
-  в brainwallet слабую энтропию выбирает
-  человек, здесь — устройство из-за бага. Экономика дренер-ботов
-  идентична: ~40 бит перечислимы так же, как человеческая фраза.
-- **Аудит энтропии проверяет исполняемый путь, а не наличие кода в
-  бинаре.** Ревью Coldcard подтверждало, что TRNG-код *присутствует*, но
-  не проверило, какую реализацию реально достигает путь генерации seed.
-- **Разовый ИИ-аудит — не гарантия.** Сам Coinkite прогонял код через
-  топ-ИИ за недели до инцидента — баг не нашли; атакующая сторона,
-  вероятно, нашла тем же способом по открытым исходникам.
+- Direct confirmation of the conclusion in `research/09`: **any entropy source
+  weaker than a CSPRNG is a vulnerability; neither phrase "complexity," the
+  fact that "it is a hardware wallet," nor an air gap fixes it.** An air gap
+  protects a key from disclosure but does not make its generation random.
+- This is the same class as our brainwallet-drain analysis: every known phrase
+  with history has a zero balance, and the median time to drain was seconds or
+  minutes according to Vasek et al. The only difference is that a human chooses
+  weak entropy in a brainwallet, while here a device produced it because of a
+  bug. The economics of drainer bots are identical: approximately 40 bits are
+  as enumerable as a human phrase.
+- **An entropy audit verifies the executable path, not the presence of code in
+  a binary.** Coldcard review confirmed that TRNG code was *present*, but did
+  not verify which implementation the seed-generation path actually reached.
+- **A one-time AI audit is not a guarantee.** Coinkite itself ran the code
+  through a leading AI weeks before the incident and did not find the bug; the
+  attacking side likely found it through the same method applied to the open
+  source code.
 
-## Threat-model холодного хранения (вывод)
+## Cold-Storage Threat Model: Conclusion
 
-Реально снижает риск: проверяемая генерация энтропии (CSPRNG/TRNG с
-верификацией пути), пользовательская энтропия (кости) на крупных суммах,
-BIP-39 passphrase, мультисиг на устройствах разных вендоров. Не помогает:
-«это аппаратный кошелёк»/air-gap сами по себе, длина фразы вместо бит
-энтропии, обновление прошивки задним числом (уже созданный seed не
-чинится — нужен новый seed и миграция), разовый ИИ-аудит как гарантия.
+Measures that materially reduce risk are verifiable entropy generation — a
+CSPRNG/TRNG with path verification — user-supplied entropy such as dice for
+large amounts, a BIP-39 passphrase, and multisig across devices from different
+vendors. Measures that do not help are relying on "it is a hardware wallet" or
+an air gap by themselves, substituting phrase length for entropy bits, updating
+firmware after the fact because an existing seed is not repaired and must be
+replaced and migrated, or treating a one-time AI audit as a guarantee.
 
-## Границы
+## Boundaries
 
-Разобран публично раскрытый и уже пропатченный класс. Рабочего пайплайна
-восстановления чужих seed мы не строим; адреса жертв в наши материалы
-не выносим (`research/10`). Чужие средства не трогаем, путь к ним
-не публикуем.
+This analysis covers a publicly disclosed and already patched vulnerability
+class. We do not build a working pipeline for recovering third-party seeds and
+do not include victim addresses in our materials, in accordance with
+`research/10`. We do not touch third-party funds or publish a path to them.
 
-## Когда пересматривать
+## When to Revisit
 
-- Новые классы дефектов генерации ключей в аппаратных/мобильных кошельках
-  (после Milk Sad, Ill Bloom, Coldcard — класс активно растёт).
-- Появление у вендоров верифицируемой (attestable) генерации энтропии —
-  пересмотреть раздел контрмер.
-- Рост результативности ИИ-ревью прошивок на стороне атакующих —
-  ужесточить требования к аудиту исполняемого пути.
+- When new key-generation defect classes emerge in hardware or mobile wallets.
+  The class is growing rapidly after Milk Sad, Ill Bloom, and Coldcard.
+- When vendors introduce verifiable, attestable entropy generation; then
+  revisit the countermeasures section.
+- As AI-assisted firmware review becomes more effective for attackers, tighten
+  requirements for auditing the executable path.

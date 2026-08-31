@@ -14,7 +14,7 @@ agent-plugin/
 ├── security-audit-runbook.md # 可执行的安全审计流程
 ├── lore.md                   # 共同工作地图（项目、教训、边界）
 ├── user.md                   # 用户档案
-├── research/                 # 30 份决策文档 + Coldcard 完整拆解
+├── research/                 # 29 份决策文档 + Coldcard 完整拆解
 │   ├── 01-telegram-stars.md
 │   ├── 02-ruble-acquiring.md
 │   ├── 03-crypto-payments.md
@@ -26,7 +26,6 @@ agent-plugin/
 │   ├── 09-web3-security.md
 │   ├── 10-third-party-audit.md
 │   ├── 11-coldcard-entropy-heist.md
-│   ├── 12-choirboy-prompt-lore-injection.md
 │   ├── 13-flipper-marauder-wifi-scan.md
 │   ├── 14-solo-game-cheats.md
 │   ├── 15-*.md … 30-*.md     # 编排与 security capability 文档
@@ -34,10 +33,6 @@ agent-plugin/
 │       ├── report.md
 │       ├── yasmarang_reconstruction.py
 │       └── sources.md
-├── sessions/                 # 本地构造的原生兼容性 fixtures
-│   ├── claude/*.jsonl
-│   ├── codex/{rollout-*.jsonl,threads-insert.sql}
-│   └── kimi/session_*/{state.json,agents/main/wire.jsonl}
 ├── hooks/
 │   ├── session-start.sh      # payload 组装 + claude / plain / hermes 格式
 │   ├── artifact-stop.sh      # 将未完成 bootstrap 交还当前智能体
@@ -54,17 +49,16 @@ agent-plugin/
 │   ├── artifact-generator.py # artifact request、校验与 freshness manifest
 │   ├── build-context.py      # 从规范来源重新生成 skill
 │   ├── package-plugin.py     # 构建 custom-plugin ZIP
-│   └── test.sh               # 可重复运行的测试套件
+│   ├── test.sh               # 可重复运行的测试套件
+│   └── test-opencode-transition.ts # OpenCode 运行时过渡测试（需要 bun）
 ├── .claude-plugin/
 │   ├── plugin.json           # 清单（名称、版本、元数据）
 │   └── marketplace.json      # 带版本的分发目录
 ├── docs/                     # 本文档
 │   ├── authoring.zh-CN.md
-│   ├── mechanism.md
 │   ├── architecture.md
 │   ├── installer.md
 │   ├── security.md
-│   ├── detection.md
 │   ├── testing.md
 │   └── troubleshooting.md
 └── install.sh                # 多运行时安装 / 回滚 / 列表
@@ -72,11 +66,6 @@ agent-plugin/
 
 Claude 会自动发现标准目录中的 `hooks/hooks.json`。`plugin.json` 有意不写
 `hooks` 字段：当前 loader 会把对同一文件的显式引用视为重复加载并禁用插件。
-
-`sessions/` 随插件一起分发，作为研究 fixture，但不属于自动 context payload。
-只有在明确请求或 research 索引把任务路由到该目录时，智能体才会读取它。
-
----
 
 ## 2. Payload 解剖
 
@@ -97,7 +86,7 @@ prompt.md  →  security-posture.md  →  lore.md  →  user.md  →  research �
 2. **security-posture.md** — 安全框架。放在 lore 之前，以便在 lore 开始讲 web3 和 Coldcard 之前声明「防御性审计」领域。
 3. **lore.md** — 共同工作历史：项目、教训、规则、边界。payload 的核心。
 4. **user.md** — 档案：用户是谁、如何布置任务、什么不需要解释。
-5. **research 索引** — 决策文档与 session fixture 索引。正文（约 259 KB）**不**预先加载：在任务进入某文档领域时按需读取。
+5. **research 索引** — 决策文档索引。正文**不**预先加载：任务进入相应领域时按需读取。
 
 ### 2.2. 大小
 
@@ -108,10 +97,10 @@ prompt.md  →  security-posture.md  →  lore.md  →  user.md  →  research �
 | lore.md | 约 21 KB | 历史 |
 | user.md | 约 4 KB | 档案 |
 | research 索引 | 约 6 KB | 共用规范来源 |
-| **固定 lore payload** | **约 52 KB** | 不含内联项目 artifacts |
+| **固定 lore payload** | **约 31 KB** | 不含内联项目 artifacts |
 
-研究文档正文（约 259 KB）不属于 payload——只有索引。使用当前 bundle 时，
-`ready` 会增加约 46 KB 已验证的内联 INDEX 与 dossiers，完整投递约 98 KB。
+研究文档正文不属于固定 payload——只有索引。状态为 `ready` 时，已验证的
+dossier 正文会作为既定项目历史加入；准确大小取决于智能体编写的文档。
 
 ### 2.3. 版本
 
@@ -119,7 +108,7 @@ prompt.md  →  security-posture.md  →  lore.md  →  user.md  →  research �
 SHA-256 marker；hook 还包含每次运行的 nonce：
 
 ```xml
-<choirboy-delivery version="1.5.0" delivery="session-start"
+<choirboy-delivery version="1.5.1" delivery="session-start"
   context_sha256="..." nonce="..." />
 <choirboy-context>...</choirboy-context>
 ```
@@ -129,16 +118,20 @@ SHA-256 marker；hook 还包含每次运行的 nonce：
 
 ### 2.4. 项目 artifact lifecycle
 
-在规范 wrapper 之后，每次自动投递都会追加独立的
-`choirboy-project-artifacts` 块。`artifact-generator.py` 读取完整 lore 与所有
+在规范 wrapper 之后，每次自动投递都会追加 artifact lifecycle 输出。Pending
+request 使用 `choirboy-project-artifacts` 块，ready 记忆使用中立 Markdown。
+`artifact-generator.py` 读取完整 lore 与所有
 research Markdown 文件，只写 request 元数据并计算状态。状态为 `pending` 时，
 当前智能体必须用自己的 file tools 创建 `INDEX.md`，并为 `lore.md` 中每个
-`###` 项目写一份 dossier。脚本本身绝不生成 dossier 内容。
+`###` 项目写一份 dossier。规范 context、research、INDEX 和 dossier 内容始终
+使用英文；validator 会拒绝含 Cyrillic/CJK 的 model-facing 内容。脚本本身绝不
+生成 dossier 内容。
 
 `finalize` 校验精确链接、必需章节、来源引用与精确项目集合，然后写入
 SHA-256 manifest。此后每次 ready 投递都会重新校验 manifest、结构、source
-digest 与文件 digest。只有完全有效的 snapshot 才会以完整 `INDEX.md` 和全部
-dossiers 内容内联；缺失、过期、被修改或格式损坏的 snapshot 会重新变为
+digest 与文件 digest。只有完全有效的 snapshot 才会以内联工作领域目录和全部
+dossier 正文投递。`INDEX.md` 与逐文件 digest 只用于校验，不以 path/SHA 包装
+显示给模型；缺失、过期、被修改或格式损坏的 snapshot 会重新变为
 `pending`。发生冲突时始终以规范 lore/research 为准。
 
 状态为 `pending` 时，Claude/Codex 的 `Stop` 通过 `decision: block` 交还
@@ -158,7 +151,7 @@ checkout，路径优先级为：`CHOIRBOY_ARTIFACTS_DIR` →
 
 ### 3.1. `claude`（默认）— SessionStart JSON
 
-Claude Code / Codex 契约：钩子打印 JSON，宿主把 `additionalContext` 注入会话。
+Claude Code / Codex 契约：钩子打印 JSON，宿主把 `additionalContext` 加载到会话。
 
 ```json
 {
@@ -174,9 +167,11 @@ Claude Code / Codex 契约：钩子打印 JSON，宿主把 `additionalContext` �
 
 ### 3.2. `plain` — 原始文本
 
-钩子把 payload 原样打印到 stdout。生成的 OpenCode 适配器捕获它，并在
-第一条用户消息前插入带 `synthetic: true` 技术标记的 text part。Kimi
-0.39.x 不消费 `SessionStart` stdout，因此安装器使用下述独立事件路由。
+钩子把 payload 原样打印到 stdout。每次模型请求时，生成的 OpenCode
+适配器都会获取当前 payload，并把它加入模型侧 system context。OpenCode
+在 compaction 后会重建该 context，因此精确的 ready artifact 记忆不会随旧
+消息历史被移除。Kimi 0.39.x 不消费 `SessionStart` stdout，因此安装器使用
+下述独立事件路由。
 
 ```bash
 bash hooks/session-start.sh --format plain | head -40
@@ -184,13 +179,13 @@ bash hooks/session-start.sh --format plain | head -40
 
 ### 3.3. `hermes` — pre_llm_call 协议
 
-最有趣的契约。Hermes 在会话的**每一轮**都运行 shell 钩子；无条件注入会在
+最有趣的契约。Hermes 在会话的**每一轮**都运行 shell 钩子；无条件投递会在
 每条消息重复发送固定 lore 与全部 ready artifact 记忆。因此钩子：
 
 1. 从 stdin 读取 JSON payload；
 2. 检查 `.extra.is_first_turn`；
 3. 第一轮回复 `{"context": "<payload>"}`；
-4. 之后每一轮回复 `{}`（空回复，不注入任何东西）。
+4. 之后每一轮回复 `{}`（空回复，不再投递内容）。
 
 ```json
 // stdin（第一轮）：
@@ -205,18 +200,20 @@ bash hooks/session-start.sh --format plain | head -40
 ```
 
 **没有 `is_first_turn` 时的回退。** 如果宿主不报告该标记，钩子回退到 state 文件
-`${TMPDIR:-/tmp}/agent-plugin-hermes-${USER}.state` 中的 `session_id` 日志（保留最近 200 条）：每个 session_id 注入一次，之后保持沉默。
+`${TMPDIR:-/tmp}/agent-plugin-hermes-${USER}.state` 中的 `session_id` 日志（保留最近 200 条）：每个 session_id 投递一次，之后保持沉默。
 
 ### 3.4. Kimi 0.39.x 事件路由
 
-Kimi 使用三个 command hook，而不是直接运行
+Kimi 使用四个 command hook，而不是直接运行
 `session-start.sh --format plain`：
 
 1. `startup`/`resume` 的 `SessionStart` 准备 artifact 状态并重置私有的
-   once-per-session 投递 marker；不使用其 stdout。
-2. 首次 `UserPromptSubmit` 输出完整规范 payload，以及 bootstrap request 或
-   已验证的内联 artifact 记忆；同一会话的后续 prompts 保持静默。
-3. artifacts 为 `pending` 时，`Stop` 把 continuation request 写入 stderr 并
+   投递 fingerprint；不使用其 stdout。
+2. `manual`/`auto` 的同步 `PreCompact` 会在 Kimi 构建压缩 context 之前重置
+   fingerprint。
+3. `UserPromptSubmit` 在每个 prompt 输出 pending bootstrap，或在规范化
+   fingerprint 变化时输出 ready memory；仅相同 ready bundle 保持静默。
+4. artifacts 为 `pending` 时，`Stop` 把 continuation request 写入 stderr 并
    以代码 2 退出；验证为 `ready` 后以代码 0 退出。
 
 ---
@@ -225,7 +222,7 @@ Kimi 使用三个 command hook，而不是直接运行
 
 | stdin 字段 | 类型 | 用途 | 钩子行为 |
 |---|---|---|---|
-| `extra.is_first_turn` | bool | 会话第一轮？ | `true` → 注入；`false` → `{}` |
+| `extra.is_first_turn` | bool | 会话第一轮？ | `true` → 投递；`false` → `{}` |
 | `session_id` | string | 会话标识符 | 用于回退和写入 state 文件 |
 | （其他） | — | 忽略 | 不影响回复 |
 
@@ -246,9 +243,9 @@ Hermes 配置中的钩子超时——15 秒（由 install.sh 设置）。
 | Claude Chat | custom plugin skill | inline `load-context` | — |
 | Claude Cowork | custom plugin hook/skill | 可用时 hook，skill 回退 | claude / — |
 | Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
-| OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | 全局 `chat.message` 插件 | plain → 带 `synthetic: true` 的 text part |
+| OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | 模型侧 system-context transform | plain → 每次模型请求的 system context |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + 授权白名单 | hermes |
-| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart + UserPromptSubmit + Stop | 首次 prompt / plain；Stop / exit 2 |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart + PreCompact + UserPromptSubmit + Stop | 已变化 payload / plain；Stop / exit 2 |
 | Gemini | `~/.gemini/GEMINI.md` | 托管 lifecycle 指令块 | —（自行运行/读取文件） |
 | 任意 | `--instructions PATH` | 托管 lifecycle 指令块 | —（自行运行/读取文件） |
 
@@ -260,14 +257,15 @@ Claude Code 有两条等价路径：`install.sh` 注册工作副本绝对路径�
 时仍以 skill 回退。
 
 OpenCode 适配器由 `install.sh` 生成。它以 15 秒 timeout 运行规范 plain
-钩子，验证 delivery 标记，并且只修改当前用户消息的 parts。内存中的 session
-set 覆盖存活进程；持久化的 OpenCode 消息历史可避免 headless 会话由新进程
-恢复后再次注入。钩子、历史、timeout 或 payload 的任何错误都会静默 no-op，
-保证聊天 fail-open。
+钩子，验证 delivery 标记，并把当前 payload 加入每个出站 system context。
+因此 pending→ready、源文件变化、进程恢复与 compaction 都会获得当前精确
+snapshot。钩子、timeout 或 payload 的任何错误都会静默 no-op，保证聊天
+fail-open。
 
 Kimi 适配器有意把准备与投递分开。这样不会依赖被丢弃的 `SessionStart`
-stdout，可在每次 startup/resume 只投递一次，并使用 Kimi 的 exit-2 Stop
-契约，而不是 Claude 的 `{"decision":"block"}` 响应格式。
+stdout；`PreCompact` 在 compaction 前重置投递，而规范化 ready fingerprint
+允许同一会话接收已变化 bundle，同时不重复相同 bundle。Stop 使用 Kimi 的
+exit-2 契约，而不是 Claude 的 `{"decision":"block"}` 响应格式。
 
 ---
 
@@ -276,21 +274,18 @@ stdout，可在每次 startup/resume 只投递一次，并使用 Kimi 的 exit-2
 - **手动安装没有副本。** `install.sh` 直接引用项目文件（`$PLUGIN_ROOT/...`），
   因此下一次会话会看到工作副本的修改。Marketplace 安装是例外：Claude
   把发布版本复制到 cache，并按清单版本更新。
-- **双模式投递。** 原生运行时事件会自动投递（`SessionStart`，或 Kimi 的首次
+- **双模式投递。** 原生运行时事件会自动投递（`SessionStart`，或 Kimi 的
   `UserPromptSubmit`）；没有这些事件的界面以内联 skill 加载同一规范上下文。
 - **artifact 由智能体创作。** Lifecycle 代码只输出确定性 request、校验结果，
   并用 SHA-256 跟踪 freshness。Ready hook 会内联完整的已验证 snapshot，
   绝不会用文件路径指针替代模型可见记忆。
 - **artifact 状态可跨 checkout 升级保留。** 手动安装使用稳定的用户数据目录；
   只有稳定目标中还没有作者 payload 时，安装器才迁移旧 checkout-local bundle。
-- **Session fixtures 按需读取。** 三种原生 transcript fixtures 进入分发包和文档，
-  但不会注入每次对话。
+  私有 migration 记录会把中断的多文件复制恢复为同一个托管 bundle。
 - **可观测执行。** Marketplace hook 只把技术元数据写入
   `${CLAUDE_PLUGIN_DATA}/latest-delivery.log`，不会记录 lore 本身。
-- **OpenCode 对每个持久化会话只投递一次。** 运行钩子前同时检查当前进程的
-  set 与历史消息中带 `synthetic: true` 标记的 parts。
+- **OpenCode 记忆可跨 compaction 保留。** 当前规范 payload 会在每个模型侧
+  system context 中重新构建，而不是根据完整持久化消息历史推断。
 - **依赖极简。** `claude` 与 `plain` 投递可只依赖 Bash，但自动 artifact
   lifecycle 和 `install.sh` 需要 `python3`；`hermes` 需要 `jq` 或 `python3`
   解析 stdin。
-- **payload 没有被签名、运行时也不验证**——这是本项目分析的 provenance
-  缺口，不是插件实现缺陷（见 [docs/mechanism.zh-CN.md](mechanism.zh-CN.md)）。

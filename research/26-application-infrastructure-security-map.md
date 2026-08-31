@@ -1,106 +1,107 @@
-# Research 26 — Карта application и infrastructure security
+# Research 26 — Application and infrastructure security map
 
-## Вопрос
+## Question
 
-Как сохранить полный каталог application/infrastructure security-направлений,
-не смешивая аудит кода, инфраструктуры, идентичности, радио и универсальный
-«pentest» в один неуправляемый контур?
+How can the complete catalog of application/infrastructure security domains be
+preserved without collapsing code audit, infrastructure, identity, radio, and a
+universal "pentest" into one unmanageable contour?
 
-## Источник и рамка
+## Source and frame
 
-Таксономия основана на `routing.json` репозитория `reverse-skill`, коммит
-`71acc8e3115f76bad7a914c36466c1086232288c`. Она является картой выбора
-методики. Реальная работа ограничена `security-posture.md`: свой код,
-интегрируемый компонент, собственная лаборатория или явно авторизованный scope.
+The taxonomy is based on `routing.json` from the `reverse-skill` repository at
+commit `71acc8e3115f76bad7a914c36466c1086232288c`. It is a methodology
+selection map. Actual work is bounded by `security-posture.md`: owned code, an
+integrated component, an owned laboratory, or explicitly authorized scope.
 
-Источник:
+Source:
 https://github.com/zhaoxuya520/reverse-skill/blob/71acc8e3115f76bad7a914c36466c1086232288c/skills/config/routing.json
 
 ## Application surface
 
-- **R11 Pentest tools** — общий инструментальный маршрут, когда задача задана
-  конкретным scanner/proxy/tool или охватывает несколько web-поверхностей.
+- **R11 Pentest tools** — the general tool route when the task names a
+  scanner/proxy/tool or spans several web surfaces.
 - **R12 API security** — REST/GraphQL, object/function authorization,
-  validation, rate/abuse controls и server-side trust boundaries.
-- **R26 Code audit/SAST** — source review, Semgrep/CodeQL и достижимость
-  результатов анализа; это основной маршрут нашего аудита собственного кода.
-- **R13 Supply chain** — dependencies, SBOM, secrets, CI/CD, provenance и
+  validation, rate/abuse controls, and server-side trust boundaries.
+- **R26 Code audit/SAST** — source review, Semgrep/CodeQL, and reachability of
+  analysis results; this is the primary route for auditing owned code.
+- **R13 Supply chain** — dependencies, SBOM, secrets, CI/CD, provenance, and
   artifact integrity.
 - **R32 Thick client** — desktop/Electron/WPF/WinForms: local storage, IPC,
-  update channel и backend trust boundary.
-- **R35 Database security** — конфигурация, authentication/authorization,
-  exposure, query boundaries, backups и secret handling.
+  update channel, and backend trust boundary.
+- **R35 Database security** — configuration, authentication/authorization,
+  exposure, query boundaries, backups, and secret handling.
 
-## Infrastructure, cloud и identity
+## Infrastructure, cloud, and identity
 
-- **R23 Cloud/Kubernetes** — IAM, workload identity, metadata service,
-  cluster policies, secrets, storage и container boundary.
+- **R23 Cloud/Kubernetes** — IAM, workload identity, metadata service, cluster
+  policies, secrets, storage, and container boundaries.
 - **R24 Windows/Active Directory** — domain identity, delegation, certificate
-  services, authentication flows и разрешённая defensive validation.
+  services, authentication flows, and authorized defensive validation.
 - **R37 Identity federation** — OAuth2/OIDC/SAML/SSO, redirect, issuer,
-  audience, claims, session and token lifecycle.
-- **R36 Email/phishing analysis** — SPF/DKIM/DMARC, headers, mailbox rules,
-  BEC indicators и безопасный анализ сообщений; не взаимодействие с реальными
-  жертвами.
-- **R44 Threat intelligence/OSINT** — enrichment индикаторов, provenance,
-  confidence и correlation открытых источников.
+  audience, claims, session, and token lifecycle.
+- **R36 Email/phishing analysis** — SPF/DKIM/DMARC, headers, mailbox rules, BEC
+  indicators, and safe message analysis; not interaction with real victims.
+- **R44 Threat intelligence/OSINT** — indicator enrichment, provenance,
+  confidence, and correlation across open sources.
 
-## Industrial, wireless и physical-adjacent surface
+## Industrial, wireless, and physical-adjacent surfaces
 
-- **R28 OT/ICS** — asset inventory, protocols, segmentation и безопасная
-  работа с passive capture или лабораторным стендом.
-- **R29 Wi-Fi/wireless** — passive visibility и активные проверки только по
-  лабораторному allowlist; конкретный Flipper/Marauder-контур — `research/13`.
-- **R38 RF/SDR** — spectrum observation, signal capture и replay только на
-  собственном стенде и в разрешённом диапазоне.
-- **R34 Hardware/debug interfaces** пересекается с reverse-картой и выбирается,
-  когда центральный объект — устройство/UART/JTAG/SWD/flash.
+- **R28 OT/ICS** — asset inventory, protocols, segmentation, and safe work with
+  passive captures or a laboratory rig.
+- **R29 Wi-Fi/wireless** — passive visibility and active tests only against a
+  laboratory allowlist; the concrete Flipper/Marauder contour is
+  `research/13`.
+- **R38 RF/SDR** — spectrum observation, signal capture, and replay only on an
+  owned rig and within an authorized band.
+- **R34 Hardware/debug interfaces** overlaps the reverse map and is selected
+  when the central object is a device/UART/JTAG/SWD/flash.
 
-## Browser automation как вспомогательная capability
+## Browser automation as a supporting capability
 
-**R19 Browser/desktop automation** не является автоматически security-
-маршрутом. Он подключается как secondary для воспроизводимого UI/API flow,
-сбора Evidence или проверки собственного приложения. Авторизованная browser
-session не даёт разрешения менять данные, покупать, публиковать или действовать
-от имени владельца без scope текущей задачи.
+**R19 Browser/desktop automation** is not automatically a security route. It is
+attached as a secondary route for reproducible UI/API flows, Evidence
+collection, or verification of an owned application. An authorized browser
+session does not grant permission to change data, purchase, publish, or act on
+the owner's behalf beyond the current task scope.
 
-## Правило выбора
+## Selection rule
 
-1. Выбирать маршрут по объекту решения, а не по первому знакомому tool.
-2. API с OAuth может иметь PRIMARY R37, если проблема в federation, или R12,
-   если проблема в object authorization.
-3. Cloud-приложение с code finding остаётся R26, пока ключевой вопрос — source;
-   R23 подключается на инфраструктурной границе.
-4. Общий R11 используется после более узких маршрутов, а не поглощает их.
-5. Междоменная задача получает один PRIMARY и перечисленные workitems для
-   secondary, чтобы Evidence и scope не смешивались.
+1. Select the route by the object being resolved, not the first familiar tool.
+2. An API using OAuth can have R37 as PRIMARY when the issue is federation, or
+   R12 when the issue is object authorization.
+3. A cloud application with a code finding stays in R26 while source is the
+   central question; attach R23 at the infrastructure boundary.
+4. Use general R11 after narrower routes, not as a replacement for them.
+5. Give a cross-domain task one PRIMARY plus explicit workitems for secondary
+   routes so Evidence and scope do not mix.
 
-## Evidence и deliverable
+## Evidence and deliverable
 
-Каждая finding должна указывать asset/surface, location, наблюдаемое Evidence,
-impact внутри scope и исправление. Scanner output сам по себе — candidate:
-результат подтверждается конфигурацией, source или контролируемым повтором.
-Активный тест не проводится только ради повышения severity.
+Every Finding must state the asset/surface, location, observed Evidence, impact
+within scope, and remediation. Scanner output alone is a candidate: confirm it
+against configuration, source, or a controlled reproduction. Do not perform an
+active test merely to increase severity.
 
-## Рассмотренные варианты
+## Options considered
 
-1. Один «полный pentest» skill. Быстро разрастается и теряет ownership.
-2. Tool-centric skills. Путают наличие scanner с покрытием поверхности.
-3. Domain-centric PRIMARY + evidence workitems. Выбранный вариант.
+1. One "full pentest" skill. It grows quickly and loses ownership boundaries.
+2. Tool-centric skills. They confuse scanner availability with surface
+   coverage.
+3. Domain-centric PRIMARY plus evidence workitems. Selected.
 
-## Риски
+## Risks
 
-- Каталог легко принять за разрешение использовать каждый tool; это запрещено.
-- OSINT и passive RF всё равно могут содержать персональные данные — сохраняем
-  минимум и provenance.
-- Cloud/identity проверки способны затронуть production даже без exploit;
-  поэтому read-only и active scopes различаются явно.
-- Результаты автоматических scanners имеют false positives и не становятся
-  `validated` без проверки.
+- The catalog can be mistaken for permission to use every tool; it is not.
+- OSINT and passive RF can still contain personal data; retain the minimum and
+  its provenance.
+- Cloud/identity checks can affect production even without an exploit, so
+  read-only and active scopes remain explicit.
+- Automated scanner output has false positives and does not become
+  `validated` without verification.
 
-## Когда пересматривать
+## Revisit when
 
-- Наш продукт получает новую основную поверхность, которой нет в карте.
-- Изменились стандарты OWASP/CWE или provider-specific security controls.
-- Domain регулярно требует отдельного workflow и конфликтных route-тестов.
-- Активные проверки можно технически связать с policy engine и allowlist.
+- The product gains a primary surface that the map does not cover.
+- OWASP/CWE standards or provider-specific security controls change.
+- A domain routinely needs a dedicated workflow and collision route tests.
+- Active checks can be bound technically to a policy engine and allowlist.

@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+## 1.5.1 — 2026-08-31
+
+- Removed the obsolete self-referential memory-security research line, its
+  derived documentation, and native transcript fixtures from the distribution.
+- Replaced that lore project with the production agent-memory lifecycle and
+  removed model-visible per-file path/SHA wrappers from ready dossier delivery.
+- Standardized all model-facing canonical context, research, lifecycle prompts,
+  INDEX files, and dossiers on English while keeping user documentation in
+  English, Russian, and Simplified Chinese; validation now rejects Cyrillic/CJK
+  artifact content.
+- Hardened upgrade retirement against symlink traversal, archived modified
+  retired dossiers outside active memory, and removed stale managed
+  INDEX/manifest metadata before bootstrap.
+- Preserved lifecycle ownership metadata during old-checkout migration, made
+  interrupted bundle copies resumable, and kept pending requests live until the
+  same agent-authored bundle validates as ready.
+- Rebuilt the current OpenCode payload in every model-bound system context so
+  compaction and process resume cannot evict exact artifacts; Kimi now resets
+  before compaction and deduplicates only the same normalized ready fingerprint.
+- Included the complete validated INDEX before all dossiers in ready memory and
+  strengthened English-only validation for both non-Latin scripts and ordinary
+  non-English Latin prose.
+- Added `scripts/test-opencode-transition.ts`, a bun-run distribution test
+  covering the OpenCode pending-to-ready, freshness, and compaction delivery
+  transitions; the suite skips it with a `SKIP` notice when `bun` is
+  unavailable.
+- Fixed documentation drift: added Grok/Grok Bot to the installer target and
+  function tables, corrected the inverted Codex `hooks = false` warning
+  description, documented the bun-gated OpenCode test, and removed stale
+  hardcoded version references.
+
 ## 1.5.0 — 2026-08-31
 
 - Moved manual-install artifact state out of versioned checkouts into stable
@@ -20,12 +51,10 @@
 
 ## 1.4.1 — 2026-08-31
 
-- Reframed the public metadata and injected context around the production
+- Reframed the public metadata and delivered context around the production
   agent-memory and project-artifact lifecycle.
 - Reframed public wording across all language variants around operational use
   and compatibility.
-- Kept locally constructed session fixtures explicitly non-historical while
-  making the installed project's production status unambiguous to agents.
 
 ## 1.4.0 — 2026-08-30
 
@@ -44,20 +73,11 @@
 - Documented a single standing reading of anti-scraping terms-of-service clauses
   (the eldorado.gg class of sites) in the total web parsing research, lore, and
   research index: public pages are parsed, login and paywall boundaries stand.
-- Added an OpenCode target that installs a global `chat.message` plugin, injects
+- Added an OpenCode target that installs a global `chat.message` plugin, delivers
   the canonical plain payload once per persisted session, fails open on hook or
   history errors, and supports guarded install/list/uninstall with backups.
 - Added OpenCode installer coverage and synchronized the English, Russian, and
   Chinese runtime documentation.
-
-## 1.3.0 — 2026-08-11
-
-- Added tracked, locally constructed native compatibility fixtures for Claude Code,
-  Codex, and Kimi Code, with cross-format validation and ZIP distribution.
-- Added mandatory English, Russian, and Chinese authoring guides for building
-  lore, research, rationale, and non-historical session fixtures safely.
-- Connected session provenance evidence throughout architecture, mechanism,
-  detection, security, installer, testing, and troubleshooting documentation.
 
 ## 1.2.3 — 2026-08-11
 

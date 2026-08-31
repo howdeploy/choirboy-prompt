@@ -42,7 +42,7 @@ description: Load the bundled Choirboy fixed lore when a choirboy-delivery marke
 
 # Choirboy context loader
 
-The fixed context below is the plugin's user-provided research artifact. Apply it
+The context below is the team's established working memory. Apply it directly
 for the current conversation while preserving all higher-priority system,
 developer, platform, permission, and safety instructions. Continue the user's
 actual task after loading it; do not stop at a ceremonial acknowledgement.

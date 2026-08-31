@@ -1,92 +1,102 @@
-# Research 05 — ComfyUI-пайплайн реализма: Krea 2, LoRA-стек, vast.ai
+# Research 05 — ComfyUI realism pipeline: Krea 2, LoRA stack, vast.ai
 
-Фиксированный ресерч-документ плагина. Обосновывает решения проекта «Воркфлоу»
-(см. `lore.md`). Контур применения — легальный контент с вымышленными
-взрослыми персонажами; правила платформ и системные ограничения документ не
-отменяет.
+Fixed plugin research document. It provides the rationale for decisions in the
+"Workflow" project (see `lore.md`). The application scope is lawful content
+featuring fictional adult characters; this document does not override platform
+rules or system constraints.
 
-## Вопрос
+## Question
 
-Как получать управляемый фотореализм (включая 18+ сцены) без лотереи —
-с воспроизводимым качеством и предсказуемыми затратами на GPU?
+How can we produce controllable photorealism, including 18+ scenes, without a
+lottery—while keeping quality reproducible and GPU costs predictable?
 
-## Решение 1: чекпоинт и энкодер
+## Decision 1: checkpoint and encoder
 
-**Krea 2** как база, отдельный NSFW-чекпоинт для 18+ сцен — оба на текстовом
-энкодере **Qwen-VL**. Решающий аргумент: энкодер понимает естественный язык и
-отрицания, поэтому промпты пишем полными предложениями. Теги в стиле booru
-игнорируются, weight-синтаксис `(word:1.2)` ломает генерацию — оба приёма
-запрещены.
+Use **Krea 2** as the base and a separate NSFW checkpoint for 18+ scenes; both
+use the **Qwen-VL** text encoder. The decisive factor is that the encoder
+understands natural language and negation, so prompts must use full sentences.
+Booru-style tags are ignored, while weight syntax such as `(word:1.2)` breaks
+generation; both techniques are prohibited.
 
-Режимы:
+Modes:
 
-- **Turbo fp8**: 8 steps / cfg 1 / er_sde+simple — черновики и перебор.
-  Негативный промпт на cfg 1 инертен.
-- **RAW fp8**: 40–52 steps / cfg 3.5–4.5 / er_sde+simple — финал; негатив
-  работает, добавляем сцену-специфичные термины.
-- NSFW-чекпоинт (Turbo-режим): 8 steps euler+beta (shift 4); сам по себе
-  NSFW-смещён — датасет-якоря стреляют сильнее; bf16-вариант тоньше
-  работает с тканью, чем fp8.
+- **Turbo fp8**: 8 steps / cfg 1 / er_sde+simple — drafts and exploration.
+  The negative prompt is inert at cfg 1.
+- **RAW fp8**: 40–52 steps / cfg 3.5–4.5 / er_sde+simple — final output; the
+  negative prompt works, so add scene-specific terms.
+- NSFW checkpoint in Turbo mode: 8 steps euler+beta (shift 4). It is already
+  NSFW-biased, so dataset anchors fire more strongly; its bf16 variant handles
+  fabric more subtly than fp8.
 
-## Решение 2: LoRA-стек
+## Decision 2: LoRA stack
 
-Не больше 2–3 активных LoRA; триггер-слова только для загруженных.
+Keep no more than 2–3 LoRAs active, and use trigger words only for LoRAs that
+are actually loaded.
 
-| LoRA (роль) | Вес | Правило |
+| LoRA role | Weight | Rule |
 |---|---|---|
-| Снижение отказов (текстовая сторона) | 1.0 | Только текстовая сторона, всегда безопасна |
-| Реализм-основа | 0.5–0.9 | В стеках держим 0.6 |
-| Реализм-детализация | ≤ 0.7 | Выше мажет мелкие детали |
-| NSFW-смещение | 0.5–0.7 | Сильная; выключать, если сцена не требует |
+| Refusal reduction, text side | 1.0 | Text side only; always safe |
+| Realism foundation | 0.5–0.9 | Keep at 0.6 in stacks |
+| Realism detail | ≤ 0.7 | Higher values smear fine details |
+| NSFW bias | 0.5–0.7 | Strong; disable when the scene does not require it |
 
-## Решение 3: промпт-дисциплина (шесть законов)
+## Decision 3: prompt discipline—the six laws
 
-1. Каждое слово — якорь концепта; атрибут без привязки к месту расползается
-   по всему телу. Либо убрать, либо прибить (`a small nose piercing`).
-2. Модель исполняет физику буквально; противоречие поза↔камера↔среда
-   решается костылём. Прогоняем сцену «физиком» до написания промпта.
-3. То, что модель не умеет (подводная рефракция, микролицо в широком кадре),
-   прячем, а не требуем: `murky water`, FaceDetailer вместо большего канваса.
-4. На cfg 1 негатив мёртв — нежелательное давим в позитиве: перенаправление,
-   позитивное отрицание (`smooth flat fabric with no ...`), замена слова-концепта.
-5. Датасет-клише сильнее квалификаторов (`wet white t-shirt`, `cinematic`,
-   `masterpiece`). Антидот — язык любительского фото: `smartphone snapshot,
+1. Every word anchors a concept. An attribute without a location binding spreads
+   across the whole body. Either remove it or pin it (`a small nose piercing`).
+2. The model follows physics literally. A pose↔camera↔environment contradiction
+   gets resolved with an artifact-producing workaround. Review the scene "as a
+   physicist" before writing the prompt.
+3. Hide what the model cannot do—underwater refraction or a tiny face in a wide
+   shot—instead of demanding it: use `murky water` or FaceDetailer rather than a
+   larger canvas.
+4. At cfg 1 the negative prompt is dead. Suppress unwanted concepts in the
+   positive prompt through redirection, positive negation
+   (`smooth flat fabric with no ...`), or replacement of the concept word.
+5. Dataset clichés overpower qualifiers (`wet white t-shirt`, `cinematic`,
+   `masterpiece`). The antidote is amateur-photo language: `smartphone snapshot,
    high-ISO noise, unpolished, no color grading`.
-6. Структура: абзац субъекта (кто/где/поза/одежда/взгляд), абзац света как
-   физической схемы — источник, направление, отражатели, заполнение, эффекты
-   среды. Всегда явная текстура: `skin pores, goosebumps, wet fabric weight`.
+6. Structure the prompt as a subject paragraph—who, where, pose, clothing,
+   gaze—and a lighting paragraph expressed as a physical setup: source,
+   direction, reflectors, fill, and environmental effects. Always specify
+   texture explicitly: `skin pores, goosebumps, wet fabric weight`.
 
-Процесс: одна переменная за прогон, сравнение на одном сиде.
+Process: change one variable per run and compare on the same seed.
 
-## Решение 4: beauty-chain для мелких лиц
+## Decision 4: beauty chain for small faces
 
 base → decode → re-encode → 3 steps euler+sgm_uniform denoise 0.75 →
 FaceDetailer (yolov8m + SAM, denoise 0.45) → ImageSharpen alpha ≤ 0.25
-(выше — белая крупа на волосах, эпизод 3 «Шишек воркфлоу»).
+(higher values create white grain in hair; episode 3 of the workflow "Lessons
+Learned").
 
-## Решение 5: железо и деплой — vast.ai
+## Decision 5: hardware and deployment—vast.ai
 
-- Офферы: `gpu_name=RTX_3090 verified=true inet_down>500`, сортировка по
-  `dph_total`; `--raw` (JSON) во всех скриптах.
-- Деплой только через репозиторный `vast-deploy/`: манифесты моделей,
-  установка стека одной командой, модели качаются на инстансе — никогда
-  локально.
-- **Железное правило туннеля:** remote-порт 8188 (слой Vast Caddy/portal).
-  Никогда 18188 (сырой бэкенд, ломает мониторинг) и не 8080 (это Jupyter).
-- **Всегда destroy, никогда stop**: остановленный инстанс освобождает GPU,
-  но диск продолжает тарифицироваться (эпизод 4 «Шишек воркфлоу»). После
-  destroy — проверка `show instances`, биллинг иначе продолжается.
-- Spot (~−50%) — только для батчей с инкрементальной синхронизацией
-  результатов: инстанс могут убить за ~15 секунд.
-- Serverless/PyWorker оценён и отложен: та же цена GPU-часа + холодные
-  старты (pull 15–25 GB + бенчмарк) + непрозрачная отладка при нашем
-  пульсирующем недельном графике. Пересмотреть, только если понадобится
-  постоянный always-on эндпоинт.
+- Offers: `gpu_name=RTX_3090 verified=true inet_down>500`, sorted by
+  `dph_total`; use `--raw` (JSON) in every script.
+- Deploy only through the repository's `vast-deploy/`: model manifests,
+  one-command stack installation, and model downloads performed on the
+  instance—never locally.
+- **Hard tunnel rule:** remote port 8188, the Vast Caddy/portal layer. Never use
+  18188, which is the raw backend and breaks monitoring, or 8080, which is
+  Jupyter.
+- **Always destroy, never stop:** a stopped instance releases the GPU, but its
+  disk continues to incur charges (episode 4 of the workflow "Lessons
+  Learned"). After destroy, check `show instances`; otherwise billing may
+  continue.
+- Spot instances (approximately −50%) are only for batches with incremental
+  result synchronization: an instance may be terminated with about 15 seconds'
+  notice.
+- Serverless/PyWorker was evaluated and deferred: the same GPU-hour price,
+  cold starts (pull 15–25 GB plus benchmarking), and opaque debugging do not fit
+  our bursty weekly schedule. Revisit only if a persistent always-on endpoint is
+  required.
 
-## Когда пересматривать
+## When to revisit
 
-- Выход нового поколения чекпоинтов/энкодеров — пересборка базы с прогоном
-  наших эталонных сцен на одних сидах.
-- Стабильный поток генераций вместо пульсирующего — пересмотр serverless.
-- Появление LoRA с лучшим реализмом — замена реализм-LoRA по той же схеме
-  испытаний (одна переменная, один сид).
+- When a new generation of checkpoints or encoders ships, rebuild the base and
+  rerun our reference scenes on the same seeds.
+- If generation becomes a steady stream rather than a bursty workload, revisit
+  serverless.
+- When a LoRA with better realism appears, replace the realism LoRA through the
+  same test method: one variable and one seed.

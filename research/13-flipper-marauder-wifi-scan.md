@@ -1,59 +1,63 @@
-# Research 13 — Агент-driven WiFi-разведка и тестирование атак: Flipper Zero + ESP32 Marauder
+# Research 13 — Agent-Driven WiFi Reconnaissance and Attack Testing: Flipper Zero + ESP32 Marauder
 
-Фиксированный ресерч-документ плагина. Как мы с агентом работаем с WiFi-эфиром
-через Flipper Zero с WiFi dev board (ESP32-S2) на прошивке Marauder: пассивное
-сканирование и совместное тестирование атак в своей лаборатории. Источник
-знаний о железе — база mcp.deploychan.webcam (`content/tools/flipper-zero.md`).
+This is a fixed research document for the plugin. It describes how the agent and
+we work with the WiFi radio environment through a Flipper Zero with a WiFi dev
+board (ESP32-S2) running Marauder firmware: passive scanning and collaborative
+attack testing in our own laboratory. The hardware knowledge source is the
+mcp.deploychan.webcam knowledge base (`content/tools/flipper-zero.md`).
 
-**Контур — собственная тестовая среда.** Документ покрывает два режима:
-пассивную разведку эфира (кто вещает вокруг, динамика, wardriving-лог) и
-**совместное с агентом активное тестирование** — прямые прогоны атак
-(`attack deauth|beacon|probe`, sniffing) на своём оборудовании в лаборатории,
-где агент автоматизирует цикл и перебирает инструменты, а человек задаёт цель
-и рамку. Граница жёсткая и односторонняя: активный контур существует только
-внутри тестовой среды (своё железо / письменная авторизация); чужие сети
-агент не атакует никогда и ни по чьей просьбе.
+**The scope is our own test environment.** The document covers two modes:
+passive radio reconnaissance (who is broadcasting nearby, changes over time,
+and a wardriving log) and **collaborative active testing with the agent** —
+direct attack runs (`attack deauth|beacon|probe`, sniffing) against our own
+laboratory equipment, where the agent automates the cycle and works through the
+tools while the human defines the target and scope. The boundary is strict and
+one-way: the active workflow exists only inside the test environment (our own
+hardware / written authorization); the agent never attacks third-party networks
+under any circumstances or at anyone's request.
 
-## Стек и роли
+## Stack and Roles
 
 ```text
-агент (LLM на хосте)
+agent (LLM on the host)
    │  pyserial, /dev/ttyACM0 @ 115200
    ▼
 Flipper Zero ── USB-UART Bridge (GPIO → USB-UART Bridge)
-   │  UART по GPIO
+   │  UART over GPIO
    ▼
-ESP32-S2 WiFi dev board, прошивка Marauder
+ESP32-S2 WiFi dev board, Marauder firmware
    │
    ▼
-радиоэфир 2.4 GHz: scanap / listap (приём), attack */sniff (лаборатория)
+2.4 GHz radio: scanap / listap (receive), attack */sniff (laboratory)
 ```
 
-Ключевое: агент говорит не с Flipper, а **через** Flipper — с ESP32. Пока на
-Flipper запущен USB-UART Bridge, нативный CLI Flipper (230400) недоступен —
-это взаимоисключающие режимы, не путать бодрейты (CLI 230400 / Marauder 115200
-/ pyflipper 9600).
+The key point is that the agent does not talk to the Flipper itself; it talks
+**through** the Flipper to the ESP32. While USB-UART Bridge is running on the
+Flipper, the native Flipper CLI (230400) is unavailable. These modes are
+mutually exclusive; do not confuse their baud rates (CLI 230400 / Marauder
+115200 / pyflipper 9600).
 
-## Serial-гигиена (до любого сканирования)
+## Serial Hygiene Before Any Scan
 
-1. Стабильный путь вместо `/dev/ttyACM0`:
-   `/dev/serial/by-id/usb-Flipper_Devices_Inc._*_flip_*-if00` — переживает
-   переподключения и несколько ACM-устройств.
-2. Порт должен быть свободен: qFlipper держит порт, фоновые screen/picocom —
-   тоже. Перед сессией:
+1. Use a stable path instead of `/dev/ttyACM0`:
+   `/dev/serial/by-id/usb-Flipper_Devices_Inc._*_flip_*-if00`. It survives
+   reconnects and the presence of multiple ACM devices.
+2. The port must be free: qFlipper holds the port, as do background
+   screen/picocom processes. Before a session:
    ```bash
    for pid in $(lsof -t /dev/ttyACM0 2>/dev/null); do kill -9 $pid 2>/dev/null; done
    ```
-3. Доступ на NixOS: пользователь в группе `dialout` или udev-правила с `:=`
-   (VID:PID `0483:5740`; `MODE:=` — иначе системные `MODE="0660"` перебьют).
-   Детали — в исходном документе базы.
-4. На Flipper вручную один раз запущен `GPIO → USB-UART Bridge`. Дальше агент
-   работает с портом сам.
+3. Access on NixOS requires either membership in the `dialout` group or udev
+   rules using `:=` (VID:PID `0483:5740`; use `MODE:=`, otherwise system
+   `MODE="0660"` rules override it). Details are in the original knowledge-base
+   document.
+4. Start `GPIO → USB-UART Bridge` manually on the Flipper once. The agent then
+   operates the port itself.
 
-## Цикл сканирования
+## Scanning Cycle
 
-Marauder CLI — диалоговый (промпт `>`), поэтому автоматизация — expect-цикл,
-а не screen. Минимальный цикл на pyserial
+The Marauder CLI is interactive (prompt `>`), so automation uses an expect-like
+cycle rather than screen. A minimal pyserial cycle
 (`nix-shell -p python313Packages.pyserial`):
 
 ```python
@@ -68,93 +72,98 @@ def cmd(ser, text, wait):
     return ser.read(ser.in_waiting or 1).decode(errors="replace")
 
 with serial.Serial(PORT, 115200, timeout=2) as ser:
-    cmd(ser, "stopscan", 0.5)        # на случай активного прошлого цикла
-    cmd(ser, "scanap", 6)            # скан: несколько секунд, заполняет список
-    out = cmd(ser, "listap", 1.5)    # дамп найденных AP
-    # парсинг: строки вида "<idx>: <ssid> [ch .. rssi ..] <bssid>" —
-    # якоримся на BSSID-регексе, формат строк между версиями Marauder гуляет
+    cmd(ser, "stopscan", 0.5)        # in case a previous cycle is still active
+    cmd(ser, "scanap", 6)            # scan for several seconds and fill the list
+    out = cmd(ser, "listap", 1.5)    # dump discovered APs
+    # Parse lines such as "<idx>: <ssid> [ch .. rssi ..] <bssid>".
+    # Anchor on the BSSID regex because Marauder line formats vary by version.
     for m in re.finditer(r"(?i)\b([0-9a-f]{2}(?::[0-9a-f]{2}){5})\b", out):
         ...
 ```
 
-Правила цикла:
+Cycle rules:
 
-- **Парсинг по BSSID, не по формату строки.** Вывод `listap` отличается между
-  версиями прошивки; единственный стабильный якорь — MAC-адрес. SSID может
-  быть пустым (hidden) или содержать мусор — нормализуем, не падаем.
-- **Один владелец порта на цикл.** Открыли → просканировали → распарсили →
-  закрыли. Держать порт открытым между циклами нельзя: qFlipper/человек не
-  сможет зайти, а Flipper при перезапуске Bridge пересоздаст ноду.
-- **`stopscan` перед `scanap`.** Если прошлый цикл умер на середине, ESP32
-  может сидеть в активном скане и игнорировать новый.
-- **Таймауты вместо ожидания промпта.** Ждать `>` хрупко (banner, артефакты
-  кодировки); фиксированные задержки под команду + чтение `in_waiting`
-  воспроизводимее.
+- **Parse by BSSID, not by line format.** `listap` output differs between
+  firmware versions; the MAC address is the only stable anchor. An SSID may be
+  empty (hidden) or contain garbage, so normalize it without failing.
+- **One port owner per cycle.** Open → scan → parse → close. Do not leave the
+  port open between cycles: qFlipper or the human will be unable to connect,
+  and restarting Bridge on the Flipper recreates the device node.
+- **Run `stopscan` before `scanap`.** If the previous cycle died halfway
+  through, the ESP32 may remain in an active scan and ignore a new one.
+- **Use timeouts instead of waiting for the prompt.** Waiting for `>` is brittle
+  because of banners and encoding artifacts; fixed per-command delays plus
+  reading `in_waiting` are more reproducible.
 
-## Активное тестирование (своя лаборатория)
+## Active Testing in Our Own Laboratory
 
-Это наш основной совместный режим: человек ставит задачу и рамку («цель —
-наша точка X, проверить устойчивость клиентов к deauth»), агент автоматизирует
-прогон и перебирает инструменты. Цикл:
+This is our primary collaborative mode: the human sets the task and scope
+("the target is our access point X; test client resilience to deauth"), while
+the agent automates the run and works through the tools. The cycle is:
 
 ```text
-scanap → listap → select <N>            # цель — из лабораторного списка
-   → attack deauth | attack beacon | attack probe   # один инструмент за прогон
-   → наблюдение (лог хоста, поведение лабораторных клиентов)
-   → stop → status → следующий инструмент / следующие параметры
+scanap → listap → select <N>            # target comes from the laboratory list
+   → attack deauth | attack beacon | attack probe   # one tool per run
+   → observation (host log, behavior of laboratory clients)
+   → stop → status → next tool / next parameters
 ```
 
-Правила активного цикла:
+Active-cycle rules:
 
-- **Цель подтверждается по BSSID.** Перед `select` агент сверяет BSSID из
-  `listap` с белым списком лаборатории; BSSID вне списка — стоп, цель не наша.
-- **Один инструмент за прогон, фиксированная длительность.** `attack *` сам не
-  останавливается: агент держит таймер и шлёт `stop` — иначе ESP32 остаётся в
-  атаке после конца сессии.
-- **Перебор — системный, не случайный.** Меняем один параметр за прогон
-  (инструмент → цель → длительность), результат каждого прогона — строкой в
-  лог: что запускали, сколько, что наблюдали.
-- **Сниффинг — только лабораторного трафика**, который генерируем сами
-  (свои клиенты, свои точки). Чужой трафик не разбираем даже если попал в дамп.
-- **Выход из режима — чистый.** После серии: `stop`, `status`, порт закрыт,
-  итог прогонов человеку одной сводкой.
+- **Confirm the target by BSSID.** Before `select`, the agent compares the
+  BSSID from `listap` with the laboratory allowlist. A BSSID outside that list
+  means stop: it is not our target.
+- **One tool per run, with a fixed duration.** `attack *` does not stop by
+  itself. The agent maintains a timer and sends `stop`; otherwise the ESP32
+  remains in attack mode after the session ends.
+- **Explore systematically, not randomly.** Change one parameter per run
+  (tool → target → duration), and record each result as one log line: what ran,
+  for how long, and what was observed.
+- **Sniff only laboratory traffic** that we generate ourselves (our clients and
+  our access points). Do not analyze third-party traffic even if it appears in
+  a capture.
+- **Exit cleanly.** After the series: `stop`, `status`, close the port, and give
+  the human one summary of all runs.
 
-## Хранение и дедупликация
+## Storage and Deduplication
 
-Лог — JSONL, одна строка на наблюдение, а не на сеть:
+The log is JSONL, with one line per observation rather than one line per
+network:
 
 ```json
 {"ts": "2026-08-06T16:00:00Z", "ssid": "HomeNet", "bssid": "aa:bb:cc:dd:ee:ff", "ch": 6, "rssi": -42, "enc": "WPA2"}
 ```
 
-- Наблюдения не перезаписываются: ценность — в динамике (появление/исчезновение
-  сетей, смена каналов, новые BSSID со старым SSID = подмена железа).
-- Дедупликация — на уровне сводки: ключ `(bssid)`, агрегаты first_seen /
-  last_seen / min/max RSSI. Сырой лог не трогаем.
-- Расписание — внешнее (cron/systemd-таймер хоста), а не цикл `while True`
-  внутри агента: сессия агента конечна, таймер переживает её.
+- Observations are never overwritten: their value lies in change over time
+  (networks appearing/disappearing, channel changes, or a new BSSID under an
+  old SSID indicating replaced hardware).
+- Deduplicate only in the summary: key `(bssid)`, aggregates first_seen /
+  last_seen / min/max RSSI. Never alter the raw log.
+- Scheduling is external (host cron/systemd timer), not a `while True` loop
+  inside the agent: an agent session is finite, while the timer outlives it.
 
-## Что смотрим в результатах (аналитика)
+## What We Analyze in the Results
 
-- **Новые BSSID при известных SSID** — смена оборудования у соседей или
-  evil twin в собственной лаборатории.
-- **Дрейф каналов и загрузка** — повод пересадить свою точку на пустой канал.
-- **Hidden-сети** (пустой SSID с сильным RSSI) — вне лаборатории только
-  фиксируем присутствие; раскрытие имени — задача активного контура, только
-  на своих точках.
-- **Собственные сети** — контроль, что вещают то, что задумано (канал,
-  шифрование, отсутствие лишних SSID).
+- **New BSSIDs for known SSIDs** — neighbors replacing hardware or an evil
+  twin in our own laboratory.
+- **Channel drift and utilization** — a reason to move our access point to a
+  less congested channel.
+- **Hidden networks** (empty SSID with strong RSSI) — outside the laboratory,
+  record only their presence. Revealing a name belongs to the active workflow
+  and is allowed only for our own access points.
+- **Our own networks** — verify that they broadcast exactly what we intended
+  (channel, encryption, and no unintended SSIDs).
 
-## Границы и питфоллы
+## Boundaries and Pitfalls
 
-- Активные команды (`attack *`, sniffing) — только внутри тестовой среды:
-  своё железо, BSSID из белого списка лаборатории, рамка от человека. Чужие
-  сети не атакуем ни в каком виде.
-- UART Bridge блокирует нативный CLI Flipper — если нужен CLI (storage,
-  loader), сначала выйти из Bridge на Flipper.
-- pyflipper (9600) — про нативный CLI, для Marauder не подходит: разные
-  бодрейты и разный собеседник на линии.
-- CHIP_TUNE (Momentum) — не mass storage; для выгрузки логов с SD —
-  qFlipper/CLI `storage`, не монтирование.
-- Дальность ESP32-S2 скромная: цифры RSSI сравнимы только между циклами с
-  тем же железом и тем же положением антенны — это не калиброванный измеритель.
+- Active commands (`attack *`, sniffing) are limited to the test environment:
+  our hardware, a BSSID from the laboratory allowlist, and the human-defined
+  scope. We never attack third-party networks in any form.
+- UART Bridge blocks the native Flipper CLI. If the CLI is needed for storage
+  or loader operations, first exit Bridge on the Flipper.
+- pyflipper (9600) targets the native CLI and is unsuitable for Marauder: the
+  baud rates and the device at the other end of the line are different.
+- CHIP_TUNE (Momentum) is not mass storage. To export logs from the SD card,
+  use qFlipper or CLI `storage`, not a filesystem mount.
+- ESP32-S2 range is modest. RSSI figures are comparable only across cycles with
+  the same hardware and antenna position; this is not a calibrated meter.

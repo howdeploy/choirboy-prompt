@@ -1,26 +1,27 @@
-# Research 23 — Case scope и доказательная цепочка
+# Research 23 — Case scope and evidence chain
 
-## Вопрос
+## Question
 
-Как сделать security/reverse-работу воспроизводимой и не позволить маршруту или
-инструменту неявно расширить разрешённую область действий?
+How can security/reverse work remain reproducible without allowing a route or
+tool to expand the authorized scope implicitly?
 
-## Контекст и ограничения
+## Context and constraints
 
-Архитектура адаптирована из `reverse-skill` на коммите
-`71acc8e3115f76bad7a914c36466c1086232288c`. Мы переносим файловые контракты и
-quality gate, но сохраняем более строгую рамку `security-posture.md`: активные
-проверки — только своё, интегрируемое или явно авторизованное окружение.
+The architecture is adapted from `reverse-skill` at commit
+`71acc8e3115f76bad7a914c36466c1086232288c`. We carry over the file contracts
+and quality gate while retaining the stricter frame in `security-posture.md`:
+active testing is limited to owned, integrated, or explicitly authorized
+environments.
 
-Основные источники:
+Primary sources:
 
 - https://github.com/zhaoxuya520/reverse-skill/blob/71acc8e3115f76bad7a914c36466c1086232288c/skills/ops/scope-contract.md
 - https://github.com/zhaoxuya520/reverse-skill/blob/71acc8e3115f76bad7a914c36466c1086232288c/skills/ops/evidence-finding-path.md
 - https://github.com/zhaoxuya520/reverse-skill/blob/71acc8e3115f76bad7a914c36466c1086232288c/skills/ops/timeline-workitem.md
 
-## Case-пакет
+## Case package
 
-Для длинной или активной работы используется один каталог:
+Long-running or active work uses one directory:
 
 ```text
 work/<case>/
@@ -32,98 +33,99 @@ work/<case>/
   report/
 ```
 
-`scope.md` фиксирует:
+`scope.md` records:
 
-- `auth.status`: `granted`, `pending` или `denied`;
-- основание: собственная система, лаборатория, offline sample, письменный
-  договор, bug bounty scope или публичный CTF;
-- точные in-scope assets, поверхности и допустимые activities;
-- out-of-scope assets и действия;
-- network profile: `offline`, `lab_only`, `authorized_target_only` или
+- `auth.status`: `granted`, `pending`, or `denied`;
+- the basis: an owned system, laboratory, offline sample, written agreement,
+  bug bounty scope, or public CTF;
+- exact in-scope assets, surfaces, and permitted activities;
+- out-of-scope assets and actions;
+- network profile: `offline`, `lab_only`, `authorized_target_only`, or
   `unrestricted_lab`;
-- deliverables, ограничения обработки данных и `ready_for_act`.
+- deliverables, data-handling constraints, and `ready_for_act`.
 
-До `auth.status=granted` и `ready_for_act=true` допустимы чтение, локальная
-классификация и подготовка scope, но не активное воздействие на цель. Флаг
-`--force` не должен обходить gate.
+Until `auth.status=granted` and `ready_for_act=true`, reading, local
+classification, and scope preparation are allowed, but active interaction with
+the target is not. A `--force` flag must not bypass this gate.
 
 ## Evidence → Finding → Path
 
 ### Evidence
 
-`E-nnn` — наблюдение: время, тип источника, путь или команда, SHA-256 файла,
-точная команда воспроизведения, минимальный обезличенный excerpt и связь с
-work item. Старое наблюдение не переписывается: исправление или новый результат
-создаётся отдельной записью с `supersedes`.
+`E-nnn` is an observation: time, source type, path or command, file SHA-256,
+exact reproduction command, minimal sanitized excerpt, and its associated work
+item. An old observation is never rewritten; a correction or new result becomes
+a separate record with `supersedes`.
 
 ### Finding
 
-`F-nnn` — интерпретация с severity, категорией, статусом, location, impact,
-confidence, reproduction и remediation. Она обязана ссылаться хотя бы на одно
-существующее Evidence. Для `validated` предпочтительны два независимых
-подтверждения, обычно статическое и динамическое; единственный слабый источник
-оставляет Finding в `candidate` или требует явного residual risk.
+`F-nnn` is an interpretation with severity, category, status, location, impact,
+confidence, reproduction, and remediation. It must reference at least one
+existing Evidence record. A `validated` finding should preferably have two
+independent confirmations, usually static and dynamic; a single weak source
+keeps the Finding in `candidate` or requires an explicit residual risk.
 
 ### Path
 
-`P-nnn` связывает путь от входа к результату. Тип зависит от задачи:
+`P-nnn` connects the route from input to result. Its type depends on the task:
 
-- `callflow` — вызовы и преобразования в reverse engineering;
-- `solve` — решение лабораторной/CTF-задачи;
-- `attack` — только разрешённый тестовый путь внутри scope.
+- `callflow` — calls and transformations in reverse engineering;
+- `solve` — a laboratory/CTF solution;
+- `attack` — only an authorized test path within scope.
 
-Каждый существенный шаг ведёт к Evidence и при необходимости Finding.
+Every material step points to Evidence and, when necessary, a Finding.
 
-## Timeline и workitems
+## Timeline and workitems
 
-`timeline.md` только дополняется. Запись содержит action, command/reference,
-result, artifacts, evidence IDs, `decision_delta`, ссылки на неизменённое
-состояние и следующий шаг. Старые записи не редактируются; исправление — новая
-запись с `corrects`.
+`timeline.md` is append-only. Each entry contains an action,
+command/reference, result, artifacts, evidence IDs, `decision_delta`, links to
+unchanged state, and the next step. Old entries are not edited; a correction is
+a new entry with `corrects`.
 
-`workitems.md` хранит покрытие и статусы `pending`, `in_progress`, `blocked`,
-`done`, `cancelled`. Это отделяет «инструмент запущен» от «поверхность реально
-проверена и подтверждена Evidence».
+`workitems.md` stores coverage and the statuses `pending`, `in_progress`,
+`blocked`, `done`, and `cancelled`. This separates "the tool ran" from "the
+surface was actually tested and confirmed by Evidence."
 
-## Проверка handoff
+## Handoff review
 
-Upstream `case-review` использует только Python standard library и проверяет:
+Upstream `case-review` uses only the Python standard library and checks:
 
-- готовность scope;
-- ссылки Findings/Paths/workitems/timeline на существующие Evidence;
-- допустимые статусы и confidence;
-- отсутствие потерянных Evidence;
-- опционально SHA-256 case-local artifacts и запрет выхода пути за case root.
+- scope readiness;
+- Findings/Paths/workitems/timeline references to existing Evidence;
+- valid statuses and confidence values;
+- absence of orphaned Evidence;
+- optionally, SHA-256 of case-local artifacts and prevention of path escape
+  outside the case root.
 
-Локальный прогон upstream-тестов дал `8/8`. Review read-only, пока его вывод
-явно не сохраняется в `report/`.
+The local upstream test run produced `8/8`. Review is read-only unless its
+output is explicitly saved under `report/`.
 
-## Важное ограничение
+## Important limitation
 
-Markdown gate — процедурный контроль, а не capability sandbox. Агент или
-пользователь технически может вручную записать `granted`; внешний CLI/MCP не
-обязан читать `scope.md`. Поэтому:
+A Markdown gate is a procedural control, not a capability sandbox. An agent or
+user can technically write `granted` by hand; an external CLI/MCP is not
+required to read `scope.md`. Therefore:
 
-1. текстовый gate остаётся обязательной операционной проверкой;
-2. опасные инструменты должны дополнительно валидировать allowlist/scope в
-   своём коде;
-3. audit log и лимиты должны жить на tool boundary;
-4. отсутствие такой проверки отмечается как риск, а не маскируется словом
-   «hard gate».
+1. the textual gate remains a mandatory operational check;
+2. dangerous tools must also validate allowlists/scope in their own code;
+3. audit logs and limits must live at the tool boundary;
+4. the absence of such a check is reported as a risk, not hidden behind the
+   phrase "hard gate."
 
-## Решение
+## Decision
 
-Используем лёгкий case-пакет для многошаговых reverse/security-задач и всегда
-отделяем наблюдение от вывода. Для короткого read-only аудита допустим
-эквивалентный компактный отчёт без каталога `work/`, если он сохраняет scope,
-Evidence и проверяемые ссылки. Формат не должен создавать бюрократию ради
-формата: он нужен там, где помогает владельцу воспроизвести и продолжить работу.
+Use a lightweight case package for multi-step reverse/security tasks and always
+separate observations from conclusions. A short read-only audit may use an
+equivalent compact report without a `work/` directory if it preserves scope,
+Evidence, and verifiable references. The format must not create bureaucracy for
+its own sake; it is warranted when it helps the owner reproduce and continue
+the work.
 
-## Когда пересматривать
+## Revisit when
 
-- Появится исполняемый policy engine, который связывает scope с каждым MCP/CLI.
-- Case-пакеты станут слишком большими для Markdown и потребуется БД или
-  подписанный evidence store.
-- Юридический или организационный процесс потребует формальной chain of custody.
-- Тесты покажут, что два независимых Evidence не подходят конкретному типу
-  статического вывода; исключение должно быть документировано.
+- An executable policy engine binds scope to every MCP/CLI operation.
+- Case packages become too large for Markdown and require a database or signed
+  evidence store.
+- A legal or organizational process requires formal chain of custody.
+- Tests show that two independent Evidence records do not fit a particular
+  type of static conclusion; the exception must be documented.

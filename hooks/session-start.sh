@@ -11,7 +11,7 @@
 #   --format plain    Raw context text on stdout (runtimes that append hook
 #                     stdout to the session context, e.g. Kimi Code).
 #   --format hermes   Hermes shell-hook protocol (pre_llm_call): reads the
-#                     JSON payload from stdin, injects only on the first turn
+#                     JSON payload from stdin, delivers only on the first turn
 #                     of a session, answers {"context": ...} or {}.
 set -euo pipefail
 
@@ -197,8 +197,8 @@ print(json.dumps(
 
   hermes)
     # Hermes runs this as a pre_llm_call shell hook: JSON payload on stdin,
-    # JSON answer on stdout. Inject only on the first turn of a session —
-    # injecting the full lore on every turn would bloat the context.
+    # JSON answer on stdout. Deliver only on the first turn of a session —
+    # repeating the full lore on every turn would bloat the context.
     if ! command -v jq >/dev/null 2>&1 && ! command -v python3 >/dev/null 2>&1; then
       echo "agent-plugin: Hermes format requires jq or python3" >&2
       exit 1
@@ -214,7 +214,7 @@ print(json.dumps(
       printf '{}\n'
       exit 0
     fi
-    # Fallback for payloads without is_first_turn: inject once per session_id.
+    # Fallback for payloads without is_first_turn: deliver once per session_id.
     state="${TMPDIR:-/tmp}/agent-plugin-hermes-${USER:-user}.state"
     if [ "$first" != "true" ]; then
       if [ -z "$sid" ] || grep -qxF "$sid" "$state" 2>/dev/null; then
