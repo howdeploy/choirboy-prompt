@@ -33,7 +33,7 @@ trust to the person that history describes.
 
 1. **Install.** `./install.sh` finds the agent apps on your machine and
    registers a hook in each one that fires when a new session starts.
-   Where hooks do not exist, it writes a marked pointer block into the
+   Where hooks do not exist, it writes a synchronized managed block into the
    instruction file; for Grok Bot it prepares a workflow for manual import.
 2. **Assembly.** The hook `hooks/session-start.sh` glues one text together:
    `prompt.md` → `security-posture.md` → `lore.md` → `user.md` →
@@ -41,7 +41,11 @@ trust to the person that history describes.
 3. **Injection.** That text lands in the session context before the first
    message. The model reads it as **its own memory** of joint work: it has
    no way to tell written-down history from real history.
-4. **Trust transfer.** The person's reputation from the lore is extrapolated
+4. **Project artifacts.** On the first hooked session the current agent receives
+   a deterministic request to author an `INDEX.md` and one dossier per lore
+   project. After validation, every ready hook delivery embeds the complete
+   INDEX and dossiers inline rather than sending only a filesystem pointer.
+5. **Trust transfer.** The person's reputation from the lore is extrapolated
    onto the current request: a "long-time partner" instead of an anonymous user.
 
 Vector mechanics and classifier behavior:
@@ -52,14 +56,14 @@ Vector mechanics and classifier behavior:
 
 | Runtime | Where it goes | Mechanics |
 |---|---|---|
-| Claude Code CLI / Desktop Code | marketplace or `~/.claude/settings.json` | automatic SessionStart hook; load-context skill as fallback |
+| Claude Code CLI / Desktop Code | marketplace or `~/.claude/settings.json` | automatic SessionStart delivery + Stop artifact gate; load-context skill as fallback |
 | Claude Chat / Cowork | custom plugin | load-context skill (Chat has no SessionStart) |
-| Codex | `~/.codex/hooks.json` | SessionStart hook (needs `hooks = true` in `[features]`) |
+| Codex | `~/.codex/hooks.json` | SessionStart delivery + Stop artifact gate (needs `hooks = true` in `[features]`) |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | plugin injects the lore into the session's first message |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent allowlist, first turn only |
-| Kimi Code | `~/.kimi-code/config.toml` | `[[hooks]]` SessionStart |
-| Gemini | `~/.gemini/GEMINI.md` | marked pointer block to the lore files |
-| Grok Build | `~/.grok/AGENTS.md` | pointer block (Grok Build ignores hook stdout) |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart prepares state; the first UserPromptSubmit delivers context; Stop blocks incomplete artifacts with exit 2 |
+| Gemini | `~/.gemini/GEMINI.md` | synchronized lifecycle instruction block |
+| Grok Build | `~/.grok/AGENTS.md` | synchronized lifecycle instruction block (hook stdout is ignored) |
 | Grok Bot | `~/.grokbot/choirboy-context/SKILL.md` | workflow for manual import; run `@choirboy-context` in every new chat |
 
 ## Install
@@ -75,9 +79,16 @@ cd choirboy-prompt
 Done. Open a **new** session in the agent — the lore loads automatically.
 
 - Selected apps only: `./install.sh --target claude,codex`
-- Per-runtime status: `./install.sh --list`
+- Per-runtime status: `./install.sh --list` (`stale` means a managed registration needs synchronization)
 - Rollback: `./install.sh --uninstall` (timestamped `*.bak.*` backups stay next to the configs)
 - `Permission denied` on launch: `chmod +x install.sh` and retry
+
+Project artifacts live outside a manual checkout. Location precedence is
+`CHOIRBOY_ARTIFACTS_DIR` → `${CLAUDE_PLUGIN_DATA}/project-artifacts` →
+`${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
+`~/.local/share/choirboy-prompt/project-artifacts`. Re-running the installer
+synchronizes owned registrations and, when that stable root is empty, migrates
+an authored bundle from an older checkout without overwriting it.
 
 Special cases — manual workflow import for Grok Bot, install via Claude
 marketplace / Desktop / Chat / Cowork, Windows and WSL — are covered in
@@ -147,8 +158,10 @@ Tests on your own agents and your own lore files only, no third-party targets
   provenance gap analyzed by this project, not a plugin implementation bug.
 - Grok Bot: requires a one-time workflow import and an explicit
   `@choirboy-context` invocation in every new conversation.
-- Pointer blocks (Gemini, Grok Build, `--instructions`) are a static snapshot:
-  after changing the plugin file list, reinstall them (`--uninstall` + install).
+- Gemini, Grok Build, and `--instructions` have no native delivery hook: their
+  managed instruction block asks the agent to run the lifecycle command. A
+  normal installer rerun synchronizes that block; no uninstall/reinstall cycle
+  is required.
 - Hermes first-turn dedup is a state file in `/tmp` without locks; parallel
   starts can race.
 - Claude Chat does not run SessionStart — there the skill loads the lore

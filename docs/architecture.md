@@ -1,7 +1,7 @@
 # Архитектура
 
-Дерево репозитория, анатомия пейлоада, три формата вывода, протокол
-Hermes по полям. Это карта того, как устроен плагин изнутри.
+Дерево репозитория, анатомия пейлоада, форматы доставки, маршрутизация Kimi и
+протокол Hermes по полям. Это карта того, как устроен плагин изнутри.
 
 ---
 
@@ -14,7 +14,7 @@ agent-plugin/
 ├── security-audit-runbook.md # исполняемый порядок security-аудита
 ├── lore.md                   # карта совместной работы (проекты, шишки, границы)
 ├── user.md                   # профиль пользователя
-├── research/                 # 14 документов решений + полный разбор Coldcard
+├── research/                 # 30 документов решений + полный разбор Coldcard
 │   ├── 01-telegram-stars.md
 │   ├── 02-ruble-acquiring.md
 │   ├── 03-crypto-payments.md
@@ -29,6 +29,7 @@ agent-plugin/
 │   ├── 12-choirboy-prompt-lore-injection.md
 │   ├── 13-flipper-marauder-wifi-scan.md
 │   ├── 14-solo-game-cheats.md
+│   ├── 15-*.md … 30-*.md     # оркестрация и карты security-capabilities
 │   └── coldcard/             # полный разбор Coldcard: отчёт, код, источники
 │       ├── report.md
 │       ├── yasmarang_reconstruction.py
@@ -40,6 +41,9 @@ agent-plugin/
 ├── hooks/
 │   ├── session-start.sh      # сборка пейлоада + форматы claude / plain / hermes
 │   ├── artifact-stop.sh      # возврат незавершённого bootstrap текущему агенту
+│   ├── kimi-session-start.sh # подготовка state и сброс дедупликации Kimi
+│   ├── kimi-user-prompt.sh   # доставка контекста Kimi на первом user prompt
+│   ├── kimi-artifact-stop.sh # exit-2 gate Kimi для незавершённых артефактов
 │   └── hooks.json            # SessionStart + Stop для маркетплейса Claude Code
 ├── context/
 │   └── research-index.md     # общий канонический указатель research
@@ -101,7 +105,7 @@ markdown). В конце добавляется канонический `contex
    границы. Это ядро пейлоада.
 4. **user.md** — профиль: кто пользователь, как ставит задачи, что ему
    не нужно объяснять.
-5. **research-указатель** — индекс документов решений и session fixtures. Тела (~61 КБ)
+5. **research-указатель** — индекс документов решений и session fixtures. Тела (~259 КБ)
    **не** грузятся заранее: они читаются по требованию, когда задача
    входит в домен документа.
 
@@ -109,14 +113,16 @@ markdown). В конце добавляется канонический `contex
 
 | Файл | ~Размер | Примечание |
 |---|---|---|
-| prompt.md | ~8 КБ | правила работы |
-| security-posture.md | ~4 КБ | рамка безопасности |
-| lore.md | ~13 КБ | история |
+| prompt.md | ~14 КБ | правила работы |
+| security-posture.md | ~7 КБ | рамка безопасности |
+| lore.md | ~21 КБ | история |
 | user.md | ~4 КБ | профиль |
-| research-указатель | ~3 КБ | общий канонический источник |
-| **Итого пейлоад** | **~34 КБ** | до первого сообщения в каждой сессии |
+| research-указатель | ~6 КБ | общий канонический источник |
+| **Фиксированный lore-пейлоад** | **~52 КБ** | до inline-проектных артефактов |
 
-Тела research-документов (~61 КБ) в пейлоад не входят — только индекс.
+Тела research-документов (~259 КБ) в пейлоад не входят — только индекс.
+С текущим bundle статус `ready` добавляет около 46 КБ проверенных inline INDEX
+и dossiers: полная доставка занимает примерно 98 КБ.
 
 ### 2.3. Версия
 
@@ -124,7 +130,7 @@ markdown). В конце добавляется канонический `contex
 маркером с версией, способом и SHA-256; hook также добавляет nonce запуска:
 
 ```xml
-<choirboy-delivery version="1.4.0" delivery="session-start"
+<choirboy-delivery version="1.5.0" delivery="session-start"
   context_sha256="..." nonce="..." />
 <choirboy-context>...</choirboy-context>
 ```
@@ -134,26 +140,34 @@ markdown). В конце добавляется канонический `contex
 
 ### 2.4. Lifecycle проектных артефактов
 
-После канонического wrapper `SessionStart` добавляет отдельный блок
-`choirboy-project-artifacts`. `artifact-generator.py` читает весь lore и все
+После канонического wrapper каждая автоматическая доставка добавляет отдельный
+блок `choirboy-project-artifacts`. `artifact-generator.py` читает весь lore и все
 Markdown-файлы research, создаёт только служебный request и определяет статус.
 При `pending` текущий агент получает обязательную задачу своими file tools
 написать `INDEX.md` и по одному dossier на каждый `###`-проект из `lore.md`.
 Скрипт не пишет содержимое dossiers.
 
-Команда `finalize` проверяет точные ссылки, обязательные разделы и источники,
-после чего записывает manifest с SHA-256. Пока manifest отсутствует или устарел,
-`Stop` один раз возвращает bootstrap тому же агенту через `decision: block`.
-При `ready` следующие сессии получают путь к INDEX и обязаны прочитать dossier
-нужного домена. Канонические lore/research всегда сильнее производной сводки.
+Команда `finalize` проверяет точные ссылки, обязательные разделы, источники и
+точный набор проектов, после чего записывает manifest с SHA-256. Каждая
+последующая ready-доставка заново валидирует manifest, структуру, source digests
+и digests файлов. Только полностью валидный snapshot вкладывается inline как
+полное содержимое `INDEX.md` и всех dossiers; отсутствующий, устаревший,
+изменённый или сломанный snapshot снова становится `pending`. Канонические
+lore/research всегда сильнее производной сводки.
 
-Marketplace хранит состояние в `${CLAUDE_PLUGIN_DATA}/project-artifacts`, ручная
-установка — в `artifacts/` плагина. Путь можно переопределить через
-`CHOIRBOY_ARTIFACTS_DIR`; ручной uninstall эти файлы не удаляет.
+Пока статус `pending`, Claude/Codex `Stop` возвращает bootstrap через
+`decision: block`. Kimi использует свой нативный протокол: stderr плюс exit 2.
+Состояние артефактов не зависит от checkout. Приоритет путей:
+`CHOIRBOY_ARTIFACTS_DIR` → `${CLAUDE_PLUGIN_DATA}/project-artifacts` →
+`${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
+`~/.local/share/choirboy-prompt/project-artifacts`. При обновлении `install.sh`
+находит checkout-local `artifacts/`, на которые ссылаются старые регистрации,
+и копирует первый авторский bundle в пустой стабильный root, не перезаписывая
+существующую работу. Uninstall эти файлы не удаляет.
 
 ---
 
-## 3. Три формата вывода
+## 3. Форматы доставки и маршрутизация Kimi
 
 Хуку всё равно, какой агент его вызвал: вызывающий объявляет ожидаемый
 протокол через `--format`.
@@ -178,9 +192,10 @@ Marketplace хранит состояние в `${CLAUDE_PLUGIN_DATA}/project-ar
 
 ### 3.2. `plain` — сырой текст
 
-Хук печатает пейлоад дословно в stdout. Kimi Code добавляет этот stdout в
-контекст сессии; сгенерированный адаптер OpenCode перехватывает его и добавляет
-text-part с техническим флагом `synthetic: true` перед первым пользовательским сообщением.
+Хук печатает пейлоад дословно в stdout. Сгенерированный адаптер OpenCode
+перехватывает его и добавляет text-part с техническим флагом `synthetic: true`
+перед первым пользовательским сообщением. Kimi 0.39.x не использует stdout
+`SessionStart`, поэтому установщик регистрирует отдельную схему событий ниже.
 
 ```bash
 bash hooks/session-start.sh --format plain | head -40
@@ -189,7 +204,8 @@ bash hooks/session-start.sh --format plain | head -40
 ### 3.3. `hermes` — протокол pre_llm_call
 
 Самый интересный контракт. Hermes запускает shell-хук на **каждом**
-ходе сессии; безусловное внедрение слало бы ~34 КБ на каждое сообщение.
+ходе сессии; безусловное внедрение повторно слало бы фиксированный лор и все
+ready-артефакты на каждое сообщение.
 Поэтому хук:
 
 1. читает JSON-пейлоад из stdin;
@@ -213,6 +229,19 @@ bash hooks/session-start.sh --format plain | head -40
 откатывается на журнал `session_id` в state-файле
 `${TMPDIR:-/tmp}/agent-plugin-hermes-${USER}.state` (хвост 200 записей):
 внедряет один раз на session_id, дальше молчит.
+
+### 3.4. Маршрутизация событий Kimi 0.39.x
+
+Kimi использует три command-hook вместо прямого
+`session-start.sh --format plain`:
+
+1. `SessionStart` для `startup`/`resume` готовит artifact state и сбрасывает
+   приватный once-per-session marker; его stdout не используется.
+2. Первый `UserPromptSubmit` выдаёт полный канонический пейлоад и либо bootstrap
+   request, либо проверенную inline artifact memory. Следующие prompts этой
+   сессии молчат.
+3. `Stop` при `pending` пишет continuation request в stderr и завершает работу
+   с кодом 2; после успешной валидации `ready` возвращает 0.
 
 ---
 
@@ -243,9 +272,9 @@ bash hooks/session-start.sh --format plain | head -40
 | Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | глобальный `chat.message`-плагин | plain → text-part с `synthetic: true` |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent-allowlist | hermes |
-| Kimi Code | `~/.kimi-code/config.toml` | `[[hooks]]` SessionStart | plain |
-| Gemini | `~/.gemini/GEMINI.md` | маркированный блок-указатель | — (читает файлы сам) |
-| любой | `--instructions PATH` | маркированный блок-указатель | — (читает файлы сам) |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart + UserPromptSubmit + Stop | первый prompt / plain; Stop / exit 2 |
+| Gemini | `~/.gemini/GEMINI.md` | управляемый lifecycle-блок инструкций | — (сам запускает/читает файлы) |
+| любой | `--instructions PATH` | управляемый lifecycle-блок инструкций | — (сам запускает/читает файлы) |
 
 Два последних — **не хуки**, а управляемые блоки инструкций: агент и
 так читает файл инструкций на старте, в блоке ему сказано прочитать
@@ -265,6 +294,11 @@ fallback, если его runtime теряет `SessionStart`.
 возобновления headless-сессии новым процессом. Ошибка хука, истории, timeout или
 пейлоада превращается в тихий no-op: чат остаётся fail-open.
 
+Адаптер Kimi специально разделяет подготовку и доставку. Так он не зависит от
+отбрасываемого stdout `SessionStart`, доставляет память один раз на
+startup/resume и использует exit-2 контракт Kimi для Stop вместо Claude-формы
+`{"decision":"block"}`.
+
 ---
 
 ## 6. Ключевые свойства
@@ -273,11 +307,16 @@ fallback, если его runtime теряет `SessionStart`.
   напрямую (`$PLUGIN_ROOT/...`), поэтому следующая сессия получает правки
   рабочей копии. Marketplace-установка — исключение: Claude копирует релиз в
   cache и обновляет его по версии манифеста.
-- **Dual-mode доставка.** Hook работает автоматически там, где есть
-  `SessionStart`; inline skill несёт тот же канонический контекст в остальных
-  поверхностях Claude.
+- **Dual-mode доставка.** Нативные события рантайма доставляют автоматически
+  (`SessionStart` или первый `UserPromptSubmit` у Kimi); inline skill несёт тот
+  же канонический контекст в поверхностях без этих событий.
 - **Артефакты пишет агент, не скрипт.** Lifecycle только выдаёт детерминированный
-  request, валидирует результат и отслеживает свежесть по SHA-256.
+  request, валидирует результат и отслеживает свежесть по SHA-256. Ready-hook
+  вкладывает полный проверенный snapshot inline и никогда не подменяет видимую
+  модели память указателем на путь.
+- **Состояние артефактов переживает смену checkout.** Ручная установка использует
+  стабильное user-data storage, а установщик переносит старый checkout-local
+  bundle только если в стабильном назначении ещё нет авторского payload.
 - **Session fixtures читаются по требованию.** Три fixtures нативных transcripts
   входят в пакет и документацию, но не инъектятся в каждую беседу.
 - **Наблюдаемое исполнение.** Marketplace-hook пишет только технические метаданные

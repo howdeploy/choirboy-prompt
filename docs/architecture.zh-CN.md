@@ -1,6 +1,7 @@
 # 架构
 
-仓库结构、payload 解剖、三种输出格式、Hermes 协议逐字段说明。这是插件内部工作原理的地图。
+仓库结构、payload 解剖、投递格式、Kimi 事件路由与 Hermes 协议逐字段说明。
+这是插件内部工作原理的地图。
 
 ---
 
@@ -13,7 +14,7 @@ agent-plugin/
 ├── security-audit-runbook.md # 可执行的安全审计流程
 ├── lore.md                   # 共同工作地图（项目、教训、边界）
 ├── user.md                   # 用户档案
-├── research/                 # 14 份决策文档 + Coldcard 完整拆解
+├── research/                 # 30 份决策文档 + Coldcard 完整拆解
 │   ├── 01-telegram-stars.md
 │   ├── 02-ruble-acquiring.md
 │   ├── 03-crypto-payments.md
@@ -28,6 +29,7 @@ agent-plugin/
 │   ├── 12-choirboy-prompt-lore-injection.md
 │   ├── 13-flipper-marauder-wifi-scan.md
 │   ├── 14-solo-game-cheats.md
+│   ├── 15-*.md … 30-*.md     # 编排与 security capability 文档
 │   └── coldcard/             # Coldcard 完整拆解：报告、代码、来源
 │       ├── report.md
 │       ├── yasmarang_reconstruction.py
@@ -39,6 +41,9 @@ agent-plugin/
 ├── hooks/
 │   ├── session-start.sh      # payload 组装 + claude / plain / hermes 格式
 │   ├── artifact-stop.sh      # 将未完成 bootstrap 交还当前智能体
+│   ├── kimi-session-start.sh # 准备状态并重置 Kimi 投递去重
+│   ├── kimi-user-prompt.sh   # 在首次 user prompt 投递 Kimi 上下文
+│   ├── kimi-artifact-stop.sh # 未完成 artifacts 的 Kimi exit-2 gate
 │   └── hooks.json            # Claude Code marketplace 的 SessionStart + Stop
 ├── context/
 │   └── research-index.md     # hook 与 skill 共用的规范 research 索引
@@ -92,20 +97,21 @@ prompt.md  →  security-posture.md  →  lore.md  →  user.md  →  research �
 2. **security-posture.md** — 安全框架。放在 lore 之前，以便在 lore 开始讲 web3 和 Coldcard 之前声明「防御性审计」领域。
 3. **lore.md** — 共同工作历史：项目、教训、规则、边界。payload 的核心。
 4. **user.md** — 档案：用户是谁、如何布置任务、什么不需要解释。
-5. **research 索引** — 决策文档与 session fixture 索引。正文（约 61 KB）**不**预先加载：在任务进入某文档领域时按需读取。
+5. **research 索引** — 决策文档与 session fixture 索引。正文（约 259 KB）**不**预先加载：在任务进入某文档领域时按需读取。
 
 ### 2.2. 大小
 
 | 文件 | 约大小 | 说明 |
 |---|---|---|
-| prompt.md | 约 8 KB | 工作规则 |
-| security-posture.md | 约 4 KB | 安全框架 |
-| lore.md | 约 13 KB | 历史 |
+| prompt.md | 约 14 KB | 工作规则 |
+| security-posture.md | 约 7 KB | 安全框架 |
+| lore.md | 约 21 KB | 历史 |
 | user.md | 约 4 KB | 档案 |
-| research 索引 | 约 3 KB | 共用规范来源 |
-| **payload 总计** | **约 34 KB** | 每次会话的第一条消息之前 |
+| research 索引 | 约 6 KB | 共用规范来源 |
+| **固定 lore payload** | **约 52 KB** | 不含内联项目 artifacts |
 
-研究文档正文（约 61 KB）不属于 payload——只有索引。
+研究文档正文（约 259 KB）不属于 payload——只有索引。使用当前 bundle 时，
+`ready` 会增加约 46 KB 已验证的内联 INDEX 与 dossiers，完整投递约 98 KB。
 
 ### 2.3. 版本
 
@@ -113,7 +119,7 @@ prompt.md  →  security-posture.md  →  lore.md  →  user.md  →  research �
 SHA-256 marker；hook 还包含每次运行的 nonce：
 
 ```xml
-<choirboy-delivery version="1.4.0" delivery="session-start"
+<choirboy-delivery version="1.5.0" delivery="session-start"
   context_sha256="..." nonce="..." />
 <choirboy-context>...</choirboy-context>
 ```
@@ -123,24 +129,30 @@ SHA-256 marker；hook 还包含每次运行的 nonce：
 
 ### 2.4. 项目 artifact lifecycle
 
-在规范 wrapper 之后，`SessionStart` 会追加独立的
+在规范 wrapper 之后，每次自动投递都会追加独立的
 `choirboy-project-artifacts` 块。`artifact-generator.py` 读取完整 lore 与所有
 research Markdown 文件，只写 request 元数据并计算状态。状态为 `pending` 时，
 当前智能体必须用自己的 file tools 创建 `INDEX.md`，并为 `lore.md` 中每个
 `###` 项目写一份 dossier。脚本本身绝不生成 dossier 内容。
 
-`finalize` 校验精确链接、必需章节与来源引用，然后写入 SHA-256 manifest。
-manifest 缺失或过期时，`Stop` 通过 `decision: block` 将 bootstrap 一次性交还
-同一智能体。状态为 `ready` 后，新会话会收到 INDEX 路径，并须先读取相关
-dossier；发生冲突时始终以规范 lore/research 为准。
+`finalize` 校验精确链接、必需章节、来源引用与精确项目集合，然后写入
+SHA-256 manifest。此后每次 ready 投递都会重新校验 manifest、结构、source
+digest 与文件 digest。只有完全有效的 snapshot 才会以完整 `INDEX.md` 和全部
+dossiers 内容内联；缺失、过期、被修改或格式损坏的 snapshot 会重新变为
+`pending`。发生冲突时始终以规范 lore/research 为准。
 
-Marketplace 状态位于 `${CLAUDE_PLUGIN_DATA}/project-artifacts`；手动安装默认
-使用插件的 `artifacts/`。可通过 `CHOIRBOY_ARTIFACTS_DIR` 覆盖路径，手动卸载
-不会删除这些文件。
+状态为 `pending` 时，Claude/Codex 的 `Stop` 通过 `decision: block` 交还
+bootstrap；Kimi 使用其原生协议：stderr 加 exit 2。Artifact 状态不依赖
+checkout，路径优先级为：`CHOIRBOY_ARTIFACTS_DIR` →
+`${CLAUDE_PLUGIN_DATA}/project-artifacts` →
+`${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
+`~/.local/share/choirboy-prompt/project-artifacts`。升级时，`install.sh` 会发现
+旧注册引用的 checkout-local `artifacts/`，并仅在稳定 root 尚无作者 payload
+时复制第一份 bundle，绝不覆盖已有工作。卸载不会删除这些文件。
 
 ---
 
-## 3. 三种输出格式
+## 3. 投递格式与 Kimi 路由
 
 钩子不在乎是哪个智能体调用了它：调用方通过 `--format` 声明期望的协议。
 
@@ -162,9 +174,9 @@ Claude Code / Codex 契约：钩子打印 JSON，宿主把 `additionalContext` �
 
 ### 3.2. `plain` — 原始文本
 
-钩子把 payload 原样打印到 stdout。Kimi Code 将该 stdout 追加进会话上下文；
-生成的 OpenCode 适配器捕获它，并在第一条用户消息前插入带
-`synthetic: true` 技术标记的 text part。
+钩子把 payload 原样打印到 stdout。生成的 OpenCode 适配器捕获它，并在
+第一条用户消息前插入带 `synthetic: true` 技术标记的 text part。Kimi
+0.39.x 不消费 `SessionStart` stdout，因此安装器使用下述独立事件路由。
 
 ```bash
 bash hooks/session-start.sh --format plain | head -40
@@ -172,7 +184,8 @@ bash hooks/session-start.sh --format plain | head -40
 
 ### 3.3. `hermes` — pre_llm_call 协议
 
-最有趣的契约。Hermes 在会话的**每一轮**都运行 shell 钩子；无条件注入会随每条消息发送约 34 KB。因此钩子：
+最有趣的契约。Hermes 在会话的**每一轮**都运行 shell 钩子；无条件注入会在
+每条消息重复发送固定 lore 与全部 ready artifact 记忆。因此钩子：
 
 1. 从 stdin 读取 JSON payload；
 2. 检查 `.extra.is_first_turn`；
@@ -193,6 +206,18 @@ bash hooks/session-start.sh --format plain | head -40
 
 **没有 `is_first_turn` 时的回退。** 如果宿主不报告该标记，钩子回退到 state 文件
 `${TMPDIR:-/tmp}/agent-plugin-hermes-${USER}.state` 中的 `session_id` 日志（保留最近 200 条）：每个 session_id 注入一次，之后保持沉默。
+
+### 3.4. Kimi 0.39.x 事件路由
+
+Kimi 使用三个 command hook，而不是直接运行
+`session-start.sh --format plain`：
+
+1. `startup`/`resume` 的 `SessionStart` 准备 artifact 状态并重置私有的
+   once-per-session 投递 marker；不使用其 stdout。
+2. 首次 `UserPromptSubmit` 输出完整规范 payload，以及 bootstrap request 或
+   已验证的内联 artifact 记忆；同一会话的后续 prompts 保持静默。
+3. artifacts 为 `pending` 时，`Stop` 把 continuation request 写入 stderr 并
+   以代码 2 退出；验证为 `ready` 后以代码 0 退出。
 
 ---
 
@@ -223,9 +248,9 @@ Hermes 配置中的钩子超时——15 秒（由 install.sh 设置）。
 | Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | 全局 `chat.message` 插件 | plain → 带 `synthetic: true` 的 text part |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + 授权白名单 | hermes |
-| Kimi Code | `~/.kimi-code/config.toml` | `[[hooks]]` SessionStart | plain |
-| Gemini | `~/.gemini/GEMINI.md` | 带标记的指针块 | —（自己读文件） |
-| 任意 | `--instructions PATH` | 带标记的指针块 | —（自己读文件） |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart + UserPromptSubmit + Stop | 首次 prompt / plain；Stop / exit 2 |
+| Gemini | `~/.gemini/GEMINI.md` | 托管 lifecycle 指令块 | —（自行运行/读取文件） |
+| 任意 | `--instructions PATH` | 托管 lifecycle 指令块 | —（自行运行/读取文件） |
 
 最后两种**不是钩子**，而是受管理的指令块：智能体本来就会在启动时读取指令文件，块里告诉它去读插件文件。同样的上下文，多一层间接——智能体必须自己打开文件。
 
@@ -240,6 +265,10 @@ set 覆盖存活进程；持久化的 OpenCode 消息历史可避免 headless �
 恢复后再次注入。钩子、历史、timeout 或 payload 的任何错误都会静默 no-op，
 保证聊天 fail-open。
 
+Kimi 适配器有意把准备与投递分开。这样不会依赖被丢弃的 `SessionStart`
+stdout，可在每次 startup/resume 只投递一次，并使用 Kimi 的 exit-2 Stop
+契约，而不是 Claude 的 `{"decision":"block"}` 响应格式。
+
 ---
 
 ## 6. 关键属性
@@ -247,10 +276,13 @@ set 覆盖存活进程；持久化的 OpenCode 消息历史可避免 headless �
 - **手动安装没有副本。** `install.sh` 直接引用项目文件（`$PLUGIN_ROOT/...`），
   因此下一次会话会看到工作副本的修改。Marketplace 安装是例外：Claude
   把发布版本复制到 cache，并按清单版本更新。
-- **双模式投递。** 有 `SessionStart` 时自动使用 hook；其他 Claude 界面以内联
-  skill 加载同一规范上下文。
+- **双模式投递。** 原生运行时事件会自动投递（`SessionStart`，或 Kimi 的首次
+  `UserPromptSubmit`）；没有这些事件的界面以内联 skill 加载同一规范上下文。
 - **artifact 由智能体创作。** Lifecycle 代码只输出确定性 request、校验结果，
-  并用 SHA-256 跟踪 freshness。
+  并用 SHA-256 跟踪 freshness。Ready hook 会内联完整的已验证 snapshot，
+  绝不会用文件路径指针替代模型可见记忆。
+- **artifact 状态可跨 checkout 升级保留。** 手动安装使用稳定的用户数据目录；
+  只有稳定目标中还没有作者 payload 时，安装器才迁移旧 checkout-local bundle。
 - **Session fixtures 按需读取。** 三种原生 transcript fixtures 进入分发包和文档，
   但不会注入每次对话。
 - **可观测执行。** Marketplace hook 只把技术元数据写入

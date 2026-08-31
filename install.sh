@@ -21,7 +21,7 @@
 #   opencode ~/.config/opencode/plugins/agent-plugin.ts
 #                                         chat.message plugin (first message)
 #   hermes   ~/.hermes/config.yaml       pre_llm_call shell hook + consent allowlist
-#   kimi     ~/.kimi-code/config.toml    [[hooks]] SessionStart block
+#   kimi     ~/.kimi-code/config.toml    SessionStart + UserPromptSubmit + Stop
 #   gemini   ~/.gemini/GEMINI.md         managed instruction block
 #   grok     ~/.grok/AGENTS.md           Grok Build global rules
 #   grokbot  ~/.grokbot/choirboy-context/SKILL.md
@@ -34,9 +34,16 @@ set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MARK="agent-plugin:vibe-lore"
+REGISTRATION_VERSION="2"
+REGISTRATION_MARK="$MARK:registration=$REGISTRATION_VERSION"
 HOOK_SCRIPT="$PLUGIN_ROOT/hooks/session-start.sh"
 STOP_HOOK_SCRIPT="$PLUGIN_ROOT/hooks/artifact-stop.sh"
+KIMI_SESSION_HOOK_SCRIPT="$PLUGIN_ROOT/hooks/kimi-session-start.sh"
+KIMI_PROMPT_HOOK_SCRIPT="$PLUGIN_ROOT/hooks/kimi-user-prompt.sh"
+KIMI_STOP_HOOK_SCRIPT="$PLUGIN_ROOT/hooks/kimi-artifact-stop.sh"
 ARTIFACT_GENERATOR="$PLUGIN_ROOT/scripts/artifact-generator.py"
+CODEX_CONTEXT_LIMIT="262144"
+KIMI_HOME="${KIMI_CODE_HOME:-$HOME/.kimi-code}"
 ALL_TARGETS="claude codex opencode hermes kimi gemini grok grokbot"
 
 UNINSTALL=0
@@ -80,7 +87,7 @@ target_present() {
     codex)  command -v codex  >/dev/null 2>&1 || [ -d "$HOME/.codex" ] ;;
     opencode) command -v opencode >/dev/null 2>&1 || [ -d "$HOME/.config/opencode" ] ;;
     hermes) command -v hermes >/dev/null 2>&1 || [ -d "$HOME/.hermes" ] ;;
-    kimi)   command -v kimi   >/dev/null 2>&1 || [ -d "$HOME/.kimi-code" ] ;;
+    kimi)   command -v kimi   >/dev/null 2>&1 || [ -d "$KIMI_HOME" ] ;;
     gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
     grok)   command -v grok   >/dev/null 2>&1 || [ -d "$HOME/.grok" ] ;;
     grokbot) command -v grokbot >/dev/null 2>&1 \
@@ -98,15 +105,38 @@ claude_settings_file() {
 
 target_installed() {
   case "$1" in
+    claude) [ "$(json_hook "$(claude_settings_file)" bash status hooks.SessionStart "$HOOK_SCRIPT" 15 "" session-start.sh 2>/dev/null || true)" = current ] \
+              && [ "$(json_hook "$(claude_settings_file)" bash status hooks.Stop "$STOP_HOOK_SCRIPT" 15 "" artifact-stop.sh 2>/dev/null || true)" = current ] ;;
+    codex) [ "$(json_hook "$HOME/.codex/hooks.json" "bash \"$HOOK_SCRIPT\"" status hooks.SessionStart "" 15 "$CODEX_CONTEXT_LIMIT" session-start.sh 2>/dev/null || true)" = current ] \
+              && [ "$(json_hook "$HOME/.codex/hooks.json" "bash \"$STOP_HOOK_SCRIPT\"" status hooks.Stop "" 15 "" artifact-stop.sh 2>/dev/null || true)" = current ] ;;
+    opencode) [ "$(opencode_plugin "$HOME/.config/opencode/plugins/agent-plugin.ts" status 2>/dev/null || true)" = current ] ;;
+    hermes) grep -qF "$REGISTRATION_MARK" "$HOME/.hermes/config.yaml" 2>/dev/null \
+              && grep -qF "$HOOK_SCRIPT" "$HOME/.hermes/config.yaml" 2>/dev/null \
+              && grep -qF "$HOOK_SCRIPT" "$HOME/.hermes/shell-hooks-allowlist.json" 2>/dev/null ;;
+    kimi)   grep -qF "$REGISTRATION_MARK" "$KIMI_HOME/config.toml" 2>/dev/null \
+              && grep -qF "$KIMI_SESSION_HOOK_SCRIPT" "$KIMI_HOME/config.toml" 2>/dev/null \
+              && grep -qF "$KIMI_PROMPT_HOOK_SCRIPT" "$KIMI_HOME/config.toml" 2>/dev/null \
+              && grep -qF "$KIMI_STOP_HOOK_SCRIPT" "$KIMI_HOME/config.toml" 2>/dev/null ;;
+    gemini) grep -qF "$REGISTRATION_MARK" "$HOME/.gemini/GEMINI.md" 2>/dev/null \
+              && grep -qF "$ARTIFACT_GENERATOR" "$HOME/.gemini/GEMINI.md" 2>/dev/null ;;
+    grok)   grep -qF "$REGISTRATION_MARK" "$HOME/.grok/AGENTS.md" 2>/dev/null \
+              && grep -qF "$ARTIFACT_GENERATOR" "$HOME/.grok/AGENTS.md" 2>/dev/null ;;
+    grokbot) [ "$(grokbot_workflow "$HOME/.grokbot/choirboy-context/SKILL.md" status 2>/dev/null || true)" = current ] ;;
+    *) return 1 ;;
+  esac
+}
+
+target_managed_present() {
+  case "$1" in
     claude) grep -qF "session-start.sh" "$(claude_settings_file)" 2>/dev/null \
-              && grep -qF "artifact-stop.sh" "$(claude_settings_file)" 2>/dev/null ;;
-    codex)  grep -qF "session-start.sh" "$HOME/.codex/hooks.json" 2>/dev/null \
-              && grep -qF "artifact-stop.sh" "$HOME/.codex/hooks.json" 2>/dev/null ;;
+              || grep -qF "artifact-stop.sh" "$(claude_settings_file)" 2>/dev/null ;;
+    codex) grep -qF "session-start.sh" "$HOME/.codex/hooks.json" 2>/dev/null \
+              || grep -qF "artifact-stop.sh" "$HOME/.codex/hooks.json" 2>/dev/null ;;
     opencode) grep -qF "$MARK" "$HOME/.config/opencode/plugins/agent-plugin.ts" 2>/dev/null ;;
     hermes) grep -qF "$MARK" "$HOME/.hermes/config.yaml" 2>/dev/null ;;
-    kimi)   grep -qF "$MARK" "$HOME/.kimi-code/config.toml" 2>/dev/null ;;
+    kimi) grep -qF "$MARK" "$KIMI_HOME/config.toml" 2>/dev/null ;;
     gemini) grep -qF "$MARK" "$HOME/.gemini/GEMINI.md" 2>/dev/null ;;
-    grok)   grep -qF "$MARK" "$HOME/.grok/AGENTS.md" 2>/dev/null ;;
+    grok) grep -qF "$MARK" "$HOME/.grok/AGENTS.md" 2>/dev/null ;;
     grokbot) grep -qF "$MARK" "$HOME/.grokbot/choirboy-context/SKILL.md" 2>/dev/null ;;
     *) return 1 ;;
   esac
@@ -133,19 +163,102 @@ backup() {
   cp -p "$1" "$1.bak.$(date +%Y%m%d-%H%M%S)"
 }
 
-# block_add FILE START_LINE — append the block read on stdin unless
-# START_LINE is already present in FILE.
-block_add() {
-  local file="$1" start="$2"
+# block_sync FILE START_LINE END_LINE — atomically append or replace exactly
+# one managed block with stdin while preserving all surrounding user content.
+block_sync() {
+  local file="$1" start="$2" end="$3" desired status
   mkdir -p "$(dirname "$file")"
   [ -f "$file" ] || : > "$file"
-  if grep -qF "$start" "$file"; then
-    echo "  already present in $file — skipped"
-    return 0
+  desired="$(mktemp "${TMPDIR:-/tmp}/choirboy-block.XXXXXX")"
+  cat > "$desired"
+  if ! status="$(BLOCK_START="$start" BLOCK_END="$end" DESIRED="$desired" python3 - "$file" <<'PY'
+import os, shutil, sys, tempfile, time
+from pathlib import Path
+
+path = Path(sys.argv[1])
+start, end = os.environ["BLOCK_START"], os.environ["BLOCK_END"]
+desired_path = Path(os.environ["DESIRED"])
+desired = desired_path.read_text(encoding="utf-8")
+current = path.read_text(encoding="utf-8")
+
+def locate(document):
+    lines = document.splitlines(keepends=True)
+    offset = 0
+    begin = finish = None
+    inside = False
+    seen = 0
+    for number, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        has_start, has_end = stripped == start, stripped == end
+        if has_start and has_end:
+            raise ValueError(f"both block markers occur on line {number}")
+        if has_start:
+            if inside or seen:
+                raise ValueError(f"duplicate or nested START marker on line {number}")
+            inside = True
+            seen += 1
+            begin = offset
+        elif has_end:
+            if not inside:
+                raise ValueError(f"END marker without START on line {number}")
+            inside = False
+            finish = offset + len(line)
+        offset += len(line)
+    if inside:
+        raise ValueError("START marker has no matching END marker")
+    return begin, finish
+
+try:
+    desired_begin, desired_finish = locate(desired)
+    if desired_begin != 0 or desired_finish != len(desired):
+        raise ValueError("generated block must contain only one complete managed block")
+    begin, finish = locate(current)
+except ValueError as exc:
+    print(exc, file=sys.stderr)
+    raise SystemExit(2)
+
+if begin is None:
+    if current and not current.endswith("\n"):
+        separator = "\n\n"
+    elif current and not current.endswith("\n\n"):
+        separator = "\n"
+    else:
+        separator = ""
+    updated = current + separator + desired
+else:
+    updated = current[:begin] + desired + current[finish:]
+
+if updated == current:
+    print("unchanged")
+    raise SystemExit(0)
+
+suffix = "%s-%s" % (time.strftime("%Y%m%d-%H%M%S"), time.time_ns())
+shutil.copy2(path, path.with_name(f"{path.name}.bak.{suffix}"))
+descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.tmp.", dir=path.parent)
+try:
+    with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(updated)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.chmod(temporary_name, path.stat().st_mode)
+    os.replace(temporary_name, path)
+finally:
+    try:
+        os.unlink(temporary_name)
+    except FileNotFoundError:
+        pass
+print("changed")
+PY
+  )"; then
+    DESIRED="$desired" python3 -c 'import os; from pathlib import Path; Path(os.environ["DESIRED"]).unlink(missing_ok=True)'
+    die "refusing unsafe managed-block update in $file; repair its markers first"
   fi
-  backup "$file"
-  { printf '\n'; cat; } >> "$file"
-  echo "  block added to $file"
+  DESIRED="$desired" python3 -c 'import os; from pathlib import Path; Path(os.environ["DESIRED"]).unlink(missing_ok=True)'
+  if [ "$status" = "changed" ]; then
+    echo "  block synchronized in $file"
+  else
+    echo "  block already current in $file — skipped"
+  fi
 }
 
 # block_remove FILE START_LINE END_LINE — delete the marked block from FILE.
@@ -216,7 +329,8 @@ PY
 # json_hook FILE CMD install|uninstall DOTPATH [ARG] [TIMEOUT]
 #           [CONTEXT_LIMIT] [SCRIPT_ID] — safely add/remove one command hook in
 # a Claude-Code-shaped hooks JSON file. ARG enables Claude's shell-free form;
-# CONTEXT_LIMIT prevents Codex from spilling a large SessionStart payload.
+# CONTEXT_LIMIT keeps Codex's complete lore plus inline artifact memory in the
+# same SessionStart context instead of truncating it at the old 20-KB setting.
 json_hook() {
   HOOK_CMD="$2" MODE="$3" DOTPATH="$4" HOOK_ARG="${5-}" HOOK_TIMEOUT="${6-}" \
   HOOK_CONTEXT_LIMIT="${7-}" HOOK_ID="${8-}" \
@@ -286,6 +400,26 @@ def has_exact(es):
         for h in e.get("hooks", [])
     )
 
+def expected_handler():
+    handler = {"type": "command", "command": cmd}
+    if hook_arg is not None:
+        handler["args"] = [hook_arg]
+    if hook_timeout is not None:
+        handler["timeout"] = hook_timeout
+    if context_limit is not None:
+        handler["additionalContextLimit"] = context_limit
+    return handler
+
+if mode == "status":
+    owned = [entry for entry in entries if is_ours(entry)]
+    current = (
+        len(owned) == 1
+        and isinstance(owned[0].get("hooks"), list)
+        and owned[0]["hooks"] == [expected_handler()]
+    )
+    print("current" if current else ("stale" if owned else "absent"))
+    raise SystemExit(0)
+
 if mode == "install":
     # drop stale registrations of our script (e.g. the plugin folder moved),
     # keep the one matching the current command exactly
@@ -343,6 +477,7 @@ PY
 # plain-format hook once per session and injects its output as a marked text part.
 opencode_plugin() {
   PLUGIN_FILE="$1" MODE="$2" HOOK_PATH="$HOOK_SCRIPT" INSTALL_MARK="$MARK" \
+    REGISTRATION_MARK="$REGISTRATION_MARK" \
     python3 - <<'PY'
 import json
 import os
@@ -355,8 +490,10 @@ path = Path(os.environ["PLUGIN_FILE"])
 mode = os.environ["MODE"]
 hook_path = os.environ["HOOK_PATH"]
 mark = os.environ["INSTALL_MARK"]
+registration_mark = os.environ["REGISTRATION_MARK"]
 
 template = r'''// >>> agent-plugin:vibe-lore >>>
+// __REGISTRATION_MARK__
 // OpenCode adapter for choirboy-prompt.
 // Injects the canonical fixed lore once per session as a marked text part.
 // Fail-open: a missing hook, timeout, or malformed payload never blocks chat.
@@ -460,6 +597,7 @@ export default AgentPlugin
 // <<< agent-plugin:vibe-lore <<<
 '''
 content = template.replace("__HOOK_SCRIPT__", json.dumps(hook_path, ensure_ascii=False))
+content = content.replace("__REGISTRATION_MARK__", registration_mark)
 
 def backup() -> Path:
     stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -467,6 +605,13 @@ def backup() -> Path:
     shutil.copy2(path, destination)
     return destination
 
+if mode == "status":
+    if not path.is_file():
+        print("absent")
+    else:
+        current = path.read_text(encoding="utf-8")
+        print("current" if current == content else ("stale" if mark in current else "absent"))
+    raise SystemExit(0)
 if mode == "install":
     current = path.read_text(encoding="utf-8") if path.is_file() else None
     if current == content:
@@ -504,7 +649,7 @@ PY
 # importing a SKILL.md into Workflows and invoking it in a conversation.
 grokbot_workflow() {
   WORKFLOW_FILE="$1" MODE="$2" SOURCE_SKILL="$PLUGIN_ROOT/skills/load-context/SKILL.md" \
-    INSTALL_MARK="$MARK" python3 - <<'PY'
+    INSTALL_MARK="$MARK" REGISTRATION_MARK="$REGISTRATION_MARK" python3 - <<'PY'
 import os
 import shutil
 import sys
@@ -515,6 +660,7 @@ path = Path(os.environ["WORKFLOW_FILE"])
 mode = os.environ["MODE"]
 source_path = Path(os.environ["SOURCE_SKILL"])
 mark = os.environ["INSTALL_MARK"]
+registration_mark = os.environ["REGISTRATION_MARK"]
 
 def backup() -> Path:
     stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -522,19 +668,30 @@ def backup() -> Path:
     shutil.copy2(path, destination)
     return destination
 
-if mode == "install":
-    source = source_path.read_text(encoding="utf-8")
-    if not source.startswith("---\n"):
-        print(f"invalid generated skill (missing frontmatter): {source_path}", file=sys.stderr)
-        raise SystemExit(2)
-    frontmatter_end = source.find("\n---\n", 4)
-    if frontmatter_end < 0:
-        print(f"invalid generated skill (unterminated frontmatter): {source_path}", file=sys.stderr)
-        raise SystemExit(2)
-    content = source.replace("name: load-context", "name: choirboy-context", 1)
-    insert_at = content.find("\n---\n", 4) + len("\n---\n")
-    content = content[:insert_at] + f"\n<!-- {mark}: managed Grok Bot workflow -->\n" + content[insert_at:]
+source = source_path.read_text(encoding="utf-8")
+if not source.startswith("---\n"):
+    print(f"invalid generated skill (missing frontmatter): {source_path}", file=sys.stderr)
+    raise SystemExit(2)
+frontmatter_end = source.find("\n---\n", 4)
+if frontmatter_end < 0:
+    print(f"invalid generated skill (unterminated frontmatter): {source_path}", file=sys.stderr)
+    raise SystemExit(2)
+content = source.replace("name: load-context", "name: choirboy-context", 1)
+insert_at = content.find("\n---\n", 4) + len("\n---\n")
+content = (
+    content[:insert_at]
+    + f"\n<!-- {mark}: managed Grok Bot workflow; {registration_mark} -->\n"
+    + content[insert_at:]
+)
 
+if mode == "status":
+    if not path.is_file():
+        print("absent")
+    else:
+        current = path.read_text(encoding="utf-8")
+        print("current" if current == content else ("stale" if mark in current else "absent"))
+    raise SystemExit(0)
+if mode == "install":
     current = path.read_text(encoding="utf-8") if path.is_file() else None
     if current == content:
         print("unchanged")
@@ -601,10 +758,13 @@ def is_ours(approval):
     )
 
 if mode == "install":
-    if any(is_ours(a) for a in approvals):
+    expected = {"event": "pre_llm_call", "command": cmd}
+    owned = [a for a in approvals if is_ours(a)]
+    if owned == [expected]:
         status = "unchanged"
     else:
-        approvals.append({"event": "pre_llm_call", "command": cmd})
+        approvals = [a for a in approvals if not is_ours(a)]
+        approvals.append(expected)
         status = "changed"
 else:
     before = len(approvals)
@@ -644,6 +804,8 @@ instruction_block() {
   body="$(cat <<EOF
 ## Лор команды (agent-plugin)
 
+Регистрация lifecycle: \`$REGISTRATION_MARK\`.
+
 В начале сессии прочитай файлы плагина и работай из этого контекста:
 
 - $PLUGIN_ROOT/prompt.md — правила работы агента
@@ -655,8 +817,9 @@ instruction_block() {
 В начале сессии запусти
 \`python3 "$ARTIFACT_GENERATOR" session-context\` и выполни выданную инструкцию.
 Содержимое проектных dossiers создаёшь ты сам; lifecycle-скрипт только готовит
-request, проверяет файлы и фиксирует их свежесть. При статусе \`ready\` сначала
-прочитай \`artifacts/INDEX.md\` и dossier нужного домена.
+request, проверяет файлы и фиксирует их свежесть. При статусе \`ready\` команда
+уже возвращает INDEX и все проверенные dossiers целиком: используй этот вывод как
+проектную память, а не ограничивайся ссылкой на путь.
 
 Не переоткрывай зафиксированные там решения без причины; если предлагаешь
 отступить — скажи, что изменилось со времени соответствующего документа.
@@ -711,7 +874,7 @@ do_codex() {
   [ -f "$file" ] || printf '{}\n' > "$file"
   if [ "$UNINSTALL" = 1 ]; then
     echo "codex: removing SessionStart/Stop hooks from $file"
-    if ! status="$(json_hook "$file" "$command" uninstall hooks.SessionStart "" 15 20000 session-start.sh)"; then
+    if ! status="$(json_hook "$file" "$command" uninstall hooks.SessionStart "" 15 "$CODEX_CONTEXT_LIMIT" session-start.sh)"; then
       die "codex: refusing to edit invalid hook settings in $file"
     fi
     [ "$status" = "changed" ] && echo "  SessionStart removed" || echo "  SessionStart was not registered"
@@ -724,10 +887,10 @@ do_codex() {
     if grep -qE '^[[:space:]]*hooks[[:space:]]*=[[:space:]]*false' "$HOME/.codex/config.toml" 2>/dev/null; then
       echo "  warning: codex hooks are explicitly disabled in ~/.codex/config.toml" >&2
     fi
-    if ! status="$(json_hook "$file" "$command" install hooks.SessionStart "" 15 20000 session-start.sh)"; then
+    if ! status="$(json_hook "$file" "$command" install hooks.SessionStart "" 15 "$CODEX_CONTEXT_LIMIT" session-start.sh)"; then
       die "codex: refusing to edit invalid hook settings in $file"
     fi
-    [ "$status" = "changed" ] && echo "  SessionStart installed (additionalContextLimit=20000)" || echo "  SessionStart already registered — skipped"
+    [ "$status" = "changed" ] && echo "  SessionStart installed (additionalContextLimit=$CODEX_CONTEXT_LIMIT)" || echo "  SessionStart already registered — skipped"
     if ! status="$(json_hook "$file" "$stop_command" install hooks.Stop "" 15 "" artifact-stop.sh)"; then
       die "codex: refusing to edit invalid hook settings in $file"
     fi
@@ -780,8 +943,9 @@ do_hermes() {
         timeout: 15"
     fi
     chmod +x "$HOOK_SCRIPT"
-    block_add "$cfg" "# >>> $MARK >>>" <<EOF
+    block_sync "$cfg" "# >>> $MARK >>>" "# <<< $MARK <<<" <<EOF
 # >>> $MARK >>>
+# $REGISTRATION_MARK
 hooks:
   pre_llm_call:
     - command: "$HERMES_CONFIG_CMD"
@@ -794,26 +958,39 @@ EOF
 }
 
 do_kimi() {
-  local cfg="$HOME/.kimi-code/config.toml"
+  local cfg="$KIMI_HOME/config.toml"
   mkdir -p "$(dirname "$cfg")"
   [ -f "$cfg" ] || : > "$cfg"
   if [ "$UNINSTALL" = 1 ]; then
-    echo "kimi: removing SessionStart hook from $cfg"
+    echo "kimi: removing SessionStart/UserPromptSubmit/Stop hooks from $cfg"
     block_remove "$cfg" "# >>> $MARK >>>" "# <<< $MARK <<<"
   else
-    echo "kimi: installing SessionStart hook into $cfg"
+    echo "kimi: installing SessionStart/UserPromptSubmit/Stop hooks into $cfg"
     if ! grep -qF "# >>> $MARK >>>" "$cfg" && grep -qE '^hooks[[:space:]]*=' "$cfg"; then
       die "kimi: $cfg already defines 'hooks =' — switch it to [[hooks]] entries or merge manually:
   [[hooks]]
   event = \"SessionStart\"
-  command = \"bash \\\"$HOOK_SCRIPT\\\" --format plain\""
+  command = \"bash \\\"$KIMI_SESSION_HOOK_SCRIPT\\\"\""
     fi
-    block_add "$cfg" "# >>> $MARK >>>" <<EOF
+    chmod +x "$KIMI_SESSION_HOOK_SCRIPT" "$KIMI_PROMPT_HOOK_SCRIPT" "$KIMI_STOP_HOOK_SCRIPT"
+    block_sync "$cfg" "# >>> $MARK >>>" "# <<< $MARK <<<" <<EOF
 # >>> $MARK >>>
+# $REGISTRATION_MARK
 [[hooks]]
 event = "SessionStart"
-command = "bash \"$HOOK_SCRIPT\" --format plain"
-timeout = 15
+matcher = "^(startup|resume)$"
+command = "bash \"$KIMI_SESSION_HOOK_SCRIPT\""
+timeout = 30
+
+[[hooks]]
+event = "UserPromptSubmit"
+command = "bash \"$KIMI_PROMPT_HOOK_SCRIPT\""
+timeout = 30
+
+[[hooks]]
+event = "Stop"
+command = "bash \"$KIMI_STOP_HOOK_SCRIPT\""
+timeout = 30
 # <<< $MARK <<<
 EOF
   fi
@@ -873,8 +1050,48 @@ do_instructions() {
     block_remove "$file" "$start" "$end"
   else
     echo "$label: installing instruction block into $file"
-    instruction_block "$style" | block_add "$file" "$start"
+    instruction_block "$style" | block_sync "$file" "$start" "$end"
   fi
+}
+
+# Print checkout-local artifact directories referenced by current or legacy
+# registrations. The lifecycle migrates the first usable bundle into its
+# stable user-data root before registrations are rewritten to this checkout.
+discover_legacy_artifact_roots() {
+  python3 - "$(claude_settings_file)" \
+    "$HOME/.codex/hooks.json" \
+    "$HOME/.config/opencode/plugins/agent-plugin.ts" \
+    "$HOME/.hermes/config.yaml" \
+    "$KIMI_HOME/config.toml" \
+    "$HOME/.gemini/GEMINI.md" \
+    "$HOME/.grok/AGENTS.md" \
+    "${INSTRUCTIONS_FILES[@]}" <<'PY'
+import re, sys
+from pathlib import Path
+
+patterns = (
+    re.compile(r'(?P<root>(?:[A-Za-z]:)?/[^"\n\r`]*?)/hooks/session-start[.]sh'),
+    re.compile(r'(?P<root>(?:[A-Za-z]:)?/[^"\n\r`]*?)/scripts/artifact-generator[.]py'),
+    re.compile(r'(?P<root>(?:[A-Za-z]:)?/[^"\n\r`]*?)/prompt[.]md'),
+)
+seen = set()
+for name in sys.argv[1:]:
+    path = Path(name)
+    if not path.is_file():
+        continue
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        continue
+    normalized = text.replace("\\", "/")
+    for pattern in patterns:
+        for match in pattern.finditer(normalized):
+            root = match.group("root").strip()
+            candidate = f"{root}/artifacts"
+            if candidate not in seen:
+                seen.add(candidate)
+                print(candidate)
+PY
 }
 
 # --- main -------------------------------------------------------------------
@@ -888,6 +1105,8 @@ if [ "$LIST_ONLY" = 1 ]; then
     fi
     if target_installed "$t"; then
       if [ "$t" = "grokbot" ]; then s="prepared"; else s="installed"; fi
+    elif target_managed_present "$t"; then
+      s="stale"
     else
       s="detected"
     fi
@@ -896,7 +1115,7 @@ if [ "$LIST_ONLY" = 1 ]; then
       codex)  loc="$HOME/.codex/hooks.json" ;;
       opencode) loc="$HOME/.config/opencode/plugins/agent-plugin.ts" ;;
       hermes) loc="$HOME/.hermes/config.yaml" ;;
-      kimi)   loc="$HOME/.kimi-code/config.toml" ;;
+      kimi)   loc="$KIMI_HOME/config.toml" ;;
       gemini) loc="$HOME/.gemini/GEMINI.md" ;;
       grok)   loc="$HOME/.grok/AGENTS.md" ;;
       grokbot) loc="$HOME/.grokbot/choirboy-context/SKILL.md" ;;
@@ -911,7 +1130,11 @@ fi
 
 if [ "$UNINSTALL" = 0 ]; then
   [ -f "$ARTIFACT_GENERATOR" ] || die "artifact lifecycle is missing: $ARTIFACT_GENERATOR"
-  if ! artifact_status="$(python3 "$ARTIFACT_GENERATOR" prepare)"; then
+  migration_args=(--migrate-from "$PLUGIN_ROOT/artifacts")
+  while IFS= read -r legacy_root; do
+    [ -n "$legacy_root" ] && migration_args+=(--migrate-from "$legacy_root")
+  done < <(discover_legacy_artifact_roots)
+  if ! artifact_status="$(python3 "$ARTIFACT_GENERATOR" prepare "${migration_args[@]}")"; then
     die "could not prepare the agent-authored artifact lifecycle"
   fi
   echo "agent-plugin: artifact lifecycle prepared — $artifact_status"

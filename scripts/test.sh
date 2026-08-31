@@ -147,6 +147,8 @@ for project in request["projects"]:
             document.append("- Канонический набор источников проверен агентом.")
         else:
             document.append("Зафиксировано runtime-agent по каноническим источникам проекта.")
+            if project == request["projects"][0] and section == request["required_sections"][0]:
+                document.append("CHOIRBOY_DOSSIER_CANARY_7f51c92d")
         document.append("")
     (root / project["artifact"]).write_text("\n".join(document), encoding="utf-8")
 (root / "INDEX.md").write_text("\n".join(index) + "\n", encoding="utf-8")
@@ -167,12 +169,14 @@ root = Path(sys.argv[1])
 status = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
 manifest = json.loads((root / ".artifact-manifest.json").read_text(encoding="utf-8"))
 assert status["status"] == "ready"
-assert manifest["content_author"] == "runtime-agent"
+assert "content_author" not in manifest
 assert len(manifest["projects"]) == 12
 PY
 grep -q '<choirboy-project-artifacts status="ready"' "$TEST_ROOT/artifact-ready.txt"
-grep -q 'сначала прочитай INDEX' "$TEST_ROOT/artifact-ready.txt"
-pass "agent-authored artifacts finalize and become runtime memory"
+grep -q '<choirboy-artifact path="INDEX.md"' "$TEST_ROOT/artifact-ready.txt"
+grep -q 'CHOIRBOY_DOSSIER_CANARY_7f51c92d' "$TEST_ROOT/artifact-ready.txt"
+python3 scripts/artifact-generator.py verify >/dev/null
+pass "validated agent-authored artifacts are embedded as runtime memory"
 
 first_artifact="$(python3 - "$CHOIRBOY_ARTIFACTS_DIR" <<'PY'
 import json, sys
@@ -184,9 +188,79 @@ PY
 )"
 printf '\n<!-- freshness drift -->\n' >> "$first_artifact"
 test "$(python3 scripts/artifact-generator.py status)" = pending
+if python3 scripts/artifact-generator.py verify >/dev/null 2>&1; then
+  echo "artifact verify accepted hash drift" >&2
+  exit 1
+fi
+python3 scripts/artifact-generator.py session-context > "$TEST_ROOT/artifact-drift.txt"
+if grep -q 'CHOIRBOY_DOSSIER_CANARY_7f51c92d' "$TEST_ROOT/artifact-drift.txt"; then
+  echo "pending artifacts leaked into runtime memory" >&2
+  exit 1
+fi
 python3 scripts/artifact-generator.py finalize >/dev/null
 test "$(python3 scripts/artifact-generator.py status)" = ready
 pass "artifact hash drift invalidates freshness"
+
+cp "$first_artifact" "$TEST_ROOT/first-artifact.valid"
+python3 - "$first_artifact" "$CHOIRBOY_ARTIFACTS_DIR/.artifact-manifest.json" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+
+artifact = Path(sys.argv[1])
+manifest_path = Path(sys.argv[2])
+document = artifact.read_text(encoding="utf-8")
+document = document.replace("## Канон\n", "## Removed required section\n", 1)
+artifact.write_text(document, encoding="utf-8")
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+relative = artifact.relative_to(manifest_path.parent).as_posix()
+record = next(value for value in manifest["projects"].values() if value["path"] == relative)
+record["artifact_sha256"] = hashlib.sha256(document.encode("utf-8")).hexdigest()
+manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+test "$(python3 scripts/artifact-generator.py status)" = pending
+mv "$TEST_ROOT/first-artifact.valid" "$first_artifact"
+python3 scripts/artifact-generator.py finalize >/dev/null
+pass "structural validation rejects a forged matching manifest hash"
+
+cp "$CHOIRBOY_ARTIFACTS_DIR/.artifact-manifest.json" "$TEST_ROOT/artifact-manifest.valid"
+printf '{ invalid manifest\n' > "$CHOIRBOY_ARTIFACTS_DIR/.artifact-manifest.json"
+test "$(python3 scripts/artifact-generator.py status)" = pending
+python3 scripts/artifact-generator.py session-context > "$TEST_ROOT/artifact-corrupt-manifest.txt"
+if grep -q 'CHOIRBOY_DOSSIER_CANARY_7f51c92d' "$TEST_ROOT/artifact-corrupt-manifest.txt"; then
+  echo "corrupt manifest leaked artifact content" >&2
+  exit 1
+fi
+mv "$TEST_ROOT/artifact-manifest.valid" "$CHOIRBOY_ARTIFACTS_DIR/.artifact-manifest.json"
+python3 scripts/artifact-generator.py verify >/dev/null
+pass "corrupt manifest cannot become runtime memory"
+
+legacy_artifacts="$TEST_ROOT/legacy-checkout/artifacts"
+stable_artifacts="$TEST_ROOT/stable-user-data/project-artifacts"
+mkdir -p "$legacy_artifacts"
+cp -R "$CHOIRBOY_ARTIFACTS_DIR/." "$legacy_artifacts/"
+CHOIRBOY_ARTIFACTS_DIR="$stable_artifacts" python3 scripts/artifact-generator.py prepare \
+  --migrate-from "$legacy_artifacts" > "$TEST_ROOT/artifact-migration.txt"
+mv "$TEST_ROOT/legacy-checkout" "$TEST_ROOT/legacy-checkout.retired"
+CHOIRBOY_ARTIFACTS_DIR="$stable_artifacts" python3 scripts/artifact-generator.py verify >/dev/null
+CHOIRBOY_ARTIFACTS_DIR="$stable_artifacts" python3 scripts/artifact-generator.py session-context \
+  > "$TEST_ROOT/stable-artifact-context.txt"
+grep -q 'CHOIRBOY_DOSSIER_CANARY_7f51c92d' "$TEST_ROOT/stable-artifact-context.txt"
+python3 - "$stable_artifacts" <<'PY'
+import json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+request = json.loads((root / ".artifact-request.json").read_text(encoding="utf-8"))
+assert Path(request["artifact_root"]) == root
+assert (root / "INDEX.md").is_file()
+assert len(list((root / "projects").glob("*.md"))) == len(request["projects"])
+PY
+cp "$stable_artifacts/INDEX.md" "$TEST_ROOT/stable-index.before"
+printf '# conflicting legacy index\n' > "$TEST_ROOT/legacy-checkout.retired/artifacts/INDEX.md"
+CHOIRBOY_ARTIFACTS_DIR="$stable_artifacts" python3 scripts/artifact-generator.py prepare \
+  --migrate-from "$TEST_ROOT/legacy-checkout.retired/artifacts" >/dev/null
+cmp "$TEST_ROOT/stable-index.before" "$stable_artifacts/INDEX.md"
+pass "legacy checkout artifacts migrate into stable user data"
 
 market_config="$TEST_ROOT/claude-config"
 CLAUDE_CONFIG_DIR="$market_config" claude plugin marketplace add "$ROOT" >/dev/null
@@ -227,6 +301,7 @@ skill_marker = re.search(rf'<choirboy-delivery version="{version}" delivery="ski
 assert hook_marker and skill_marker and hook_marker.group(1) == skill_marker.group(1)
 assert "<choirboy-context>" in context and "</choirboy-context>" in context
 assert '<choirboy-project-artifacts status="ready"' in context
+assert "CHOIRBOY_DOSSIER_CANARY_7f51c92d" in context
 assert "# Prompt" in context and "## Research — обоснования решений" in context
 PY
 test -s "$TEST_ROOT/plugin-data/latest-delivery.log"
@@ -236,8 +311,43 @@ if grep -q -- '--arg ctx' hooks/session-start.sh; then
 fi
 pass "Claude payload and delivery diagnostic"
 
+env -u CHOIRBOY_ARTIFACTS_DIR CLAUDE_PLUGIN_DATA="$TEST_ROOT/isolated-plugin-data" \
+  bash hooks/session-start.sh --format claude > "$TEST_ROOT/claude-plugin-data.json"
+python3 - "$TEST_ROOT/claude-plugin-data.json" "$TEST_ROOT/isolated-plugin-data/project-artifacts" <<'PY'
+import json, sys
+from pathlib import Path
+
+context = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["hookSpecificOutput"]["additionalContext"]
+root = Path(sys.argv[2])
+assert f'root="{root}"' in context
+assert '<choirboy-project-artifacts status="pending"' in context
+assert (root / ".artifact-request.json").is_file()
+PY
+pass "CLAUDE_PLUGIN_DATA owns marketplace artifact state"
+
+env -u CHOIRBOY_ARTIFACTS_DIR -u CLAUDE_PLUGIN_DATA \
+  XDG_DATA_HOME="$TEST_ROOT/xdg-data" HOME="$TEST_ROOT/root-precedence-home" \
+  python3 scripts/artifact-generator.py status --json > "$TEST_ROOT/xdg-root.json"
+env -u CHOIRBOY_ARTIFACTS_DIR -u CLAUDE_PLUGIN_DATA -u XDG_DATA_HOME \
+  HOME="$TEST_ROOT/root-precedence-home" \
+  python3 scripts/artifact-generator.py status --json > "$TEST_ROOT/home-root.json"
+python3 - "$TEST_ROOT/xdg-root.json" "$TEST_ROOT/home-root.json" "$TEST_ROOT" <<'PY'
+import json, sys
+from pathlib import Path
+
+xdg = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+home = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+root = Path(sys.argv[3])
+assert Path(xdg["artifact_root"]) == root / "xdg-data/choirboy-prompt/project-artifacts"
+assert Path(home["artifact_root"]) == root / "root-precedence-home/.local/share/choirboy-prompt/project-artifacts"
+assert not (root / "xdg-data").exists()
+assert not (root / "root-precedence-home/.local").exists()
+PY
+pass "stable artifact-root precedence and read-only status"
+
 bash hooks/session-start.sh --format plain > "$TEST_ROOT/plain.txt"
 grep -q "<choirboy-delivery version=\"$VERSION\" delivery=\"session-start\"" "$TEST_ROOT/plain.txt"
+grep -q 'CHOIRBOY_DOSSIER_CANARY_7f51c92d' "$TEST_ROOT/plain.txt"
 pass "plain payload"
 
 sid="test-$$-$(date +%s)"
@@ -246,7 +356,8 @@ printf '{"session_id":"%s","extra":{"is_first_turn":true}}' "$sid" \
 python3 - "$TEST_ROOT/hermes-first.json" <<'PY'
 import json, sys
 from pathlib import Path
-assert "context" in json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+context = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["context"]
+assert "CHOIRBOY_DOSSIER_CANARY_7f51c92d" in context
 PY
 printf '{"session_id":"%s","extra":{"is_first_turn":false}}' "$sid" \
   | bash hooks/session-start.sh --format hermes > "$TEST_ROOT/hermes-second.json"
@@ -364,7 +475,7 @@ assert start == {
     "type": "command",
     "command": f'bash "{root / "hooks/session-start.sh"}"',
     "timeout": 15,
-    "additionalContextLimit": 20000,
+    "additionalContextLimit": 262144,
 }
 assert stop == {
     "type": "command",
@@ -380,7 +491,7 @@ hooks = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["hooks"]
 assert hooks["SessionStart"] == []
 assert hooks["Stop"] == []
 PY
-pass "Codex lifecycle hooks and context limit"
+pass "Codex lifecycle hooks and full-memory context limit"
 
 invalid_home="$TEST_ROOT/invalid-json-home"
 invalid_settings="$invalid_home/settings.json"
@@ -505,13 +616,198 @@ home = Path(sys.argv[1])
 hermes = (home / ".hermes/config.yaml").read_text(encoding="utf-8")
 kimi = tomllib.loads((home / ".kimi-code/config.toml").read_text(encoding="utf-8"))
 allowlist = json.loads((home / ".hermes/shell-hooks-allowlist.json").read_text(encoding="utf-8"))
-plain_command = kimi["hooks"][0]["command"]
-assert plain_command.startswith('bash "') and plain_command.endswith('" --format plain')
-command = plain_command.removesuffix(" --format plain") + " --format hermes"
-assert f'command: "{command.replace(chr(34), chr(92) + chr(34))}"' in hermes
-assert {"event": "pre_llm_call", "command": command} in allowlist["approvals"]
+hooks = kimi["hooks"]
+assert [hook["event"] for hook in hooks] == ["SessionStart", "UserPromptSubmit", "Stop"]
+assert hooks[0]["matcher"] == "^(startup|resume)$"
+assert all(hook["timeout"] == 30 for hook in hooks)
+assert hooks[0]["command"].endswith('/hooks/kimi-session-start.sh"')
+assert hooks[1]["command"].endswith('/hooks/kimi-user-prompt.sh"')
+assert hooks[2]["command"].endswith('/hooks/kimi-artifact-stop.sh"')
+hermes_command = next(item["command"] for item in allowlist["approvals"] if item["event"] == "pre_llm_call")
+assert hermes_command.endswith('/hooks/session-start.sh" --format hermes')
+assert f'command: "{hermes_command.replace(chr(34), chr(92) + chr(34))}"' in hermes
 PY
-pass "quoted Hermes and Kimi paths"
+pass "quoted Hermes and Kimi lifecycle paths"
+
+kimi_state="$runtime_home/kimi-hook-state"
+kimi_session='{"hook_event_name":"SessionStart","session_id":"fixture-session","cwd":"/tmp","source":"startup"}'
+kimi_prompt='{"hook_event_name":"UserPromptSubmit","session_id":"fixture-session","cwd":"/tmp","prompt":[{"type":"text","text":"test"}],"is_steer":false}'
+printf '%s\n' "$kimi_session" | CHOIRBOY_STATE_DIR="$kimi_state" \
+  bash hooks/kimi-session-start.sh > "$TEST_ROOT/kimi-session-start.out"
+test ! -s "$TEST_ROOT/kimi-session-start.out"
+printf '%s\n' "$kimi_prompt" | CHOIRBOY_STATE_DIR="$kimi_state" \
+  bash hooks/kimi-user-prompt.sh > "$TEST_ROOT/kimi-prompt-first.out"
+grep -q 'CHOIRBOY_DOSSIER_CANARY_7f51c92d' "$TEST_ROOT/kimi-prompt-first.out"
+printf '%s\n' "$kimi_prompt" | CHOIRBOY_STATE_DIR="$kimi_state" \
+  bash hooks/kimi-user-prompt.sh > "$TEST_ROOT/kimi-prompt-second.out"
+test ! -s "$TEST_ROOT/kimi-prompt-second.out"
+printf '%s\n' "$kimi_session" | CHOIRBOY_STATE_DIR="$kimi_state" \
+  bash hooks/kimi-session-start.sh >/dev/null
+printf '%s\n' "$kimi_prompt" | CHOIRBOY_STATE_DIR="$kimi_state" \
+  bash hooks/kimi-user-prompt.sh > "$TEST_ROOT/kimi-prompt-resume.out"
+grep -q 'CHOIRBOY_DOSSIER_CANARY_7f51c92d' "$TEST_ROOT/kimi-prompt-resume.out"
+printf '{"hook_event_name":"Stop","session_id":"fixture-session","cwd":"/tmp","stop_hook_active":false}\n' \
+  | bash hooks/kimi-artifact-stop.sh > "$TEST_ROOT/kimi-stop-ready.out" 2> "$TEST_ROOT/kimi-stop-ready.err"
+test ! -s "$TEST_ROOT/kimi-stop-ready.out"
+test ! -s "$TEST_ROOT/kimi-stop-ready.err"
+if printf '{"hook_event_name":"Stop","session_id":"pending-session","cwd":"/tmp","stop_hook_active":false}\n' \
+  | CHOIRBOY_ARTIFACTS_DIR="$TEST_ROOT/kimi-pending-artifacts" \
+    bash hooks/kimi-artifact-stop.sh > "$TEST_ROOT/kimi-stop-pending.out" 2> "$TEST_ROOT/kimi-stop-pending.err"; then
+  echo "Kimi Stop accepted pending artifacts" >&2
+  exit 1
+else
+  test "$?" = 2
+fi
+test ! -s "$TEST_ROOT/kimi-stop-pending.out"
+grep -q 'bootstrap is still incomplete' "$TEST_ROOT/kimi-stop-pending.err"
+printf '{"hook_event_name":"Stop","session_id":"pending-session","cwd":"/tmp","stop_hook_active":true}\n' \
+  | CHOIRBOY_ARTIFACTS_DIR="$TEST_ROOT/kimi-pending-artifacts" \
+    bash hooks/kimi-artifact-stop.sh > "$TEST_ROOT/kimi-stop-active.out" 2> "$TEST_ROOT/kimi-stop-active.err"
+test ! -s "$TEST_ROOT/kimi-stop-active.out"
+test ! -s "$TEST_ROOT/kimi-stop-active.err"
+pass "Kimi model-visible delivery and exit-2 completion gate"
+
+legacy_commit="25078a62f13e97ed1a2eb98c4e73bc1aa8b2f1bb"
+legacy_zip="$TEST_ROOT/legacy-25078.zip"
+legacy_root="$TEST_ROOT/legacy-25078-root"
+upgrade_home="$TEST_ROOT/upgrade-home"
+upgrade_custom="$upgrade_home/custom/AGENTS.md"
+git archive --format=zip --output="$legacy_zip" "$legacy_commit"
+python3 - "$legacy_zip" "$legacy_root" <<'PY'
+import sys, zipfile
+from pathlib import Path
+
+destination = Path(sys.argv[2])
+destination.mkdir(parents=True)
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    archive.extractall(destination)
+PY
+mkdir -p "$upgrade_home/.claude" "$upgrade_home/.codex" "$upgrade_home/.hermes" \
+  "$upgrade_home/.kimi-code" "$upgrade_home/.gemini" "$upgrade_home/.grok" \
+  "$(dirname "$upgrade_custom")"
+printf '%s\n' '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"foreign-claude-hook"}]}]}}' \
+  > "$upgrade_home/.claude/settings.json"
+printf '%s\n' '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"foreign-codex-hook"}]}]}}' \
+  > "$upgrade_home/.codex/hooks.json"
+printf '%s\n' '# hermes user sentinel' > "$upgrade_home/.hermes/config.yaml"
+printf '%s\n' '{"approvals":[{"event":"pre_llm_call","command":"foreign-hermes-hook"}]}' \
+  > "$upgrade_home/.hermes/shell-hooks-allowlist.json"
+printf '%s\n' '# kimi user sentinel' > "$upgrade_home/.kimi-code/config.toml"
+printf '%s\n' '<!-- gemini user sentinel -->' > "$upgrade_home/.gemini/GEMINI.md"
+printf '%s\n' '<!-- grok user sentinel -->' > "$upgrade_home/.grok/AGENTS.md"
+printf '%s\n' '# custom user sentinel' > "$upgrade_custom"
+
+upgrade_targets="claude,codex,opencode,hermes,kimi,gemini,grok,grokbot"
+env -u CHOIRBOY_ARTIFACTS_DIR HOME="$upgrade_home" \
+  bash "$legacy_root/install.sh" --target "$upgrade_targets" --instructions "$upgrade_custom" >/dev/null
+env -u CHOIRBOY_ARTIFACTS_DIR HOME="$upgrade_home" ./install.sh --list \
+  > "$TEST_ROOT/upgrade-before-list.txt"
+for target in claude codex opencode hermes kimi gemini grok grokbot; do
+  grep -Eq "^${target}[[:space:]]+stale[[:space:]]+" "$TEST_ROOT/upgrade-before-list.txt"
+done
+
+env -u CHOIRBOY_ARTIFACTS_DIR HOME="$upgrade_home" \
+  ./install.sh --target "$upgrade_targets" --instructions "$upgrade_custom" >/dev/null
+mv "$legacy_root" "$legacy_root.retired"
+env -u CHOIRBOY_ARTIFACTS_DIR HOME="$upgrade_home" ./install.sh --list \
+  > "$TEST_ROOT/upgrade-after-list.txt"
+for target in claude codex opencode hermes kimi gemini grok; do
+  grep -Eq "^${target}[[:space:]]+installed[[:space:]]+" "$TEST_ROOT/upgrade-after-list.txt"
+done
+grep -Eq '^grokbot[[:space:]]+prepared[[:space:]]+' "$TEST_ROOT/upgrade-after-list.txt"
+
+python3 - "$upgrade_home" "$upgrade_custom" "$legacy_root" "$ROOT" <<'PY'
+import json, sys, tomllib
+from pathlib import Path
+
+home, custom, legacy, current = map(Path, sys.argv[1:])
+live = [
+    home / ".claude/settings.json",
+    home / ".codex/hooks.json",
+    home / ".config/opencode/plugins/agent-plugin.ts",
+    home / ".hermes/config.yaml",
+    home / ".hermes/shell-hooks-allowlist.json",
+    home / ".kimi-code/config.toml",
+    home / ".gemini/GEMINI.md",
+    home / ".grok/AGENTS.md",
+    home / ".grokbot/choirboy-context/SKILL.md",
+    custom,
+]
+for path in live:
+    text = path.read_text(encoding="utf-8")
+    assert str(legacy) not in text, f"stale checkout path remains in {path}"
+
+claude = json.loads(live[0].read_text(encoding="utf-8"))["hooks"]
+codex = json.loads(live[1].read_text(encoding="utf-8"))["hooks"]
+for hooks in (claude, codex):
+    flat = [handler for entries in hooks.values() for entry in entries for handler in entry["hooks"]]
+    joined = json.dumps(flat)
+    assert str(current / "hooks/session-start.sh") in joined
+    assert str(current / "hooks/artifact-stop.sh") in joined
+    assert "foreign-" in joined
+
+opencode = live[2].read_text(encoding="utf-8")
+assert str(current / "hooks/session-start.sh") in opencode
+assert "agent-plugin:vibe-lore:registration=2" in opencode
+
+hermes = live[3].read_text(encoding="utf-8")
+allowlist = json.loads(live[4].read_text(encoding="utf-8"))["approvals"]
+assert "# hermes user sentinel" in hermes
+assert str(current / "hooks/session-start.sh") in hermes
+assert {"event": "pre_llm_call", "command": "foreign-hermes-hook"} in allowlist
+owned = [entry for entry in allowlist if "session-start.sh" in entry.get("command", "")]
+assert len(owned) == 1 and str(current / "hooks/session-start.sh") in owned[0]["command"]
+
+kimi_text = live[5].read_text(encoding="utf-8")
+kimi = tomllib.loads(kimi_text)
+assert "# kimi user sentinel" in kimi_text
+assert [hook["event"] for hook in kimi["hooks"]] == ["SessionStart", "UserPromptSubmit", "Stop"]
+assert str(current / "hooks/kimi-session-start.sh") in kimi_text
+assert str(current / "hooks/kimi-user-prompt.sh") in kimi_text
+assert str(current / "hooks/kimi-artifact-stop.sh") in kimi_text
+
+for path, sentinel in (
+    (live[6], "gemini user sentinel"),
+    (live[7], "grok user sentinel"),
+    (live[9], "custom user sentinel"),
+):
+    text = path.read_text(encoding="utf-8")
+    assert sentinel in text
+    assert "agent-plugin:vibe-lore:registration=2" in text
+    assert str(current / "scripts/artifact-generator.py") in text
+
+grokbot = live[8].read_text(encoding="utf-8")
+assert "agent-plugin:vibe-lore:registration=2" in grokbot
+assert any(home.rglob("*.bak.*")), "upgrade must retain timestamped backups"
+PY
+
+python3 - "$upgrade_home" > "$TEST_ROOT/upgrade-snapshot.before" <<'PY'
+import hashlib, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+for path in sorted(root.rglob("*")):
+    if path.is_file() and ".bak." not in path.name:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        print(path.relative_to(root).as_posix(), digest)
+PY
+find "$upgrade_home" -type f -name '*.bak.*' | sort > "$TEST_ROOT/upgrade-backups.before"
+env -u CHOIRBOY_ARTIFACTS_DIR HOME="$upgrade_home" \
+  ./install.sh --target "$upgrade_targets" --instructions "$upgrade_custom" >/dev/null
+python3 - "$upgrade_home" > "$TEST_ROOT/upgrade-snapshot.after" <<'PY'
+import hashlib, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+for path in sorted(root.rglob("*")):
+    if path.is_file() and ".bak." not in path.name:
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        print(path.relative_to(root).as_posix(), digest)
+PY
+find "$upgrade_home" -type f -name '*.bak.*' | sort > "$TEST_ROOT/upgrade-backups.after"
+cmp "$TEST_ROOT/upgrade-snapshot.before" "$TEST_ROOT/upgrade-snapshot.after"
+cmp "$TEST_ROOT/upgrade-backups.before" "$TEST_ROOT/upgrade-backups.after"
+pass "25078a6 registrations migrate paths, lifecycle, backups, and idempotency"
 
 opencode_home="$TEST_ROOT/opencode-home"
 opencode_plugin="$opencode_home/.config/opencode/plugins/agent-plugin.ts"
@@ -524,7 +820,8 @@ from pathlib import Path
 
 plugin = Path(sys.argv[1]).read_text(encoding="utf-8")
 hook = sys.argv[2]
-assert plugin.count("agent-plugin:vibe-lore") == 2
+assert plugin.count("agent-plugin:vibe-lore") == 3
+assert "agent-plugin:vibe-lore:registration=2" in plugin
 assert f"const HOOK_SCRIPT = {json.dumps(hook)}" in plugin
 assert '"chat.message"' in plugin
 assert "new Set<string>()" in plugin
@@ -648,6 +945,9 @@ required = {
     ".claude-plugin/marketplace.json",
     "hooks/hooks.json",
     "hooks/artifact-stop.sh",
+    "hooks/kimi-artifact-stop.sh",
+    "hooks/kimi-session-start.sh",
+    "hooks/kimi-user-prompt.sh",
     "hooks/session-start.sh",
     "scripts/artifact-generator.py",
     "skills/load-context/SKILL.md",
@@ -676,6 +976,9 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
     for executable in (
         "hooks/session-start.sh",
         "hooks/artifact-stop.sh",
+        "hooks/kimi-artifact-stop.sh",
+        "hooks/kimi-session-start.sh",
+        "hooks/kimi-user-prompt.sh",
         "scripts/artifact-generator.py",
     ):
         mode = archive.getinfo(executable).external_attr >> 16

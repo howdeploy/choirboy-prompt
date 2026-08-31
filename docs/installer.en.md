@@ -75,14 +75,24 @@ Three modes:
 |---|---|
 | install (default) | Registers hooks/blocks and prepares the artifact request |
 | `--uninstall` | Removes registrations but preserves agent-authored artifacts |
-| `--list` | Read-only status: `absent` / `detected` / `installed` |
+| `--list` | Read-only status: `absent` / `detected` / `stale` / `installed` (`prepared` for Grok Bot) |
 
 `install.sh` requires `python3` for JSON operations. The hook's `claude` and
 `plain` formats run on Bash without `jq`/`python3`; the `hermes` format requires
 one of those two JSON parsers. The automatic artifact lifecycle requires
 `python3`: installation prepares metadata only, while the next session asks the
-current agent to write dossiers and pass the validator. Manual installs default
-to `artifacts/`; `CHOIRBOY_ARTIFACTS_DIR` overrides that location.
+current agent to write dossiers and pass the validator. Artifact storage is
+stable across checkout changes. Root precedence is
+`CHOIRBOY_ARTIFACTS_DIR` → `${CLAUDE_PLUGIN_DATA}/project-artifacts` →
+`${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
+`~/.local/share/choirboy-prompt/project-artifacts`.
+
+Before rewriting registrations, the installer inspects current and legacy hook
+paths plus the current checkout's `artifacts/`. If the stable root has no
+agent-authored payload, it copies the first legacy INDEX/manifest/dossier bundle
+there. Existing stable artifacts are never overwritten, and uninstall preserves
+them. A ready bundle is fully revalidated and embedded inline in hook context;
+the runtime does not receive only an INDEX path.
 
 ---
 
@@ -95,7 +105,7 @@ claude) command -v claude >/dev/null 2>&1 || [ -d "$HOME/.claude" ] ;;
 codex)  command -v codex  >/dev/null 2>&1 || [ -d "$HOME/.codex" ] ;;
 opencode) command -v opencode >/dev/null 2>&1 || [ -d "$HOME/.config/opencode" ] ;;
 hermes) command -v hermes >/dev/null 2>&1 || [ -d "$HOME/.hermes" ] ;;
-kimi)   command -v kimi   >/dev/null 2>&1 || [ -d "$HOME/.kimi-code" ] ;;
+kimi)   command -v kimi   >/dev/null 2>&1 || [ -d "${KIMI_CODE_HOME:-$HOME/.kimi-code}" ] ;;
 gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
 ```
 
@@ -114,9 +124,9 @@ Each target writes to its own file:
 | codex | `~/.codex/hooks.json` | JSON hooks `SessionStart` + `Stop` |
 | opencode | `~/.config/opencode/plugins/agent-plugin.ts` | global `chat.message` plugin |
 | hermes | `~/.hermes/config.yaml` | marked `hooks.pre_llm_call` block + consent allowlist |
-| kimi | `~/.kimi-code/config.toml` | marked `[[hooks]]` block |
-| gemini | `~/.gemini/GEMINI.md` | marked HTML pointer block |
-| `--instructions FILE` | any file | marked pointer block (HTML or `#`) |
+| kimi | `${KIMI_CODE_HOME:-~/.kimi-code}/config.toml` | marked SessionStart + UserPromptSubmit + Stop hooks |
+| gemini | `~/.gemini/GEMINI.md` | marked HTML lifecycle instruction block |
+| `--instructions FILE` | any file | marked lifecycle instruction block (HTML or `#`) |
 
 ---
 
@@ -132,11 +142,15 @@ All blocks are marked `MARK="agent-plugin:vibe-lore"`. Marker forms:
   `<!-- agent-plugin:vibe-lore END -->`
 
 The marker is both the ownership identifier and the block boundary for removal.
+Current generated blocks also carry
+`agent-plugin:vibe-lore:registration=2`; `--list` uses that revision and exact
+script paths to distinguish a current install from a `stale` one.
 
 ### 3.2. Idempotency
 
-- `block_add` checks the START marker: already present → `already present — skipped`,
-  duplicates nothing.
+- `block_sync` appends a missing managed block or atomically replaces the one
+  complete START/END block with the current generated text. Surrounding user
+  content is preserved; malformed, duplicate, or nested markers are refused.
 - `json_hook` matches entries by script name (`session-start.sh` or
   `artifact-stop.sh` in the
   command), not by absolute path: if the plugin folder moved, the stale
@@ -146,16 +160,17 @@ The marker is both the ownership identifier and the block boundary for removal.
   alternatives, not two layers to enable at once.
 - The OpenCode target owns one complete marked plugin file. An identical
   reinstall is a no-op; an update is backed up and replaced atomically.
+- Hermes consent entries, Kimi's three hooks, Gemini/Grok instruction blocks,
+  and arbitrary `--instructions` blocks are synchronized on every installer
+  run. Old absolute paths and old registration revisions are upgraded in place.
 
-### 3.3. The marker pitfall
+### 3.3. Managed-block upgrades
 
-`block_add` is idempotent by the START marker. This means: if `instruction_block`
-(the pointer-block text) is edited, already-installed blocks (GEMINI.md,
-`--instructions` files) **will not update** — the installer says
-`already present — skipped`, the copy stays old. Remedy: patch the installed
-file manually or `--uninstall` + install.
-
-After any `instruction_block` edit — grep by the marker in installed files.
+The old skip-only behavior is gone. Re-running install regenerates and replaces
+an owned block when its script path, lifecycle text, or registration revision
+changed, with a timestamped backup first. `--list` reports `stale` when an owned
+registration exists but is not the exact current registration. Run the normal
+install command to synchronize it; an uninstall/install cycle is not required.
 
 ---
 
@@ -184,14 +199,16 @@ JSON entries, does not touch foreign ones.
 |---|---|---|
 | `target_present` | Runtime detection | binary or config dir |
 | `claude_settings_file` | Where to write the Claude hook | `--settings` > `--project` > `~/.claude/settings.json` |
-| `target_installed` | Already installed? | grep by marker/script name |
+| `target_installed` | Exact current install? | per-target revision/path/hook checks |
+| `target_managed_present` | Older owned install? | ownership marker/script ids; drives `stale` |
 | `backup` | Backup before edit | `cp -p` with timestamp |
-| `block_add` | Add a marked block | idempotent by START |
+| `block_sync` | Add or upgrade a marked block | exact START/END replacement, atomic write |
 | `block_remove` | Remove a marked block | by START/END, cleans the trailing blank line |
 | `json_hook` | Hook into Claude-shaped JSON | match by script name, `is_ours()`/`has_exact()` |
 | `opencode_plugin` | Manage the OpenCode adapter | marked-file guard, atomic replace, timestamped backup |
 | `hermes_allowlist` | Hermes consent allowlist | exact (event, command) pair |
-| `instruction_block` | Pointer-block text | HTML or `#` comments |
+| `instruction_block` | Lifecycle instruction text | HTML or `#` comments |
+| `discover_legacy_artifact_roots` | Find old checkout-local bundles | inspect old managed absolute paths |
 | `do_claude` / `do_codex` / `do_opencode` / `do_hermes` / `do_kimi` / `do_gemini` | Target install | per-target logic |
 | `do_instructions` | Install into an arbitrary file | style by extension |
 
@@ -210,7 +227,8 @@ def is_ours(entry):
 - install: removes stale registrations of our script (folder moved), adds the
   exact handler if absent. Claude receives `command: bash`, one `args` path, and
   `timeout: 15`; Codex keeps its quoted command and sets
-  `additionalContextLimit: 20000` for the complete startup payload.
+  `additionalContextLimit: 262144` so the fixed lore and inline artifact memory
+  remain in the same startup context.
 - uninstall: removes all `is_ours()` entries.
 - Invalid JSON is never replaced; real changes are backed up and written
   atomically.
@@ -222,13 +240,33 @@ in `~/.hermes/shell-hooks-allowlist.json`. The function adds/removes the exact
 pair `("pre_llm_call", "<session-start.sh> --format hermes")`, refuses malformed
 JSON, and writes valid changes atomically.
 
-### 5.3. `block_add` / `block_remove` — details
+### 5.3. `block_sync` / `block_remove` — details
 
 Work with text configs (config.yaml, config.toml, GEMINI.md):
 
-- add: appends the block at the end (with a blank line before) if START is absent.
+- sync: appends the block if absent; otherwise replaces exactly one complete
+  START/END range, preserving all surrounding content. Identical text is a no-op.
+- safety: malformed, duplicate, or nested markers stop the install instead of
+  guessing ownership. A real update is backed up and written atomically.
 - remove: cuts from START to END inclusive, removes one preceding blank line if
   it was left by add.
+
+### 5.4. Kimi 0.39.x lifecycle hooks
+
+Kimi 0.39.x discards `SessionStart` stdout, so the managed TOML block installs
+three hooks:
+
+- `SessionStart` (`startup|resume`) prepares artifact state and resets the
+  once-per-session delivery marker;
+- the first `UserPromptSubmit` runs the canonical plain delivery and emits the
+  fixed lore plus either the bootstrap request or validated inline artifacts;
+- `Stop` exits 2 with the continuation request on stderr while validation is
+  pending, and exits 0 at `ready`.
+
+The state markers live below
+`${KIMI_CODE_HOME:-~/.kimi-code}/choirboy-prompt/hook-state` unless
+`CHOIRBOY_STATE_DIR` overrides them. Delivery is marked only after stdout was
+emitted successfully.
 
 ---
 
@@ -242,12 +280,14 @@ Work with text configs (config.yaml, config.toml, GEMINI.md):
 3. **Codex: hooks disabled.** `grep hooks = true` in `~/.codex/config.toml`
    not found → warning (not a block).
 4. **File absent.** `mkdir -p` + creating an empty `{}`/empty file.
-5. **Plugin folder moved.** JSON hooks match by script name — old entries are
-   replaced, no duplicates.
-6. **Re-run.** Everything is idempotent: `unchanged`/`skipped`.
+5. **Plugin folder moved.** JSON hooks match by script name and managed text
+   blocks are synchronized — old absolute paths are replaced, not duplicated.
+6. **Re-run or upgrade.** Current registrations are no-ops; old owned ones are
+   reported as `stale` and upgraded in place by normal install.
 7. **`--uninstall` without an install.** `no block in file — skipped`, does not
    fail.
-8. **`--target none` + `--instructions`.** Only pointer blocks, no runtimes.
+8. **`--target none` + `--instructions`.** Only managed lifecycle instruction
+   blocks, no runtime-specific hooks.
 9. **Parallel Hermes starts.** State file in `/tmp` without locks — races are
    possible (known limitation, see README).
 10. **Foreign OpenCode plugin at the managed path.** Install and uninstall
@@ -260,6 +300,8 @@ Work with text configs (config.yaml, config.toml, GEMINI.md):
 ```bash
 ./install.sh --list                    # statuses
 ./install.sh --target opencode         # install the global OpenCode adapter
+python3 scripts/artifact-generator.py status
+python3 scripts/artifact-generator.py verify  # exit 2 unless fully ready
 grep -F 'agent-plugin:vibe-lore' ~/.config/opencode/plugins/agent-plugin.ts
 bash hooks/session-start.sh --format plain | head -40   # payload
 echo '{"session_id":"hook-check","extra":{"is_first_turn":true}}' \
@@ -267,6 +309,11 @@ echo '{"session_id":"hook-check","extra":{"is_first_turn":true}}' \
 echo '{"session_id":"hook-check","extra":{"is_first_turn":false}}' \
   | bash hooks/session-start.sh --format hermes            # → {}
 ```
+
+In `--list`, `stale` is actionable: rerun install for that target and verify it
+becomes `installed` (or `prepared` for Grok Bot). For a ready artifact bundle,
+`session-context` must contain `choirboy-artifact` blocks with full INDEX and
+dossier bodies; a path-only message is not a successful memory delivery.
 
 The full ad-hoc suite — [docs/testing.en.md](testing.en.md).
 

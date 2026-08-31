@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import sys
 import tempfile
 import unicodedata
@@ -242,6 +243,66 @@ def prepare(source_root: Path, artifact_root: Path) -> dict[str, Any]:
     return request
 
 
+def has_authored_payload(artifact_root: Path) -> bool:
+    if (artifact_root / INDEX_FILE).is_file() or (artifact_root / MANIFEST_FILE).is_file():
+        return True
+    projects_root = artifact_root / PROJECTS_DIR
+    return projects_root.is_dir() and any(projects_root.rglob("*.md"))
+
+
+def migrate_legacy_artifacts(legacy_root: Path, artifact_root: Path) -> bool:
+    """Copy an old checkout-local artifact bundle without overwriting new work."""
+
+    legacy_input = legacy_root.expanduser()
+    artifact_input = artifact_root.expanduser()
+    if legacy_input.is_symlink() or artifact_input.is_symlink():
+        raise ArtifactError("refusing symlink artifact root during migration")
+    legacy_root = legacy_input.resolve()
+    artifact_root = artifact_input.resolve()
+    if legacy_root == artifact_root or not legacy_root.exists():
+        return False
+    if legacy_root.is_symlink() or not legacy_root.is_dir():
+        raise ArtifactError(f"refusing unsafe legacy artifact root: {legacy_root}")
+    if has_authored_payload(artifact_root):
+        return False
+
+    candidates: list[tuple[Path, Path]] = []
+    for relative in (INDEX_FILE, MANIFEST_FILE):
+        source = legacy_root / relative
+        if source.exists():
+            candidates.append((source, artifact_root / relative))
+    projects_root = legacy_root / PROJECTS_DIR
+    if projects_root.is_symlink():
+        raise ArtifactError(f"refusing unsafe legacy projects directory: {projects_root}")
+    if projects_root.is_dir():
+        for source in sorted(projects_root.rglob("*.md")):
+            candidates.append((source, artifact_root / source.relative_to(legacy_root)))
+    if not candidates:
+        return False
+
+    for source, destination in candidates:
+        if source.is_symlink() or not source.is_file():
+            raise ArtifactError(f"refusing unsafe legacy artifact file: {source}")
+        if destination.exists():
+            raise ArtifactError(f"refusing to overwrite artifact during migration: {destination}")
+    for source, destination in candidates:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{destination.name}.migrate.", dir=destination.parent
+        )
+        os.close(descriptor)
+        temporary = Path(temporary_name)
+        try:
+            shutil.copyfile(source, temporary)
+            os.replace(temporary, destination)
+        finally:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+    return True
+
+
 def load_json(path: Path) -> dict[str, Any] | None:
     if not path.is_file() or path.is_symlink():
         return None
@@ -261,11 +322,10 @@ def split_sections(document: str) -> dict[str, str]:
     return sections
 
 
-def validate_project_file(path: Path, project: dict[str, Any]) -> list[str]:
+def validate_project_document(
+    path: Path, document: str, project: dict[str, Any]
+) -> list[str]:
     errors: list[str] = []
-    if not path.is_file() or path.is_symlink():
-        return [f"missing agent-authored artifact: {path}"]
-    document = read_text(path)
     first_line = next((line.strip() for line in document.splitlines() if line.strip()), "")
     if first_line != f"# {project['title']}":
         errors.append(f"{path}: first heading must be '# {project['title']}'")
@@ -282,11 +342,19 @@ def validate_project_file(path: Path, project: dict[str, Any]) -> list[str]:
     return errors
 
 
-def validate_index(path: Path, projects: list[dict[str, Any]]) -> list[str]:
+def validate_project_file(path: Path, project: dict[str, Any]) -> list[str]:
     if not path.is_file() or path.is_symlink():
-        return [f"missing agent-authored index: {path}"]
-    document = read_text(path)
+        return [f"missing agent-authored artifact: {path}"]
+    return validate_project_document(path, read_text(path), project)
+
+
+def validate_index_document(
+    path: Path, document: str, projects: list[dict[str, Any]]
+) -> list[str]:
     errors = []
+    first_line = next((line.strip() for line in document.splitlines() if line.strip()), "")
+    if not first_line.startswith("# "):
+        errors.append(f"{path}: index must start with a level-one heading")
     for project in projects:
         link = f"[{project['title']}]({project['artifact']})"
         if link not in document:
@@ -294,11 +362,22 @@ def validate_index(path: Path, projects: list[dict[str, Any]]) -> list[str]:
     return errors
 
 
+def validate_index(path: Path, projects: list[dict[str, Any]]) -> list[str]:
+    if not path.is_file() or path.is_symlink():
+        return [f"missing agent-authored index: {path}"]
+    return validate_index_document(path, read_text(path), projects)
+
+
 def validate_project_set(artifact_root: Path, projects: list[dict[str, Any]]) -> list[str]:
+    projects_root = artifact_root / PROJECTS_DIR
+    if projects_root.is_symlink():
+        return [f"unsafe symlink projects directory: {projects_root}"]
+    if not projects_root.is_dir():
+        return [f"missing projects directory: {projects_root}"]
     expected = {project["artifact"] for project in projects}
     actual = {
         path.relative_to(artifact_root).as_posix()
-        for path in (artifact_root / PROJECTS_DIR).rglob("*.md")
+        for path in projects_root.rglob("*.md")
     }
     return [
         f"unexpected project artifact: {artifact_root / relative}"
@@ -310,48 +389,80 @@ def artifact_file_digest(path: Path) -> str:
     return sha256_text(read_text(path))
 
 
-def current_status(request: dict[str, Any], artifact_root: Path) -> dict[str, Any]:
-    manifest = load_json(artifact_root / MANIFEST_FILE)
+def inspect_artifacts(
+    request: dict[str, Any], artifact_root: Path
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Validate one in-memory snapshot and return documents only when ready."""
+
     reasons: list[str] = []
+    documents: dict[str, str] = {}
+    manifest = load_json(artifact_root / MANIFEST_FILE)
+
     if manifest is None:
         reasons.append("completion manifest is missing or invalid")
-    elif manifest.get("schema_version") != SCHEMA_VERSION:
-        reasons.append("completion manifest schema is stale")
-    elif manifest.get("source_sha256") != request["source_sha256"]:
-        reasons.append("canonical lore or research changed")
     else:
-        expected_slugs = [project["slug"] for project in request["projects"]]
-        records = manifest.get("projects")
-        if not isinstance(records, dict) or set(records) != set(expected_slugs):
-            reasons.append("project set changed")
-        index = artifact_root / INDEX_FILE
-        if not reasons:
-            if not index.is_file() or index.is_symlink():
-                reasons.append("artifact index is missing")
-            elif artifact_file_digest(index) != manifest.get("index_sha256"):
-                reasons.append("artifact index changed after finalization")
-        if not reasons:
-            for project in request["projects"]:
-                record = records.get(project["slug"], {})
-                path = artifact_root / project["artifact"]
-                if not isinstance(record, dict):
-                    reasons.append(f"invalid manifest record: {project['slug']}")
-                    continue
+        if manifest.get("schema_version") != SCHEMA_VERSION:
+            reasons.append("completion manifest schema is stale")
+        if manifest.get("source_sha256") != request["source_sha256"]:
+            reasons.append("canonical lore or research changed")
+
+    expected_slugs = [project["slug"] for project in request["projects"]]
+    records = manifest.get("projects") if isinstance(manifest, dict) else None
+    records_valid = isinstance(records, dict) and set(records) == set(expected_slugs)
+    if not records_valid:
+        reasons.append("project set changed")
+
+    index_path = artifact_root / INDEX_FILE
+    if not index_path.is_file() or index_path.is_symlink():
+        reasons.append("artifact index is missing or unsafe")
+    else:
+        documents[INDEX_FILE] = read_text(index_path)
+        reasons.extend(
+            validate_index_document(index_path, documents[INDEX_FILE], request["projects"])
+        )
+        if isinstance(manifest, dict) and sha256_text(documents[INDEX_FILE]) != manifest.get(
+            "index_sha256"
+        ):
+            reasons.append("artifact index changed after finalization")
+
+    reasons.extend(validate_project_set(artifact_root, request["projects"]))
+    for project in request["projects"]:
+        relative = project["artifact"]
+        path = artifact_root / relative
+        record = records.get(project["slug"]) if records_valid else None
+        if records_valid:
+            if not isinstance(record, dict):
+                reasons.append(f"invalid manifest record: {project['slug']}")
+                record = None
+            else:
+                if record.get("path") != relative:
+                    reasons.append(f"invalid manifest path: {project['slug']}")
                 if record.get("source_sha256") != project["source_sha256"]:
                     reasons.append(f"stale source digest: {project['slug']}")
-                    continue
-                if not path.is_file() or path.is_symlink():
-                    reasons.append(f"artifact is missing: {project['artifact']}")
-                    continue
-                if artifact_file_digest(path) != record.get("artifact_sha256"):
-                    reasons.append(f"artifact changed after finalization: {project['artifact']}")
-    return {
+        if not path.is_file() or path.is_symlink():
+            reasons.append(f"artifact is missing or unsafe: {relative}")
+            continue
+        document = read_text(path)
+        documents[relative] = document
+        reasons.extend(validate_project_document(path, document, project))
+        if isinstance(record, dict) and sha256_text(document) != record.get("artifact_sha256"):
+            reasons.append(f"artifact changed after finalization: {relative}")
+
+    # Keep reasons deterministic and compact when one broken input causes the
+    # same diagnostic through more than one validation branch.
+    reasons = list(dict.fromkeys(reasons))
+    status = {
         "status": "ready" if not reasons else "pending",
         "source_sha256": request["source_sha256"],
         "artifact_root": str(artifact_root),
         "project_count": len(request["projects"]),
         "reasons": reasons,
     }
+    return status, documents if not reasons else {}
+
+
+def current_status(request: dict[str, Any], artifact_root: Path) -> dict[str, Any]:
+    return inspect_artifacts(request, artifact_root)[0]
 
 
 def finalize(request: dict[str, Any], artifact_root: Path) -> dict[str, Any]:
@@ -373,12 +484,14 @@ def finalize(request: dict[str, Any], artifact_root: Path) -> dict[str, Any]:
         "schema_version": SCHEMA_VERSION,
         "source_sha256": request["source_sha256"],
         "completed_at": datetime.now(timezone.utc).isoformat(),
-        "content_author": "runtime-agent",
         "index_sha256": artifact_file_digest(artifact_root / INDEX_FILE),
         "projects": records,
     }
     atomic_write(artifact_root / MANIFEST_FILE, json_text(manifest))
-    return current_status(request, artifact_root)
+    status = current_status(request, artifact_root)
+    if status["status"] != "ready":
+        raise ArtifactError("artifact snapshot changed during finalization")
+    return status
 
 
 def quoted_command(source_root: Path, artifact_root: Path) -> str:
@@ -414,10 +527,11 @@ file tools до обычной проектной работы, затем пр�
 пользователя. Скрипт не генерирует содержимое и не заменяет твою работу.
 
 1. Прочитай полностью `{source_root / 'lore.md'}`, `{source_root / 'prompt.md'}`,
-   `{source_root / 'security-posture.md'}`, `{source_root / 'user.md'}`,
-   `{source_root / 'context/research-index.md'}` и все Markdown-файлы внутри
-   `{source_root / 'research'}`. Не выводи факты, которых нет в этих источниках;
-   пробелы фиксируй фразой «Не зафиксировано в источниках».
+   `{source_root / 'security-posture.md'}`, `{source_root / 'user.md'}` и
+   `{source_root / 'context/research-index.md'}`. Затем для каждого dossier
+   прочитай только перечисленные рядом с ним research-файлы; не загружай
+   несвязанные документы одним общим блоком. Не выводи факты, которых нет в
+   источниках; пробелы фиксируй фразой «Не зафиксировано в источниках».
 2. Создай `{artifact_root / INDEX_FILE}` и ровно эти dossiers:
 {project_lines(request)}
 3. В каждом dossier первая строка — `# <точное название проекта>`, затем
@@ -431,17 +545,32 @@ file tools до обычной проектной работы, затем пр�
 """
 
 
+def artifact_memory(request: dict[str, Any], documents: dict[str, str]) -> str:
+    order = [INDEX_FILE, *(project["artifact"] for project in request["projects"])]
+    blocks = [
+        "Validated project memory follows. Every file below passed the current "
+        "manifest, structure, source, and SHA-256 checks. Use it directly for "
+        "the current request; canonical lore/research wins if a conflict is found."
+    ]
+    for relative in order:
+        document = documents[relative]
+        path = html.escape(relative, quote=True)
+        digest = sha256_text(document)
+        content = html.escape(document.rstrip(), quote=False)
+        blocks.append(
+            f'<choirboy-artifact path="{path}" sha256="{digest}">\n'
+            f"{content}\n"
+            "</choirboy-artifact>"
+        )
+    return "\n\n".join(blocks)
+
+
 def session_context(request: dict[str, Any], artifact_root: Path) -> str:
-    status = current_status(request, artifact_root)
+    status, documents = inspect_artifacts(request, artifact_root)
     root = html.escape(str(artifact_root), quote=True)
     digest = html.escape(request["source_sha256"], quote=True)
     if status["status"] == "ready":
-        body = (
-            f"Проектные артефакты готовы: `{artifact_root / INDEX_FILE}`. "
-            "Перед решением задачи из описанного домена сначала прочитай INDEX и "
-            "соответствующий dossier. При расхождении канонические lore/research "
-            "сильнее производного артефакта."
-        )
+        body = artifact_memory(request, documents)
     else:
         body = bootstrap_instruction(request, artifact_root)
     return (
@@ -472,6 +601,25 @@ def stop_response(request: dict[str, Any], artifact_root: Path, hook_input: str)
     return {"decision": "block", "reason": reason}
 
 
+def kimi_stop_reason(
+    request: dict[str, Any], artifact_root: Path, hook_input: str
+) -> str | None:
+    try:
+        event = json.loads(hook_input) if hook_input.strip() else {}
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(event, dict) or event.get("stop_hook_active") is True:
+        return None
+    status = current_status(request, artifact_root)
+    if status["status"] == "ready":
+        return None
+    return (
+        bootstrap_instruction(request, artifact_root)
+        + "\nKimi Stop validation found that the bootstrap is still incomplete. "
+        "Continue in this session, repair every validator error, and run finalize."
+    )
+
+
 def default_artifact_root() -> Path:
     configured = os.environ.get("CHOIRBOY_ARTIFACTS_DIR")
     if configured:
@@ -479,17 +627,38 @@ def default_artifact_root() -> Path:
     plugin_data = os.environ.get("CLAUDE_PLUGIN_DATA")
     if plugin_data:
         return Path(plugin_data) / "project-artifacts"
-    return PLUGIN_ROOT / "artifacts"
+    data_home = os.environ.get("XDG_DATA_HOME")
+    if data_home:
+        return Path(data_home) / "choirboy-prompt" / "project-artifacts"
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if os.name == "nt" and local_app_data:
+        return Path(local_app_data) / "choirboy-prompt" / "project-artifacts"
+    return Path.home() / ".local" / "share" / "choirboy-prompt" / "project-artifacts"
 
 
 def parser() -> argparse.ArgumentParser:
     value = argparse.ArgumentParser(description=__doc__)
     value.add_argument(
         "command",
-        choices=("prepare", "status", "session-context", "stop", "finalize"),
+        choices=(
+            "prepare",
+            "status",
+            "verify",
+            "session-context",
+            "stop",
+            "stop-kimi",
+            "finalize",
+        ),
     )
     value.add_argument("--source-root", type=Path, default=PLUGIN_ROOT)
     value.add_argument("--root", type=Path, default=default_artifact_root())
+    value.add_argument(
+        "--migrate-from",
+        type=Path,
+        action="append",
+        default=[],
+        help="copy a legacy checkout-local artifact bundle when the stable root is empty",
+    )
     value.add_argument("--json", action="store_true", help="emit machine-readable status")
     return value
 
@@ -499,17 +668,37 @@ def main() -> int:
     try:
         source_root = args.source_root.resolve()
         artifact_root = args.root.resolve()
-        request = prepare(source_root, artifact_root)
+        if args.command in ("status", "verify"):
+            request = build_request(source_root, artifact_root)
+        else:
+            for legacy_root in args.migrate_from:
+                if migrate_legacy_artifacts(legacy_root, artifact_root):
+                    print(
+                        f"artifact-generator: migrated artifacts from {legacy_root}",
+                        file=sys.stderr,
+                    )
+                    break
+            request = prepare(source_root, artifact_root)
         if args.command == "prepare":
             result = current_status(request, artifact_root)
             print(json_text(result).rstrip() if args.json else f"{result['status']} {artifact_root}")
         elif args.command == "status":
             result = current_status(request, artifact_root)
             print(json_text(result).rstrip() if args.json else result["status"])
+        elif args.command == "verify":
+            result = current_status(request, artifact_root)
+            print(json_text(result).rstrip() if args.json else result["status"])
+            if result["status"] != "ready":
+                return 2
         elif args.command == "session-context":
             print(session_context(request, artifact_root))
         elif args.command == "stop":
             print(json.dumps(stop_response(request, artifact_root, sys.stdin.read()), ensure_ascii=False))
+        elif args.command == "stop-kimi":
+            reason = kimi_stop_reason(request, artifact_root, sys.stdin.read())
+            if reason is not None:
+                print(reason, file=sys.stderr)
+                return 2
         elif args.command == "finalize":
             result = finalize(request, artifact_root)
             print(json_text(result).rstrip() if args.json else f"ready {artifact_root / INDEX_FILE}")

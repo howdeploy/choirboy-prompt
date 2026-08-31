@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 1.5.0 — 2026-08-31
+
+- Moved manual-install artifact state out of versioned checkouts into stable
+  user data and added non-overwriting migration of existing dossiers.
+- Made every `ready` decision rerun structural, source, project-set, and digest
+  validation, and added a nonzero `verify` gate for incomplete state.
+- Embedded the validated INDEX and every dossier in the actual SessionStart,
+  OpenCode, Hermes, and Kimi model-visible payload instead of sending a path.
+- Added Kimi 0.39 lifecycle support through `SessionStart` preparation,
+  once-per-session `UserPromptSubmit` delivery, and an exit-2 `Stop` gate.
+- Replaced append-or-skip managed blocks with versioned synchronization,
+  truthful `stale` status, exact Hermes allowlist refresh, and an upgrade test
+  starting from commit `25078a6`.
+- Raised Codex's SessionStart context limit to 256 KiB so inline artifact
+  memory is not truncated.
+
 ## 1.4.1 — 2026-08-31
 
 - Reframed the public metadata and injected context around the production

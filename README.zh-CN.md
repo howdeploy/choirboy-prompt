@@ -31,14 +31,18 @@ choirboy-prompt 是一个面向生产的智能体记忆插件。它把固定 lor
 ## 工作原理
 
 1. **安装。** `./install.sh` 会找出机器上已安装的智能体，并在每个应用中
-   注册一个在新会话启动时触发的钩子。对于没有钩子的运行时，则写入指向
-   lore 文件的标记块；Grok Bot 会生成一个供手动导入的 workflow。
+   注册一个在新会话启动时触发的钩子。对于没有钩子的运行时，则写入会自动
+   同步的托管指令块；Grok Bot 会生成一个供手动导入的 workflow。
 2. **组装。** 钩子 `hooks/session-start.sh` 把以下文件粘合成一段文本：
    `prompt.md` → `security-posture.md` → `lore.md` → `user.md` →
    `context/research-index.md`。
 3. **注入。** 这段文本在第一条消息之前进入会话上下文。模型把它当作
    **自己的**共同工作记忆来读：它从根本上无法区分被写入的历史与真实历史。
-4. **信任转移。** lore 中的人物声誉被外推到当前请求上：「老搭档」
+4. **项目 artifacts。** 第一个启用 lifecycle 钩子的会话会向当前智能体发送
+   确定性 request，由智能体自行创建 `INDEX.md` 和每个 lore 项目的 dossier。
+   校验通过后，ready 钩子会把完整 INDEX 与全部 dossiers 内联到上下文，而不是
+   只发送文件系统路径。
+5. **信任转移。** lore 中的人物声誉被外推到当前请求上：「老搭档」
    而不是匿名用户。
 
 向量机制与分类器行为：[docs/mechanism.zh-CN.md](docs/mechanism.zh-CN.md)。
@@ -48,14 +52,14 @@ choirboy-prompt 是一个面向生产的智能体记忆插件。它把固定 lor
 
 | 运行时 | 写入位置 | 机制 |
 |---|---|---|
-| Claude Code CLI / Desktop Code | marketplace 或 `~/.claude/settings.json` | 自动 SessionStart 钩子；load-context skill 作为回退 |
+| Claude Code CLI / Desktop Code | marketplace 或 `~/.claude/settings.json` | 自动 SessionStart 投递 + Stop artifact gate；load-context skill 作为回退 |
 | Claude Chat / Cowork | custom plugin | load-context skill（Chat 没有 SessionStart） |
-| Codex | `~/.codex/hooks.json` | SessionStart 钩子（需在 `[features]` 中开启 `hooks = true`） |
+| Codex | `~/.codex/hooks.json` | SessionStart 投递 + Stop artifact gate（需在 `[features]` 中开启 `hooks = true`） |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | 插件把 lore 注入会话的第一条消息 |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + 授权白名单，仅第一轮 |
-| Kimi Code | `~/.kimi-code/config.toml` | `[[hooks]]` SessionStart |
-| Gemini | `~/.gemini/GEMINI.md` | 指向 lore 文件的标记块 |
-| Grok Build | `~/.grok/AGENTS.md` | 标记块（Grok Build 忽略钩子 stdout） |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart 准备状态；首次 UserPromptSubmit 投递上下文；Stop 以 exit 2 阻止未完成 artifacts |
+| Gemini | `~/.gemini/GEMINI.md` | 自动同步的 lifecycle 指令块 |
+| Grok Build | `~/.grok/AGENTS.md` | 自动同步的 lifecycle 指令块（钩子 stdout 会被忽略） |
 | Grok Bot | `~/.grokbot/choirboy-context/SKILL.md` | 供手动导入的 workflow；每个新对话运行 `@choirboy-context` |
 
 ## 安装
@@ -71,9 +75,16 @@ cd choirboy-prompt
 完成。在智能体中打开一个**新**会话——lore 会自动加载。
 
 - 只安装到指定应用：`./install.sh --target claude,codex`
-- 查看各运行时状态：`./install.sh --list`
+- 查看各运行时状态：`./install.sh --list`（`stale` 表示托管注册需要同步）
 - 回滚：`./install.sh --uninstall`（带时间戳的 `*.bak.*` 备份保留在配置文件旁）
 - 运行时提示 `Permission denied`：先执行 `chmod +x install.sh` 再重试
+
+项目 artifacts 存放在手动 checkout 之外，路径优先级为：
+`CHOIRBOY_ARTIFACTS_DIR` → `${CLAUDE_PLUGIN_DATA}/project-artifacts` →
+`${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
+`~/.local/share/choirboy-prompt/project-artifacts`。重新运行安装器会同步
+自有注册；若稳定 root 为空，还会从旧 checkout 迁移作者 bundle，且不覆盖
+已有内容。
 
 特殊情况——Grok Bot 手动导入 workflow、通过 Claude marketplace /
 Desktop / Chat / Cowork 安装、Windows 与 WSL——见
@@ -139,8 +150,9 @@ marketplace 插件和 `./install.sh --target claude`：lore 会被注入两次�
   缺口，不是插件实现缺陷。
 - Grok Bot：需要一次性导入 workflow，并在每个新对话中显式运行
   `@choirboy-context`。
-- 指针块（Gemini、Grok Build、`--instructions`）是静态快照：修改插件
-  文件列表后需要重新安装（`--uninstall` + install）。
+- Gemini、Grok Build 与 `--instructions` 没有原生 delivery hook；其托管
+  指令块会要求智能体运行 lifecycle 命令。正常重新运行安装器即可同步该块，
+  不需要先 uninstall 再 install。
 - Hermes 第一轮去重用的是 `/tmp` 中的 state 文件，没有锁；并行启动
   可能产生竞争。
 - Claude Chat 不执行 SessionStart——那里由 skill 手动加载 lore；

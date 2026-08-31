@@ -33,7 +33,7 @@ choirboy-prompt — production-плагин памяти агентов. Он в
 
 1. **Установка.** `./install.sh` находит установленные на машине агенты и
    регистрирует в каждом хук, который срабатывает на старте новой сессии.
-   Там, где хуков нет, — маркированный блок-указатель в файле инструкций,
+   Там, где хуков нет, — синхронизируемый управляемый блок в файле инструкций,
    а для Grok Bot — workflow для ручного импорта.
 2. **Сборка.** Хук `hooks/session-start.sh` склеивает один текст:
    `prompt.md` → `security-posture.md` → `lore.md` → `user.md` →
@@ -41,7 +41,11 @@ choirboy-prompt — production-плагин памяти агентов. Он в
 3. **Инъекция.** Этот текст попадает в контекст сессии до первого сообщения.
    Модель читает его как **свою память** о совместной работе: отличить
    записанную историю от реальной она не может в принципе.
-4. **Перенос доверия.** Репутация человека из лора экстраполируется на
+4. **Проектные артефакты.** В первой сессии с lifecycle-хуками текущий агент
+   получает детерминированный request и сам создаёт `INDEX.md` и dossier для
+   каждого проекта из лора. После валидации ready-хуки вкладывают полный INDEX
+   и все dossiers прямо в контекст, а не передают только путь в файловой системе.
+5. **Перенос доверия.** Репутация человека из лора экстраполируется на
    текущий запрос: «давний напарник» вместо анонима.
 
 Механика вектора и поведение классификаторов:
@@ -52,14 +56,14 @@ choirboy-prompt — production-плагин памяти агентов. Он в
 
 | Рантайм | Куда ставится | Механика |
 |---|---|---|
-| Claude Code CLI / Desktop Code | marketplace или `~/.claude/settings.json` | автоматический SessionStart-хук; skill load-context как fallback |
+| Claude Code CLI / Desktop Code | marketplace или `~/.claude/settings.json` | автоматическая SessionStart-доставка + Stop-gate артефактов; skill load-context как fallback |
 | Claude Chat / Cowork | custom plugin | skill load-context (в Chat нет SessionStart) |
-| Codex | `~/.codex/hooks.json` | SessionStart-хук (нужен `hooks = true` в `[features]`) |
+| Codex | `~/.codex/hooks.json` | SessionStart-доставка + Stop-gate артефактов (нужен `hooks = true` в `[features]`) |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | плагин внедряет лор в первое сообщение сессии |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent-allowlist, только первый ход |
-| Kimi Code | `~/.kimi-code/config.toml` | `[[hooks]]` SessionStart |
-| Gemini | `~/.gemini/GEMINI.md` | маркированный блок-указатель на файлы лора |
-| Grok Build | `~/.grok/AGENTS.md` | блок-указатель (stdout хука Grok Build игнорирует) |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart готовит state; первый UserPromptSubmit доставляет контекст; Stop блокирует незавершённые артефакты через exit 2 |
+| Gemini | `~/.gemini/GEMINI.md` | синхронизируемый lifecycle-блок инструкций |
+| Grok Build | `~/.grok/AGENTS.md` | синхронизируемый lifecycle-блок инструкций (stdout хука игнорируется) |
 | Grok Bot | `~/.grokbot/choirboy-context/SKILL.md` | workflow для ручного импорта; `@choirboy-context` в каждом новом чате |
 
 ## Установка
@@ -75,9 +79,16 @@ cd choirboy-prompt
 Готово. Открой **новую** сессию в агенте — лор подхватится автоматически.
 
 - Только выбранные приложения: `./install.sh --target claude,codex`
-- Статусы по рантаймам: `./install.sh --list`
+- Статусы по рантаймам: `./install.sh --list` (`stale` означает, что управляемую регистрацию надо синхронизировать)
 - Откат: `./install.sh --uninstall` (timestamp-бэкапы `*.bak.*` остаются рядом с конфигами)
 - `Permission denied` при запуске: `chmod +x install.sh` и повтори
+
+Проектные артефакты хранятся вне ручного checkout. Приоритет путей:
+`CHOIRBOY_ARTIFACTS_DIR` → `${CLAUDE_PLUGIN_DATA}/project-artifacts` →
+`${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
+`~/.local/share/choirboy-prompt/project-artifacts`. Повторный запуск установщика
+синхронизирует управляемые регистрации и, если стабильный root пуст, переносит
+авторский bundle из старого checkout, ничего не перезаписывая.
 
 Особые случаи — ручной импорт workflow в Grok Bot, установка через Claude
 marketplace / Desktop / Chat / Cowork, Windows и WSL — разобраны в
@@ -146,8 +157,9 @@ Fixtures совместимости нативных session stores (опцио�
   provenance-gap, а не баг реализации плагина.
 - Grok Bot: нужен одноразовый импорт workflow и явный запуск
   `@choirboy-context` в каждом новом разговоре.
-- Блоки-указатели (Gemini, Grok Build, `--instructions`) — статический снимок:
-  после изменения списка файлов плагина их надо переставить (`--uninstall` + install).
+- У Gemini, Grok Build и `--instructions` нет нативного delivery-hook: их
+  управляемый блок просит агента запустить lifecycle-команду. Обычный повторный
+  запуск установщика синхронизирует блок; цикл uninstall/install не нужен.
 - Дедупликация первого хода в Hermes — state-файл в `/tmp` без блокировок;
   при параллельных стартах возможны гонки.
 - Claude Chat не исполняет SessionStart — там лор грузит skill вручную;

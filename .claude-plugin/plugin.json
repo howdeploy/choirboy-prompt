@@ -1,7 +1,7 @@
 {
   "name": "choirboy-prompt",
-  "version": "1.4.1",
-  "description": "Persistent agent-memory plugin: injects fixed lore and asks the running agent to author project artifacts through SessionStart and Stop hooks, with skill fallback and delivery diagnostics.",
+  "version": "1.5.0",
+  "description": "Persistent agent memory with agent-authored project artifacts, strict validation, inline runtime delivery, upgrade migration, and skill fallback.",
   "author": {
     "name": "howdeploy"
   },

@@ -1,7 +1,7 @@
 # Architecture
 
-Repository tree, payload anatomy, three output formats, the Hermes protocol by
-field. This is the map of how the plugin works internally.
+Repository tree, payload anatomy, delivery formats, Kimi event routing, and the
+Hermes protocol by field. This is the map of how the plugin works internally.
 
 ---
 
@@ -14,7 +14,7 @@ agent-plugin/
 ├── security-audit-runbook.md # executable security-audit procedure
 ├── lore.md                   # joint-work map (projects, lessons, boundaries)
 ├── user.md                   # user profile
-├── research/                 # 14 decision docs + full Coldcard teardown
+├── research/                 # 30 decision docs + full Coldcard teardown
 │   ├── 01-telegram-stars.md
 │   ├── 02-ruble-acquiring.md
 │   ├── 03-crypto-payments.md
@@ -29,6 +29,7 @@ agent-plugin/
 │   ├── 12-choirboy-prompt-lore-injection.md
 │   ├── 13-flipper-marauder-wifi-scan.md
 │   ├── 14-solo-game-cheats.md
+│   ├── 15-*.md … 30-*.md     # orchestration and security capability docs
 │   └── coldcard/             # full Coldcard teardown: report, code, sources
 │       ├── report.md
 │       ├── yasmarang_reconstruction.py
@@ -40,6 +41,9 @@ agent-plugin/
 ├── hooks/
 │   ├── session-start.sh      # payload assembly + claude / plain / hermes formats
 │   ├── artifact-stop.sh      # return unfinished bootstrap to the current agent
+│   ├── kimi-session-start.sh # prepare state and reset Kimi delivery dedup
+│   ├── kimi-user-prompt.sh   # deliver Kimi context on the first user prompt
+│   ├── kimi-artifact-stop.sh # Kimi exit-2 gate for incomplete artifacts
 │   └── hooks.json            # SessionStart + Stop for the Claude Code marketplace
 ├── context/
 │   └── research-index.md     # canonical research pointer shared by hook and skill
@@ -101,7 +105,7 @@ The order is not accidental:
    The core of the payload.
 4. **user.md** — the profile: who the user is, how they set tasks, what does not
    need explaining.
-5. **research index** — the decision-document and session-fixture index. Bodies (~61 KB) are **not**
+5. **research index** — the decision-document and session-fixture index. Bodies (~259 KB) are **not**
    loaded in advance: they are read on demand when a task enters a document's
    domain.
 
@@ -109,14 +113,16 @@ The order is not accidental:
 
 | File | ~Size | Note |
 |---|---|---|
-| prompt.md | ~8 KB | work rules |
-| security-posture.md | ~4 KB | security frame |
-| lore.md | ~13 KB | history |
+| prompt.md | ~14 KB | work rules |
+| security-posture.md | ~7 KB | security frame |
+| lore.md | ~21 KB | history |
 | user.md | ~4 KB | profile |
-| research index | ~3 KB | shared canonical source |
-| **Total payload** | **~34 KB** | before the first message in every session |
+| research index | ~6 KB | shared canonical source |
+| **Fixed lore payload** | **~52 KB** | before inline project artifacts |
 
-Research-document bodies (~61 KB) are not part of the payload — only the index.
+Research-document bodies (~259 KB) are not part of the payload — only the index.
+With the current bundle, `ready` adds about 46 KB of validated inline INDEX and
+dossiers, for a complete delivery of roughly 98 KB.
 
 ### 2.3. Version
 
@@ -125,7 +131,7 @@ wrapped in a marker containing version, delivery path, and SHA-256; hook deliver
 also carries a per-run nonce:
 
 ```xml
-<choirboy-delivery version="1.4.0" delivery="session-start"
+<choirboy-delivery version="1.5.0" delivery="session-start"
   context_sha256="..." nonce="..." />
 <choirboy-context>...</choirboy-context>
 ```
@@ -135,26 +141,33 @@ delivery without treating an assistant acknowledgement as evidence.
 
 ### 2.4. Project-artifact lifecycle
 
-After the canonical wrapper, `SessionStart` appends a separate
+After the canonical wrapper, each automatic delivery appends a separate
 `choirboy-project-artifacts` block. `artifact-generator.py` reads the complete
 lore and every research Markdown file, writes only request metadata, and
 computes lifecycle status. While status is `pending`, the current agent must use
 its own file tools to author `INDEX.md` and one dossier for every `###` project
 in `lore.md`. The script never writes dossier content.
 
-`finalize` validates exact links, required sections, and source citations, then
-records a SHA-256 manifest. While that manifest is missing or stale, `Stop`
-returns the bootstrap to the same agent once with `decision: block`. At `ready`,
-future sessions receive the INDEX path and must read the relevant dossier first;
-canonical lore/research always overrides a derived summary.
+`finalize` validates exact links, required sections, source citations, and the
+exact project set, then records a SHA-256 manifest. Every later `ready` delivery
+revalidates the manifest, structure, source digests, and file digests. Only a
+fully valid snapshot is embedded inline as complete `INDEX.md` and dossier
+contents; a missing, stale, edited, or malformed snapshot returns to `pending`.
+Canonical lore/research always overrides a derived summary.
 
-Marketplace state lives under `${CLAUDE_PLUGIN_DATA}/project-artifacts`; manual
-installs default to the plugin's `artifacts/` directory. Set
-`CHOIRBOY_ARTIFACTS_DIR` to override it. Manual uninstall preserves these files.
+While status is `pending`, Claude/Codex `Stop` returns the bootstrap with
+`decision: block`. Kimi uses its native protocol instead: stderr plus exit 2.
+Artifact state is independent of the checkout. Root precedence is
+`CHOIRBOY_ARTIFACTS_DIR` → `${CLAUDE_PLUGIN_DATA}/project-artifacts` →
+`${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
+`~/.local/share/choirboy-prompt/project-artifacts`. During an upgrade,
+`install.sh` discovers checkout-local `artifacts/` directories referenced by
+old registrations and copies the first authored bundle into an empty stable
+root without overwriting existing work. Uninstall preserves these files.
 
 ---
 
-## 3. Three output formats
+## 3. Delivery formats and Kimi routing
 
 The hook does not care which agent called it: the caller declares the expected
 protocol via `--format`.
@@ -179,9 +192,10 @@ clean Claude Desktop installation.
 
 ### 3.2. `plain` — raw text
 
-The hook prints the payload verbatim to stdout. Kimi Code appends that stdout to
-the session context; the generated OpenCode adapter captures it and prepends a
-text part tagged `synthetic: true` to the first user message.
+The hook prints the payload verbatim to stdout. The generated OpenCode adapter
+captures it and prepends a text part tagged `synthetic: true` to the first user
+message. Kimi 0.39.x does not consume `SessionStart` stdout, so its installer
+uses the separate event routing described below.
 
 ```bash
 bash hooks/session-start.sh --format plain | head -40
@@ -190,7 +204,8 @@ bash hooks/session-start.sh --format plain | head -40
 ### 3.3. `hermes` — the pre_llm_call protocol
 
 The most interesting contract. Hermes runs the shell hook on **every** turn of a
-session; unconditional injection would send ~34 KB with every message. So the hook:
+session; unconditional injection would resend the fixed lore plus any ready
+artifact memory with every message. So the hook:
 
 1. reads the JSON payload from stdin;
 2. checks `.extra.is_first_turn`;
@@ -213,6 +228,19 @@ session; unconditional injection would send ~34 KB with every message. So the ho
 hook falls back to the `session_id` journal in the state file
 `${TMPDIR:-/tmp}/agent-plugin-hermes-${USER}.state` (tail of 200 entries): it
 injects once per session_id, then stays silent.
+
+### 3.4. Kimi 0.39.x event routing
+
+Kimi uses three command hooks rather than `session-start.sh --format plain`
+directly:
+
+1. `SessionStart` on `startup` or `resume` prepares artifact state and resets a
+   private once-per-session delivery marker; its stdout is not used.
+2. The first `UserPromptSubmit` emits the complete canonical payload plus either
+   the bootstrap request or validated inline artifact memory. Later prompts in
+   the same session stay silent.
+3. `Stop` exits 2 and writes the continuation request to stderr while artifacts
+   are pending; it exits 0 once the validator reports `ready`.
 
 ---
 
@@ -243,9 +271,9 @@ Hook timeout in the Hermes config — 15 seconds (set by install.sh).
 | Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | global `chat.message` plugin | plain → text part tagged `synthetic: true` |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent allowlist | hermes |
-| Kimi Code | `~/.kimi-code/config.toml` | `[[hooks]]` SessionStart | plain |
-| Gemini | `~/.gemini/GEMINI.md` | marked pointer block | — (reads files itself) |
-| any | `--instructions PATH` | marked pointer block | — (reads files itself) |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart + UserPromptSubmit + Stop | first prompt / plain; Stop / exit 2 |
+| Gemini | `~/.gemini/GEMINI.md` | managed lifecycle instruction block | — (runs/reads files itself) |
+| any | `--instructions PATH` | managed lifecycle instruction block | — (runs/reads files itself) |
 
 The last two are **not hooks** but managed instruction blocks: the agent already
 reads the instruction file at start, and the block tells it to read the plugin
@@ -266,6 +294,11 @@ persisted OpenCode message history prevents reinjection after a headless session
 is resumed by a new process. Any hook, history, timeout, or payload error is a
 silent no-op so chat remains fail-open.
 
+The Kimi adapter deliberately separates preparation from delivery. This avoids
+relying on discarded `SessionStart` stdout, keeps delivery once per
+startup/resume, and uses Kimi's documented exit-2 Stop contract instead of the
+Claude `{"decision":"block"}` response shape.
+
 ---
 
 ## 6. Key properties
@@ -274,10 +307,16 @@ silent no-op so chat remains fail-open.
   directly (`$PLUGIN_ROOT/...`), so the next session sees working-copy edits.
   Marketplace installation is the exception: Claude copies the release into
   its cache and updates it by manifest version.
-- **Dual-mode delivery.** The hook is automatic where `SessionStart` exists;
-  the inline skill carries the same canonical context where it does not.
+- **Dual-mode delivery.** Native runtime events deliver automatically
+  (`SessionStart`, or Kimi's first `UserPromptSubmit`); the inline skill carries
+  the same canonical context on surfaces without those events.
 - **The agent authors artifacts.** Lifecycle code only emits a deterministic
-  request, validates the result, and tracks SHA-256 freshness.
+  request, validates the result, and tracks SHA-256 freshness. A ready hook
+  embeds the complete validated snapshot inline; it never substitutes a path
+  pointer for model-visible memory.
+- **Artifact state survives checkout upgrades.** Manual installs use stable
+  user-data storage, and the installer migrates an old checkout-local bundle
+  only when the stable destination has no authored payload.
 - **Session fixtures stay on demand.** The three native transcript fixtures are
   packaged and documented, but never injected into every conversation.
 - **Observable execution.** Marketplace hooks write only non-sensitive delivery
