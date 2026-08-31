@@ -31,6 +31,13 @@ EXECUTABLES = {
     "scripts/package-plugin.py",
     "scripts/test.sh",
 }
+CANONICAL_CONTEXT = {
+    "prompt.md",
+    "security-posture.md",
+    "lore.md",
+    "user.md",
+    "context/research-index.md",
+}
 
 
 def version() -> str:
@@ -61,6 +68,20 @@ def repository_files() -> list[Path]:
         path = ROOT / relative
         if path.is_file():
             paths.add(relative)
+    # Canonical context may gain new research files before its first commit.
+    # Local release validation must package what build-context/artifact-generator
+    # actually reference instead of silently omitting untracked content.
+    for canonical in CANONICAL_CONTEXT:
+        relative = Path(canonical)
+        if (ROOT / relative).is_file():
+            paths.add(relative)
+    research_root = ROOT / "research"
+    if research_root.is_dir():
+        paths.update(
+            path.relative_to(ROOT)
+            for path in research_root.rglob("*.md")
+            if path.is_file()
+        )
     return sorted(paths, key=lambda value: value.as_posix())
 
 

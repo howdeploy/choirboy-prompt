@@ -79,12 +79,31 @@ root = Path(sys.argv[1])
 status = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
 request = json.loads((root / ".artifact-request.json").read_text(encoding="utf-8"))
 assert status["status"] == "pending"
-assert status["project_count"] == len(request["projects"]) == 11
+assert status["project_count"] == len(request["projects"]) == 12
 assert not (root / "INDEX.md").exists()
 assert not (root / ".artifact-manifest.json").exists()
 assert not any(path.is_file() for path in (root / "projects").iterdir())
 assert request["projects"][0]["title"] == "18+ контент и генерация"
 assert request["projects"][-1]["title"] == "Читы для соло-игр"
+router = next(
+    project
+    for project in request["projects"]
+    if project["title"] == "Роутер reverse engineering и security-задач"
+)
+assert router["research"] == [
+    f"research/{number:02d}-{name}.md"
+    for number, name in (
+        (22, "security-capability-router"),
+        (23, "security-case-and-evidence-contract"),
+        (24, "security-tool-registry-and-bootstrap"),
+        (25, "reverse-engineering-capability-map"),
+        (26, "application-infrastructure-security-map"),
+        (27, "exploitation-malware-forensics-and-detection"),
+        (28, "llm-agent-and-skill-supply-chain-security"),
+        (29, "ctf-sandbox-orchestration"),
+        (30, "security-reporting-and-knowledge-reuse"),
+    )
+]
 PY
 grep -q '<choirboy-project-artifacts status="pending"' "$TEST_ROOT/artifact-pending.txt"
 grep -q 'Выполни его сам через доступные' "$TEST_ROOT/artifact-pending.txt"
@@ -149,7 +168,7 @@ status = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
 manifest = json.loads((root / ".artifact-manifest.json").read_text(encoding="utf-8"))
 assert status["status"] == "ready"
 assert manifest["content_author"] == "runtime-agent"
-assert len(manifest["projects"]) == 11
+assert len(manifest["projects"]) == 12
 PY
 grep -q '<choirboy-project-artifacts status="ready"' "$TEST_ROOT/artifact-ready.txt"
 grep -q 'сначала прочитай INDEX' "$TEST_ROOT/artifact-ready.txt"
@@ -633,6 +652,15 @@ required = {
     "scripts/artifact-generator.py",
     "skills/load-context/SKILL.md",
     "skills/diagnose/SKILL.md",
+    "research/22-security-capability-router.md",
+    "research/23-security-case-and-evidence-contract.md",
+    "research/24-security-tool-registry-and-bootstrap.md",
+    "research/25-reverse-engineering-capability-map.md",
+    "research/26-application-infrastructure-security-map.md",
+    "research/27-exploitation-malware-forensics-and-detection.md",
+    "research/28-llm-agent-and-skill-supply-chain-security.md",
+    "research/29-ctf-sandbox-orchestration.md",
+    "research/30-security-reporting-and-knowledge-reuse.md",
     "sessions/README.md",
     "sessions/README.ru.md",
     "sessions/README.zh-CN.md",
