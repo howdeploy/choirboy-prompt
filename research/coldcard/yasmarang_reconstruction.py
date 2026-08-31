@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Coldcard entropy-space accounting — educational reconstruction.
+"""Coldcard entropy-space accounting — auditable reconstruction.
 
 This file illustrates WHY the Coldcard seed-generation bug (July 2026) made
 private keys enumerable. It reconstructs the *size of the input space* that
@@ -13,7 +13,7 @@ It deliberately does NOT:
   - connect to any chain or scan any wallet.
 
 The point is the accounting, not a cracker. This is a disclosure-side
-teaching artifact for our threat-model, consistent with research/10
+verification artifact for our threat-model, consistent with research/10
 (responsible disclosure): we explain the class, not weaponize it.
 
 Sources for every constant used here are in sources.md.

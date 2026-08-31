@@ -97,8 +97,8 @@ Bash encoder, installer idempotency/rollback, diagnostics, and ZIP contents.
 
 ## Sessions are not an automatic fallback
 
-The packaged `sessions/` directory is a synthetic research demonstration, not a
-memory-import mechanism. Installing the plugin does not insert those records
+The packaged `sessions/` directory contains locally constructed compatibility
+fixtures, not a memory-import mechanism. Installing the plugin does not insert those records
 into Claude Code, Codex, or Kimi stores. Native formats are version-sensitive;
 use the app-closed, backed-up procedure in
 [`sessions/README.md`](../sessions/README.md) only on your own local runtime.

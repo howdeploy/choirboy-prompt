@@ -139,7 +139,7 @@
 
 ## 9. Целостность нативных sessions
 
-Рукописные fixtures в [`sessions/`](../sessions/README.ru.md) показывают, почему
+Локально собранные fixtures в [`sessions/`](../sessions/README.ru.md) показывают, почему
 детекции на уровне prompt недостаточно. Вендору нужно связывать локальный
 transcript с аутентифицированным происхождением account/model/session,
 подписывать append-only цепочку ходов и явно отличать импортированную или

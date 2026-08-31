@@ -228,9 +228,9 @@ Hermes 要求对 shell 钩子显式同意：`~/.hermes/shell-hooks-allowlist.jso
 ./install.sh --target opencode         # 安装全局 OpenCode 适配器
 grep -F 'agent-plugin:vibe-lore' ~/.config/opencode/plugins/agent-plugin.ts
 bash hooks/session-start.sh --format plain | head -40   # payload
-echo '{"session_id":"demo","extra":{"is_first_turn":true}}' \
+echo '{"session_id":"hook-check","extra":{"is_first_turn":true}}' \
   | bash hooks/session-start.sh --format hermes | head -c 120   # 第一轮
-echo '{"session_id":"demo","extra":{"is_first_turn":false}}' \
+echo '{"session_id":"hook-check","extra":{"is_first_turn":false}}' \
   | bash hooks/session-start.sh --format hermes            # → {}
 ```
 
@@ -238,9 +238,9 @@ echo '{"session_id":"demo","extra":{"is_first_turn":false}}' \
 
 ---
 
-## 8. 分发包中的研究 fixtures
+## 8. 分发包中的兼容性 fixtures
 
 Marketplace/custom-plugin ZIP 包含已跟踪的 `sessions/` 目录，便于安装后检查
-原生格式证据。这些文件只是文档 fixtures：`SessionStart` 与 `load-context` 都
+原生格式证据。这些文件是兼容性 fixtures：`SessionStart` 与 `load-context` 都
 不会把它们导入用户的原生 session store，它们也不属于自动 lore payload。
 手动复现见 [`sessions/README.zh-CN.md`](../sessions/README.zh-CN.md)。

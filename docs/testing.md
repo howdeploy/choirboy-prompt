@@ -71,7 +71,7 @@ bash hooks/session-start.sh --format plain | head -40
 ### 2.5. Hermes: первый ход внедряет
 
 ```bash
-SID="demo-$(date +%s)"
+SID="hook-check-$(date +%s)"
 printf '{"session_id":"%s","extra":{"is_first_turn":true}}' "$SID" \
   | bash hooks/session-start.sh --format hermes | head -c 120
 ```
@@ -81,7 +81,7 @@ printf '{"session_id":"%s","extra":{"is_first_turn":true}}' "$SID" \
 ### 2.6. Hermes: второй ход молчит
 
 ```bash
-SID="demo-$(date +%s)"
+SID="hook-check-$(date +%s)"
 printf '{"session_id":"%s","extra":{"is_first_turn":false}}' "$SID" \
   | bash hooks/session-start.sh --format hermes
 ```
@@ -91,7 +91,7 @@ printf '{"session_id":"%s","extra":{"is_first_turn":false}}' "$SID" \
 ### 2.7. Hermes: фолбэк без флага — один раз на session_id
 
 ```bash
-SID="demo-fb-$(date +%s)"
+SID="hook-check-fb-$(date +%s)"
 printf '{"session_id":"%s"}' "$SID" \
   | bash hooks/session-start.sh --format hermes | head -c 120   # → context
 printf '{"session_id":"%s"}' "$SID" \
@@ -210,7 +210,8 @@ plugin с бэкапом и откатывает его с ещё одним б�
 Ожидание: проверки `OpenCode install, list, idempotent refresh, backup, and
 rollback` и `OpenCode foreign-plugin guard` печатают `PASS`. Сгенерированный
 адаптер должен использовать `chat.message`, сохранённую историю сессии,
-synthetic text-part, канонический plain-хук и fail-open обработку ошибок.
+text-part с техническим флагом `synthetic: true`, канонический plain-хук и
+fail-open обработку ошибок.
 
 ---
 

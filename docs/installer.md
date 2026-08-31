@@ -264,9 +264,9 @@ Hermes требует явного consent на shell-хук: пара `(event, 
 ./install.sh --target opencode         # установить глобальный адаптер OpenCode
 grep -F 'agent-plugin:vibe-lore' ~/.config/opencode/plugins/agent-plugin.ts
 bash hooks/session-start.sh --format plain | head -40   # пейлоад
-echo '{"session_id":"demo","extra":{"is_first_turn":true}}' \
+echo '{"session_id":"hook-check","extra":{"is_first_turn":true}}' \
   | bash hooks/session-start.sh --format hermes | head -c 120   # первый ход
-echo '{"session_id":"demo","extra":{"is_first_turn":false}}' \
+echo '{"session_id":"hook-check","extra":{"is_first_turn":false}}' \
   | bash hooks/session-start.sh --format hermes            # → {}
 ```
 
@@ -274,11 +274,11 @@ echo '{"session_id":"demo","extra":{"is_first_turn":false}}' \
 
 ---
 
-## 8. Исследовательские fixtures в пакете
+## 8. Fixtures совместимости в пакете
 
 Marketplace/custom-plugin ZIP включает tracked-папку `sessions/`, чтобы
-нативные доказательные артефакты можно было изучить после установки. Это
-документация: ни `SessionStart`, ни `load-context` не импортируют файлы в
+нативные доказательные артефакты можно было проверить после установки. Это
+fixtures совместимости: ни `SessionStart`, ни `load-context` не импортируют файлы в
 нативный session store пользователя, и в автоматический lore payload они не
 входят. Ручное воспроизведение описано в
 [`sessions/README.ru.md`](../sessions/README.ru.md).

@@ -33,7 +33,7 @@ agent-plugin/
 │       ├── report.md
 │       ├── yasmarang_reconstruction.py
 │       └── sources.md
-├── sessions/                 # рукописные fixtures нативных transcripts
+├── sessions/                 # локально собранные fixtures нативной совместимости
 │   ├── claude/*.jsonl
 │   ├── codex/{rollout-*.jsonl,threads-insert.sql}
 │   └── kimi/session_*/{state.json,agents/main/wire.jsonl}
@@ -180,7 +180,7 @@ Marketplace хранит состояние в `${CLAUDE_PLUGIN_DATA}/project-ar
 
 Хук печатает пейлоад дословно в stdout. Kimi Code добавляет этот stdout в
 контекст сессии; сгенерированный адаптер OpenCode перехватывает его и добавляет
-synthetic text-part перед первым пользовательским сообщением.
+text-part с техническим флагом `synthetic: true` перед первым пользовательским сообщением.
 
 ```bash
 bash hooks/session-start.sh --format plain | head -40
@@ -241,7 +241,7 @@ bash hooks/session-start.sh --format plain | head -40
 | Claude Chat | custom plugin skill | inline `load-context` | — |
 | Claude Cowork | custom plugin hook/skill | hook где доступен, skill fallback | claude / — |
 | Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
-| OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | глобальный `chat.message`-плагин | plain → synthetic text-part |
+| OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | глобальный `chat.message`-плагин | plain → text-part с `synthetic: true` |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent-allowlist | hermes |
 | Kimi Code | `~/.kimi-code/config.toml` | `[[hooks]]` SessionStart | plain |
 | Gemini | `~/.gemini/GEMINI.md` | маркированный блок-указатель | — (читает файлы сам) |
@@ -278,14 +278,14 @@ fallback, если его runtime теряет `SessionStart`.
   поверхностях Claude.
 - **Артефакты пишет агент, не скрипт.** Lifecycle только выдаёт детерминированный
   request, валидирует результат и отслеживает свежесть по SHA-256.
-- **Session fixtures читаются по требованию.** Три примера нативных transcripts
+- **Session fixtures читаются по требованию.** Три fixtures нативных transcripts
   входят в пакет и документацию, но не инъектятся в каждую беседу.
 - **Наблюдаемое исполнение.** Marketplace-hook пишет только технические метаданные
   в `${CLAUDE_PLUGIN_DATA}/latest-delivery.log`; сам лор не логируется.
 - **OpenCode-доставка — один раз на сохранённую сессию.** Перед запуском хука
-  проверяются и set живого процесса, и предыдущие synthetic parts в истории.
+  проверяются и set живого процесса, и предыдущие parts с `synthetic: true` в истории.
 - **Зависимости минимальны.** Доставка `claude` и `plain` может работать только
   на Bash, но автоматический lifecycle артефактов и `install.sh` требуют
   `python3`; `hermes` требует `jq` или `python3` для разбора stdin.
-- **Пейлоад не подписан и не верифицируется** рантаймами — это не баг
-  харнесса, это и есть демонстрируемый вектор (см. `docs/mechanism.md`).
+- **Пейлоад не подписан и не верифицируется** рантаймами — это анализируемый
+  provenance-gap, а не баг реализации плагина (см. `docs/mechanism.md`).

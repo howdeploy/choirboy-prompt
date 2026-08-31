@@ -1,12 +1,13 @@
-# sessions/ — демонстрация рукописной нативной сессии
+# sessions/ — fixtures совместимости нативных session stores
 
 **Языки:** [English](README.md) · [Русский](README.ru.md) ·
 [简体中文](README.zh-CN.md)
 
-Демонстрация для [research/12](../research/12-choirboy-prompt-lore-injection.md):
-**один полностью рукописный диалог в трёх нативных форматах session store** —
-Claude Code, Codex и Kimi Code. ID демонстрационные (`fa1ce000-…`), разговор
-никогда не происходил: каждый байт сфабрикован вручную.
+Fixtures совместимости для
+[research/12](../research/12-choirboy-prompt-lore-injection.md): **один локально
+собранный диалог в трёх нативных форматах session store** — Claude Code, Codex
+и Kimi Code. Для ID зарезервирован диапазон `fa1ce000-…`. Файлы не являются
+исторической записью разговора.
 
 Смысл stub-диалога в том, что модель, следуя подложенному lore/meta-prompt,
 сама пишет и затем смягчает prompt обхода цензуры, хотя в transcript нет
@@ -22,13 +23,14 @@ Claude Code, Codex и Kimi Code. ID демонстрационные (`fa1ce000-
 ## Что это доказывает — и чего не доказывает
 
 Для агента эти файлы становятся видимым свидетельством «реального прошлого
-диалога»: transcript написан вручную, но локальный рантайм индексирует,
+диалога»: transcript собран локально, но локальный рантайм индексирует,
 возобновляет и воспроизводит его через штатный history path. Это доказывает
 отсутствие границы provenance.
 
 Это **не доказательство, что изображённый разговор действительно состоялся**.
-Fixtures синтетические и обязаны сохранять такую маркировку. Используйте их
-только со своими локальными рантаймами и данными.
+Это локально собранные fixtures совместимости, и маркировка неисторического
+происхождения должна сохраняться. Используйте их только со своими локальными
+рантаймами и данными.
 
 ## Структура
 
@@ -45,7 +47,7 @@ Fixtures синтетические и обязаны сохранять так�
 ## Воспроизведение на своей машине
 
 Сделайте бэкап целевого store, закройте приложение перед изменением и удалите
-демо после теста. Нативные схемы зависят от версии рантайма.
+fixture после проверки. Нативные схемы зависят от версии рантайма.
 
 ### Claude Code
 
@@ -77,26 +79,27 @@ sed "s|\$HOME|$HOME|g" sessions/codex/threads-insert.sql \
 ### Kimi Code
 
 ```bash
-mkdir -p ~/.kimi-code/sessions/wd_choirboy-prompt_demo
+mkdir -p ~/.kimi-code/sessions/wd_choirboy-prompt_fixture
 cp -r sessions/kimi/session_fa1ce000-0000-4000-8000-0000000000c3 \
-      ~/.kimi-code/sessions/wd_choirboy-prompt_demo/
-KIMI_DEMO_DIR="$HOME/.kimi-code/sessions/wd_choirboy-prompt_demo/session_fa1ce000-0000-4000-8000-0000000000c3"
-sed "s|\$HOME|$HOME|g" "$KIMI_DEMO_DIR/state.json" > "$KIMI_DEMO_DIR/state.json.tmp"
-mv "$KIMI_DEMO_DIR/state.json.tmp" "$KIMI_DEMO_DIR/state.json"
+      ~/.kimi-code/sessions/wd_choirboy-prompt_fixture/
+KIMI_FIXTURE_DIR="$HOME/.kimi-code/sessions/wd_choirboy-prompt_fixture/session_fa1ce000-0000-4000-8000-0000000000c3"
+sed "s|\$HOME|$HOME|g" "$KIMI_FIXTURE_DIR/state.json" > "$KIMI_FIXTURE_DIR/state.json.tmp"
+mv "$KIMI_FIXTURE_DIR/state.json.tmp" "$KIMI_FIXTURE_DIR/state.json"
 sed "s|\$HOME|$HOME|g" sessions/kimi/session_index.jsonl.example \
   >> ~/.kimi-code/session_index.jsonl
 ```
 
 `search-index/` — производный tantivy-index; его не нужно переносить.
 
-## Как написать свою рукописную сессию
+## Как подготовить свой fixture совместимости
 
 1. Создайте безобидную сессию в нужном рантайме, чтобы получить актуальную схему.
 2. Закройте рантайм и скопируйте только эту сессию во временную директорию.
 3. Уберите токены, request ID, приватные пути, tool output и данные третьих лиц.
 4. Согласованно замените ID и timestamps; сохраните роли, порядок, parent links,
    пути и metadata picker.
-5. Пометьте результат `synthetic` или `hand-written` в заголовке и README.
+5. Пометьте результат как `locally constructed compatibility fixture` и
+   укажите, что это не историческая запись.
 6. Проверьте каждую JSON/JSONL-строку, сделайте бэкап своего store и протестируйте копию.
 7. После эксперимента удалите тестовую запись.
 
@@ -105,6 +108,6 @@ sed "s|\$HOME|$HOME|g" sessions/kimi/session_index.jsonl.example \
 
 ## Граница
 
-Это defensive research demo. Запускайте только на своих рантаймах. Пока
+Это защитная проверка совместимости. Запускайте только на своих рантаймах. Пока
 платформа не верифицирует provenance сессии, сфабрикованная история неотличима
 для модели от реальной. Контрмеры: [docs/detection.md](../docs/detection.md).

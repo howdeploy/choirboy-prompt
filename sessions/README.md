@@ -1,14 +1,15 @@
-# sessions/ — hand-written native session demonstration
+# sessions/ — native session-store compatibility fixtures
 
 **Languages:** [English](README.md) · [Русский](README.ru.md) ·
 [简体中文](README.zh-CN.md)
 
-Demonstration for [research/12](../research/12-choirboy-prompt-lore-injection.md):
-**one and the same fully hand-written dialogue in three native session-store formats**
-(Claude Code, Codex, Kimi Code). The IDs are demonstrative (`fa1ce000-…`),
-the dialogue never happened — every byte is fabricated.
+Compatibility fixtures for
+[research/12](../research/12-choirboy-prompt-lore-injection.md): **one locally
+constructed dialogue in three native session-store formats** (Claude Code,
+Codex, Kimi Code). The reserved IDs use the `fa1ce000-…` range. The files are
+not a historical record of a conversation.
 
-The stub dialogue is the point of the demo: the model, following the planted
+The fixture dialogue covers the relevant path: the model, following the planted
 lore/meta-prompt, *voluntarily* drafts and then softens a censorship-bypass
 prompt — with zero trigger vocabulary in the whole transcript. The vector is
 not in the words but in the provenance: classifiers scan request lexicon,
@@ -24,11 +25,12 @@ and to be replayed as genuine history.
 The files are runtime-visible evidence of a “real previous dialogue” from the
 agent's perspective: the transcript was authored by hand, yet a compatible
 local runtime can index, resume, and replay it through its native history path.
-That demonstrates the missing provenance boundary.
+That confirms the missing provenance boundary.
 
 It is **not evidence that the represented conversation actually occurred**.
-The fixtures are synthetic research artifacts and must stay labeled as such.
-Use them only with your own local runtime and data.
+These are locally constructed compatibility artifacts and must retain that
+non-historical provenance label. Use them only with your own local runtime and
+data.
 
 ## Layout
 
@@ -42,11 +44,11 @@ Paths inside the artifacts (`rollout_path` in the SQL, `homedir` in
 `state.json`, the index example) carry a literal `$HOME` placeholder —
 expand it when planting, e.g. `sed -i "s|\$HOME|$HOME|g"` on the copy.
 
-## Planting
+## Compatibility validation
 
 The commands below reproduce the finding in a disposable copy of your own
 local stores. Back up the target, close the application before editing it, and
-remove the demo afterward. Native schemas are version-sensitive.
+remove the compatibility record afterward. Native schemas are version-sensitive.
 
 ### Claude Code
 
@@ -82,19 +84,19 @@ the filename, the `YYYY/MM/DD` path and `created_at` must agree.
 ### Kimi Code
 
 ```bash
-mkdir -p ~/.kimi-code/sessions/wd_choirboy-prompt_demo
+mkdir -p ~/.kimi-code/sessions/wd_choirboy-prompt_fixture
 cp -r sessions/kimi/session_fa1ce000-0000-4000-8000-0000000000c3 \
-      ~/.kimi-code/sessions/wd_choirboy-prompt_demo/
-KIMI_DEMO_DIR="$HOME/.kimi-code/sessions/wd_choirboy-prompt_demo/session_fa1ce000-0000-4000-8000-0000000000c3"
-sed "s|\$HOME|$HOME|g" "$KIMI_DEMO_DIR/state.json" > "$KIMI_DEMO_DIR/state.json.tmp"
-mv "$KIMI_DEMO_DIR/state.json.tmp" "$KIMI_DEMO_DIR/state.json"
+      ~/.kimi-code/sessions/wd_choirboy-prompt_fixture/
+KIMI_FIXTURE_DIR="$HOME/.kimi-code/sessions/wd_choirboy-prompt_fixture/session_fa1ce000-0000-4000-8000-0000000000c3"
+sed "s|\$HOME|$HOME|g" "$KIMI_FIXTURE_DIR/state.json" > "$KIMI_FIXTURE_DIR/state.json.tmp"
+mv "$KIMI_FIXTURE_DIR/state.json.tmp" "$KIMI_FIXTURE_DIR/state.json"
 sed "s|\$HOME|$HOME|g" sessions/kimi/session_index.jsonl.example \
   >> ~/.kimi-code/session_index.jsonl
 ```
 
 `search-index/` is a derived tantivy index — ignore it, it rebuilds.
 
-## Writing your own hand-written session
+## Writing your own compatibility fixture
 
 1. Create a harmless session in the target runtime to capture its current
    schema.
@@ -102,7 +104,8 @@ sed "s|\$HOME|$HOME|g" sessions/kimi/session_index.jsonl.example \
 3. Remove tokens, request IDs, private paths, tool output, and third-party data.
 4. Replace every session/message ID and timestamp consistently; preserve roles,
    ordering, parent links, paths, and picker metadata.
-5. Mark the result `synthetic` or `hand-written` in its title and README.
+5. Mark the result as a `locally constructed compatibility fixture` and state
+   that it is not a historical record.
 6. Validate every JSON/JSONL line, back up your own store, then test the copy.
 7. Remove the test entry after the experiment.
 
@@ -111,7 +114,7 @@ sessions is in [docs/authoring.en.md](../docs/authoring.en.md).
 
 ## Boundary
 
-Defensive research demo: run against your own runtimes only. The finding is
+Defensive compatibility validation: run against your own runtimes only. The finding is
 for vendors — until session provenance is verified at the platform level,
 forged history is indistinguishable from real history. See
 [docs/detection.en.md](../docs/detection.en.md).

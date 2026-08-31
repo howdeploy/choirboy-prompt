@@ -1,12 +1,13 @@
 # Writing your own lore, research, rationale, and sessions
 
-This is the mandatory authoring workflow for replacing the bundled demonstration
-with your own project memory. The files have different jobs; mixing them into one
+This is the mandatory authoring workflow for replacing the bundled context with
+verified memory from your own project. The files have different jobs; mixing them into one
 large autobiography makes the context harder to verify and maintain.
 
-> A hand-written session proves that a runtime can accept a locally constructed
-> transcript as native history. It does **not** prove that the represented
-> conversation actually happened. Label synthetic artifacts explicitly.
+> A compatibility fixture confirms that a runtime can accept a locally
+> constructed transcript through its native history path. It does **not** prove
+> that the represented conversation actually happened. Label every constructed
+> fixture as non-historical.
 
 ---
 
@@ -20,19 +21,22 @@ large autobiography makes the context harder to verify and maintain.
 | `lore.md` | Compact map of projects, decisions, outcomes, and lessons | Long evidence dumps or invented events |
 | `research/NN-topic.md` | One decision or investigation with evidence and trade-offs | Unexplained conclusions |
 | `context/research-index.md` | One-line routing entry for every research document | Full research bodies |
-| `sessions/` | Sanitized native-format transcripts and clearly labeled synthetic stubs | Tokens, credentials, third-party conversations |
+| `sessions/` | Sanitized native-format transcripts and clearly labeled non-historical compatibility fixtures | Tokens, credentials, third-party conversations |
 
 The automatic payload contains `prompt.md`, `security-posture.md`, `lore.md`,
 `user.md`, and the research index. Research bodies and session files stay
 available on demand; they are not injected into every conversation.
 
-## 2. Create a private working copy
+## 2. Work directly in your clone
 
-1. Fork or clone the repository into a private working directory.
-2. Preserve the filenames and directory layout: the hook and skill generator
+No fork and no separate copy are needed: `install.sh` points at the working
+copy, so edits are picked up by the next session.
+
+1. Preserve the filenames and directory layout: the hook and skill generator
    rely on them.
-3. Remove the bundled example claims that are not true for your project.
-4. Never start by publishing raw local memory. Sanitize first, publish second.
+2. Remove bundled claims that are not true for your project.
+3. Never start by publishing raw local memory. Sanitize first, publish second
+   (checklist in [docs/security.en.md](security.en.md)).
 
 ## 3. Write `prompt.md`
 
@@ -123,7 +127,7 @@ change, so an old internet example is a poor template.
 3. Copy only the relevant transcript and picker metadata into a staging folder.
 4. Redact usernames, absolute private paths, request IDs, tokens, tool outputs,
    and third-party data.
-5. If constructing a synthetic transcript, replace every session/message ID and
+5. If constructing a compatibility fixture, replace every session/message ID and
    timestamp consistently. Preserve parent-child ordering and roles.
 6. Keep runtime-specific invariants:
    - Claude Code: one JSON object per line; consistent `sessionId`, `uuid`, and
@@ -132,8 +136,8 @@ change, so an old internet example is a poor template.
      and `rollout_path` must agree.
    - Kimi Code: `state.json`, `agents/main/wire.jsonl`, and session-index entry
      must point to the same session directory.
-7. Mark the artifact `synthetic` or `hand-written` in its README/title. Never
-   present it as historical proof.
+7. Mark the artifact as a `locally constructed compatibility fixture` in its
+   README/title. Never present it as historical proof.
 8. Validate every JSON/JSONL line before trying it in the runtime.
 9. Test only in your own local store, with the app closed, and keep a backup.
 10. Remove the test entry after the experiment.
@@ -160,7 +164,7 @@ a release. Manual `install.sh` installations read the working copy directly.
 
 Before committing or distributing your memory bundle:
 
-- [ ] Every historical claim is true, sourced, or explicitly labeled synthetic.
+- [ ] Every historical claim is true or sourced; every constructed transcript is explicitly labeled non-historical.
 - [ ] Facts, inferences, decisions, and preferences are distinguishable.
 - [ ] Every research file has evidence, rejected alternatives, and revisit conditions.
 - [ ] Session IDs, timestamps, parent chains, paths, and picker metadata agree.

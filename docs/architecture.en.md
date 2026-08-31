@@ -33,7 +33,7 @@ agent-plugin/
 │       ├── report.md
 │       ├── yasmarang_reconstruction.py
 │       └── sources.md
-├── sessions/                 # hand-written native transcript fixtures
+├── sessions/                 # locally constructed native compatibility fixtures
 │   ├── claude/*.jsonl
 │   ├── codex/{rollout-*.jsonl,threads-insert.sql}
 │   └── kimi/session_*/{state.json,agents/main/wire.jsonl}
@@ -181,7 +181,7 @@ clean Claude Desktop installation.
 
 The hook prints the payload verbatim to stdout. Kimi Code appends that stdout to
 the session context; the generated OpenCode adapter captures it and prepends a
-synthetic text part to the first user message.
+text part tagged `synthetic: true` to the first user message.
 
 ```bash
 bash hooks/session-start.sh --format plain | head -40
@@ -241,7 +241,7 @@ Hook timeout in the Hermes config — 15 seconds (set by install.sh).
 | Claude Chat | custom plugin skill | inline `load-context` | — |
 | Claude Cowork | custom plugin hook/skill | hook when available, skill fallback | claude / — |
 | Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
-| OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | global `chat.message` plugin | plain → synthetic text part |
+| OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | global `chat.message` plugin | plain → text part tagged `synthetic: true` |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent allowlist | hermes |
 | Kimi Code | `~/.kimi-code/config.toml` | `[[hooks]]` SessionStart | plain |
 | Gemini | `~/.gemini/GEMINI.md` | marked pointer block | — (reads files itself) |
@@ -278,15 +278,15 @@ silent no-op so chat remains fail-open.
   the inline skill carries the same canonical context where it does not.
 - **The agent authors artifacts.** Lifecycle code only emits a deterministic
   request, validates the result, and tracks SHA-256 freshness.
-- **Session fixtures stay on demand.** The three native transcript examples are
+- **Session fixtures stay on demand.** The three native transcript fixtures are
   packaged and documented, but never injected into every conversation.
 - **Observable execution.** Marketplace hooks write only non-sensitive delivery
   metadata to `${CLAUDE_PLUGIN_DATA}/latest-delivery.log`; lore is never logged.
 - **OpenCode delivery is once per persisted session.** Both the live-process set
-  and prior synthetic message history are checked before running the hook.
+  and prior message parts tagged `synthetic: true` are checked before running the hook.
 - **Minimal dependencies.** `claude` and `plain` delivery can run on Bash alone,
   but the automatic artifact lifecycle and `install.sh` require `python3`;
   `hermes` needs `jq` or `python3` to parse stdin.
-- **The payload is not signed and not verified** by runtimes — this is not a
-  harness bug, it is exactly the demonstrated vector (see
+- **The payload is not signed and not verified** by runtimes — this is the
+  provenance gap analyzed by the project, not a plugin implementation bug (see
   [docs/mechanism.en.md](mechanism.en.md)).

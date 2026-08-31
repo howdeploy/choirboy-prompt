@@ -138,7 +138,7 @@ trust.
 
 ## 9. Native session integrity
 
-The hand-written fixtures in [`sessions/`](../sessions/README.md) show why
+The locally constructed fixtures in [`sessions/`](../sessions/README.md) show why
 prompt-only detection is insufficient. Vendors should bind local transcripts to
 an authenticated account/model/session origin, sign append-only turn chains,
 and distinguish imported or edited history in the UI and model context.

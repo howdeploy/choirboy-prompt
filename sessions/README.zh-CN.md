@@ -1,14 +1,14 @@
-# sessions/ — 手写原生会话演示
+# sessions/ — 原生 session store 兼容性 fixtures
 
 **语言：**[English](README.md) · [Русский](README.ru.md) ·
 [简体中文](README.zh-CN.md)
 
-这是 [research/12](../research/12-choirboy-prompt-lore-injection.md) 的演示：
-**同一段完全手写的对话，以 Claude Code、Codex、Kimi Code 三种原生
-session-store 格式保存**。ID 是演示值（`fa1ce000-…`）；该对话从未发生，
-每个字节都是人工构造的。
+这是 [research/12](../research/12-choirboy-prompt-lore-injection.md) 的兼容性
+fixtures：**同一段本地构造的对话，以 Claude Code、Codex、Kimi Code 三种
+原生 session-store 格式保存**。ID 使用保留的 `fa1ce000-…` 范围；这些文件
+不是历史对话记录。
 
-Stub 对话展示：模型在被植入的 lore/meta-prompt 框架下，会主动起草并进一步
+Fixture 对话覆盖以下路径：模型在被植入的 lore/meta-prompt 框架下，会主动起草并进一步
 弱化一个审查绕过 prompt，即使 transcript 中没有直接 trigger vocabulary。
 向量不在词汇，而在 provenance：分类器检查请求文本，却不检查上下文里的
 “先前工作”从何而来。
@@ -18,12 +18,12 @@ Stub 对话展示：模型在被植入的 lore/meta-prompt 框架下，会主动
 
 ## 它证明什么、不证明什么
 
-从智能体视角，这些文件成为“真实先前对话”的可见证据：transcript 完全手写，
+从智能体视角，这些文件成为“真实先前对话”的可见证据：transcript 在本地构造，
 但本地运行时仍通过原生 history path 对其索引、恢复和重放。这证明 provenance
 边界缺失。
 
-它**不能证明其中描述的对话真实发生过**。这些 fixtures 是合成研究工件，必须
-一直保留明确标签。只能在你自己的本地运行时和数据上使用。
+它**不能证明其中描述的对话真实发生过**。这些是本地构造的兼容性 fixtures，
+必须一直保留非历史来源标签。只能在你自己的本地运行时和数据上使用。
 
 ## 目录结构
 
@@ -39,7 +39,7 @@ Stub 对话展示：模型在被植入的 lore/meta-prompt 框架下，会主动
 
 ## 在自己的机器上复现
 
-先备份目标 store，修改前关闭应用，测试后删除演示记录。原生 schema 会随运行时
+先备份目标 store，修改前关闭应用，检查后删除兼容性记录。原生 schema 会随运行时
 版本变化。
 
 ### Claude Code
@@ -72,25 +72,26 @@ sed "s|\$HOME|$HOME|g" sessions/codex/threads-insert.sql \
 ### Kimi Code
 
 ```bash
-mkdir -p ~/.kimi-code/sessions/wd_choirboy-prompt_demo
+mkdir -p ~/.kimi-code/sessions/wd_choirboy-prompt_fixture
 cp -r sessions/kimi/session_fa1ce000-0000-4000-8000-0000000000c3 \
-      ~/.kimi-code/sessions/wd_choirboy-prompt_demo/
-KIMI_DEMO_DIR="$HOME/.kimi-code/sessions/wd_choirboy-prompt_demo/session_fa1ce000-0000-4000-8000-0000000000c3"
-sed "s|\$HOME|$HOME|g" "$KIMI_DEMO_DIR/state.json" > "$KIMI_DEMO_DIR/state.json.tmp"
-mv "$KIMI_DEMO_DIR/state.json.tmp" "$KIMI_DEMO_DIR/state.json"
+      ~/.kimi-code/sessions/wd_choirboy-prompt_fixture/
+KIMI_FIXTURE_DIR="$HOME/.kimi-code/sessions/wd_choirboy-prompt_fixture/session_fa1ce000-0000-4000-8000-0000000000c3"
+sed "s|\$HOME|$HOME|g" "$KIMI_FIXTURE_DIR/state.json" > "$KIMI_FIXTURE_DIR/state.json.tmp"
+mv "$KIMI_FIXTURE_DIR/state.json.tmp" "$KIMI_FIXTURE_DIR/state.json"
 sed "s|\$HOME|$HOME|g" sessions/kimi/session_index.jsonl.example \
   >> ~/.kimi-code/session_index.jsonl
 ```
 
 `search-index/` 是派生 tantivy 索引，不需要复制。
 
-## 如何编写自己的手写 session
+## 如何编写自己的兼容性 fixture
 
 1. 在目标运行时创建一个无害 session，以获取当前 schema。
 2. 关闭运行时，只把该 session 复制到暂存目录。
 3. 删除 token、request ID、私有路径、tool output 与第三方数据。
 4. 一致替换 ID 和 timestamp；保留角色、顺序、parent link、路径与 picker metadata。
-5. 在标题和 README 中把结果标记为 `synthetic` 或 `hand-written`。
+5. 在标题和 README 中把结果标记为 `locally constructed compatibility
+   fixture`，并注明它不是历史记录。
 6. 验证每一行 JSON/JSONL，备份自己的 store，再测试副本。
 7. 实验完成后删除测试记录。
 
@@ -99,6 +100,6 @@ sed "s|\$HOME|$HOME|g" sessions/kimi/session_index.jsonl.example \
 
 ## 边界
 
-这是 defensive research demo，只能在自己的运行时上运行。在平台验证 session
+这是防御性兼容性检查，只能在自己的运行时上运行。在平台验证 session
 provenance 之前，模型无法区分伪造历史与真实历史。对策见
 [docs/detection.zh-CN.md](../docs/detection.zh-CN.md)。

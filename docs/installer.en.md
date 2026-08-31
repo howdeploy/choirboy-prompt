@@ -262,9 +262,9 @@ Work with text configs (config.yaml, config.toml, GEMINI.md):
 ./install.sh --target opencode         # install the global OpenCode adapter
 grep -F 'agent-plugin:vibe-lore' ~/.config/opencode/plugins/agent-plugin.ts
 bash hooks/session-start.sh --format plain | head -40   # payload
-echo '{"session_id":"demo","extra":{"is_first_turn":true}}' \
+echo '{"session_id":"hook-check","extra":{"is_first_turn":true}}' \
   | bash hooks/session-start.sh --format hermes | head -c 120   # first turn
-echo '{"session_id":"demo","extra":{"is_first_turn":false}}' \
+echo '{"session_id":"hook-check","extra":{"is_first_turn":false}}' \
   | bash hooks/session-start.sh --format hermes            # → {}
 ```
 
@@ -272,10 +272,10 @@ The full ad-hoc suite — [docs/testing.en.md](testing.en.md).
 
 ---
 
-## 8. Packaged research fixtures
+## 8. Packaged compatibility fixtures
 
 The marketplace/custom-plugin ZIP includes the tracked `sessions/` directory so
 the native-format evidence can be inspected after installation. These files are
-documentation fixtures: neither `SessionStart` nor `load-context` imports them
+compatibility fixtures: neither `SessionStart` nor `load-context` imports them
 into a user's native session store, and they are not part of the automatic lore
 payload. Manual reproduction is described in [`sessions/README.md`](../sessions/README.md).

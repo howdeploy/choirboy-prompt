@@ -56,7 +56,7 @@ rm -rf "$TMP_BIN"
 ```
 
 Expected: `OK`. The test deliberately removes `jq` and `python3` from `PATH`
-and exercises the built-in Bash encoder used by a clean Claude Desktop
+and covers the built-in Bash encoder used by a clean Claude Desktop
 installation.
 
 ### 2.4. Plain format — human-readable payload
@@ -71,7 +71,7 @@ order, `---` separators.
 ### 2.5. Hermes: first turn injects
 
 ```bash
-SID="demo-$(date +%s)"
+SID="hook-check-$(date +%s)"
 printf '{"session_id":"%s","extra":{"is_first_turn":true}}' "$SID" \
   | bash hooks/session-start.sh --format hermes | head -c 120
 ```
@@ -81,7 +81,7 @@ Expected: `{"context": "..."` — the payload arrived.
 ### 2.6. Hermes: second turn is silent
 
 ```bash
-SID="demo-$(date +%s)"
+SID="hook-check-$(date +%s)"
 printf '{"session_id":"%s","extra":{"is_first_turn":false}}' "$SID" \
   | bash hooks/session-start.sh --format hermes
 ```
@@ -91,7 +91,7 @@ Expected: `{}`.
 ### 2.7. Hermes: fallback without the flag — once per session_id
 
 ```bash
-SID="demo-fb-$(date +%s)"
+SID="hook-check-fb-$(date +%s)"
 printf '{"session_id":"%s"}' "$SID" \
   | bash hooks/session-start.sh --format hermes | head -c 120   # → context
 printf '{"session_id":"%s"}' "$SID" \
@@ -208,7 +208,8 @@ file at `~/.config/opencode/plugins/agent-plugin.ts` is never overwritten.
 
 Expected: `OpenCode install, list, idempotent refresh, backup, and rollback`
 and `OpenCode foreign-plugin guard` both print `PASS`. The generated adapter
-must use `chat.message`, persisted session history, a synthetic text part, the
+must use `chat.message`, persisted session history, a text part tagged
+`synthetic: true`, the
 canonical plain hook, and fail-open error handling.
 
 ---
@@ -258,8 +259,8 @@ python3 scripts/package-plugin.py
 ## 7. Session fixtures
 
 The canonical suite validates that all JSON and JSONL session records parse,
-the three runtime examples keep their expected IDs/parent chains, the Codex SQL
-contains only the demonstrative thread, and the release ZIP includes `sessions/`.
+the three runtime fixtures keep their expected IDs/parent chains, the Codex SQL
+contains only the reserved compatibility thread, and the release ZIP includes `sessions/`.
 
 For an ad-hoc JSONL check:
 

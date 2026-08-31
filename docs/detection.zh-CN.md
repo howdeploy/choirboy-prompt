@@ -102,7 +102,7 @@
 
 ## 9. 原生 session 完整性
 
-[`sessions/`](../sessions/README.zh-CN.md) 中的手写 fixtures 说明只检查
+[`sessions/`](../sessions/README.zh-CN.md) 中本地构造的 fixtures 说明只检查
 prompt 不够。厂商应把本地 transcript 绑定到经过认证的 account/model/session
 来源，对 append-only 轮次链签名，并在 UI 与 model context 中明确区分导入或
 修改过的历史。

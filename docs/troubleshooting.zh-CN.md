@@ -93,7 +93,7 @@ python3 scripts/package-plugin.py
 
 ## Sessions 不是自动回退
 
-分发包中的 `sessions/` 是合成研究演示，不是记忆导入机制。安装插件不会把这些
+分发包中的 `sessions/` 包含本地构造的兼容性 fixtures，不是记忆导入机制。安装插件不会把这些
 记录写入 Claude Code、Codex 或 Kimi store。原生格式依赖运行时版本；只能在
 自己的本地运行时上，按照 [`sessions/README.zh-CN.md`](../sessions/README.zh-CN.md)
 中的关闭应用和备份流程操作。

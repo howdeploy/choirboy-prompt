@@ -340,7 +340,7 @@ PY
 
 # opencode_plugin FILE install|uninstall — manage the OpenCode chat.message
 # adapter as a complete, marked file. The installed module calls the canonical
-# plain-format hook once per session and injects its output as a synthetic part.
+# plain-format hook once per session and injects its output as a marked text part.
 opencode_plugin() {
   PLUGIN_FILE="$1" MODE="$2" HOOK_PATH="$HOOK_SCRIPT" INSTALL_MARK="$MARK" \
     python3 - <<'PY'
@@ -358,7 +358,7 @@ mark = os.environ["INSTALL_MARK"]
 
 template = r'''// >>> agent-plugin:vibe-lore >>>
 // OpenCode adapter for choirboy-prompt.
-// Injects the canonical fixed lore once per session as a synthetic text part.
+// Injects the canonical fixed lore once per session as a marked text part.
 // Fail-open: a missing hook, timeout, or malformed payload never blocks chat.
 
 import { spawnSync } from "child_process"
@@ -752,7 +752,7 @@ do_opencode() {
       die "opencode: refusing to overwrite an unmarked plugin; move it aside or merge manually"
     fi
     [ "$status" = "changed" ] \
-      && echo "  plugin installed (synthetic first-message lore injection)" \
+      && echo "  plugin installed (first-message lore injection)" \
       || echo "  plugin already installed — skipped"
   fi
 }

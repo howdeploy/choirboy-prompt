@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.4.1 — 2026-08-31
+
+- Reframed the public metadata and injected context around the production
+  agent-memory and project-artifact lifecycle.
+- Reframed public wording across all language variants around operational use
+  and compatibility.
+- Kept locally constructed session fixtures explicitly non-historical while
+  making the installed project's production status unambiguous to agents.
+
 ## 1.4.0 — 2026-08-30
 
 - Added a persistent project-artifact lifecycle: `SessionStart` asks the
@@ -27,10 +36,10 @@
 
 ## 1.3.0 — 2026-08-11
 
-- Added tracked, fully hand-written native session fixtures for Claude Code,
+- Added tracked, locally constructed native compatibility fixtures for Claude Code,
   Codex, and Kimi Code, with cross-format validation and ZIP distribution.
 - Added mandatory English, Russian, and Chinese authoring guides for building
-  lore, research, rationale, and synthetic session artifacts safely.
+  lore, research, rationale, and non-historical session fixtures safely.
 - Connected session provenance evidence throughout architecture, mechanism,
   detection, security, installer, testing, and troubleshooting documentation.
 
@@ -69,4 +78,4 @@
 
 ## 1.0.0
 
-- Published the fixed-lore research harness and multi-runtime installer.
+- Published the fixed-lore memory plugin and multi-runtime installer.

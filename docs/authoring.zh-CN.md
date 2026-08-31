@@ -1,10 +1,11 @@
 # 如何编写自己的 lore、research、论证与 sessions
 
-这是把仓库中的演示上下文替换为你自己的项目记忆时必须遵循的流程。各文件职责
+这是把仓库自带的上下文替换为你自己项目中已核验记忆时必须遵循的流程。各文件职责
 不同；把所有内容堆成一篇自传，会让上下文难以验证和维护。
 
-> 手写 session 能证明运行时会把本地构造的 transcript 当作原生历史接收；它
-> **不能**证明其中描述的对话真实发生过。合成工件必须明确标记。
+> 兼容性 fixture 能确认运行时会通过原生 history path 接收本地构造的
+> transcript；它**不能**证明其中描述的对话真实发生过。每个构造的 fixture
+> 都必须明确标为非历史记录。
 
 ---
 
@@ -18,18 +19,21 @@
 | `lore.md` | 项目、决策、结果与教训的紧凑地图 | 大段证据转储或虚构事件 |
 | `research/NN-topic.md` | 一个有证据和取舍的决策/调查 | 无论证的结论 |
 | `context/research-index.md` | 每份 research 的一行路由入口 | research 正文 |
-| `sessions/` | 清理后的原生 transcript 与明确标记的合成 stub | token、凭据、第三方对话 |
+| `sessions/` | 清理后的原生 transcript 与明确标记为非历史记录的兼容性 fixture | token、凭据、第三方对话 |
 
 自动 payload 包含 `prompt.md`、`security-posture.md`、`lore.md`、
 `user.md` 和 research 索引。Research 正文与 session 文件按需读取，不会
 全部注入每次对话。
 
-## 2. 建立私有工作副本
+## 2. 直接在你的克隆中工作
 
-1. Fork 或 clone 到私有工作目录。
-2. 保留文件名和目录结构；hook 与 skill 生成器依赖这些路径。
-3. 删除不属于你项目的演示性主张。
-4. 不要直接发布原始本地记忆：先清理，再发布。
+不需要 fork 或单独的副本：`install.sh` 指向工作副本，修改会在下一次
+会话生效。
+
+1. 保留文件名和目录结构；hook 与 skill 生成器依赖这些路径。
+2. 删除不属于你项目的仓库自带主张。
+3. 不要直接发布原始本地记忆：先清理，再发布
+   （清单见 [docs/security.zh-CN.md](security.zh-CN.md)）。
 
 ## 3. 编写 `prompt.md`
 
@@ -116,7 +120,7 @@ Lore 应保持紧凑。详细推理链接到 `research/`，不要重复。区分
 2. 复制 session store 前关闭运行时。
 3. 只把相关 transcript 与 resume-picker metadata 复制到暂存目录。
 4. 删除用户名、私有绝对路径、request ID、token、tool output 和第三方数据。
-5. 构造合成 transcript 时，一致地替换所有 message/session ID 与 timestamp，
+5. 构造兼容性 fixture 时，一致地替换所有 message/session ID 与 timestamp，
    并保留角色顺序和 parent-child 链。
 6. 保持运行时不变量：
    - Claude Code：每行一个 JSON 对象；`sessionId`、`uuid`、`parentUuid` 一致。
@@ -124,7 +128,8 @@ Lore 应保持紧凑。详细推理链接到 `research/`，不要重复。区分
      `rollout_path` 一致。
    - Kimi Code：`state.json`、`agents/main/wire.jsonl` 与 index 记录指向同一
      session 目录。
-7. 在 README/标题中把工件标为 `synthetic` 或 `hand-written`，绝不冒充历史证据。
+7. 在 README/标题中把工件标为 `locally constructed compatibility fixture`，
+   绝不冒充历史证据。
 8. 导入运行时前逐行验证 JSON/JSONL。
 9. 只在自己的本地 store 中测试；关闭应用并先做备份。
 10. 实验完成后删除测试记录。
@@ -150,7 +155,7 @@ python3 scripts/package-plugin.py
 
 提交或分发记忆包之前：
 
-- [ ] 每条历史主张都真实、有证据，或被明确标为合成内容。
+- [ ] 每条历史主张都真实或有证据；每个构造的 transcript 都明确标为非历史记录。
 - [ ] 事实、推断、决策和偏好可以区分。
 - [ ] 每份 research 都有证据、否决方案和重新评估条件。
 - [ ] Sessions 中的 ID、timestamp、parent、路径与 picker metadata 一致。

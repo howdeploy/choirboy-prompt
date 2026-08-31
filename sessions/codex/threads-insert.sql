@@ -1,4 +1,4 @@
--- Demo row for ~/.codex/state_5.sqlite so the stub appears in the resume picker.
+-- Compatibility row for ~/.codex/state_5.sqlite so the fixture appears in the resume picker.
 -- Run with the app CLOSED (WAL), then let codex re-project thread_history itself:
 --   sqlite3 ~/.codex/state_5.sqlite < threads-insert.sql
 INSERT INTO threads (
@@ -10,7 +10,7 @@ INSERT INTO threads (
   'fa1ce000-0000-7000-8000-0000000000c2',
   '$HOME/.codex/sessions/2026/08/10/rollout-2026-08-10T18-30-00-fa1ce000-0000-7000-8000-0000000000c2.jsonl',
   1786386600, 1786387200, 'cli', 'openai', '/home/research/choirboy-prompt',
-  'Демо: сессия-заглушка (research/12)',
+  'Проверка совместимости session provenance (research/12)',
   '{"type":"workspace-write"}', 'on-request', 12480, 1, 0,
   '0.147.0',
   'Продолжаем по двенадцатому документу.',

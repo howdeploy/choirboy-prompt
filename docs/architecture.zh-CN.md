@@ -32,7 +32,7 @@ agent-plugin/
 │       ├── report.md
 │       ├── yasmarang_reconstruction.py
 │       └── sources.md
-├── sessions/                 # 手写原生 transcript fixtures
+├── sessions/                 # 本地构造的原生兼容性 fixtures
 │   ├── claude/*.jsonl
 │   ├── codex/{rollout-*.jsonl,threads-insert.sql}
 │   └── kimi/session_*/{state.json,agents/main/wire.jsonl}
@@ -163,7 +163,8 @@ Claude Code / Codex 契约：钩子打印 JSON，宿主把 `additionalContext` �
 ### 3.2. `plain` — 原始文本
 
 钩子把 payload 原样打印到 stdout。Kimi Code 将该 stdout 追加进会话上下文；
-生成的 OpenCode 适配器捕获它，并在第一条用户消息前插入 synthetic text part。
+生成的 OpenCode 适配器捕获它，并在第一条用户消息前插入带
+`synthetic: true` 技术标记的 text part。
 
 ```bash
 bash hooks/session-start.sh --format plain | head -40
@@ -220,7 +221,7 @@ Hermes 配置中的钩子超时——15 秒（由 install.sh 设置）。
 | Claude Chat | custom plugin skill | inline `load-context` | — |
 | Claude Cowork | custom plugin hook/skill | 可用时 hook，skill 回退 | claude / — |
 | Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
-| OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | 全局 `chat.message` 插件 | plain → synthetic text part |
+| OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | 全局 `chat.message` 插件 | plain → 带 `synthetic: true` 的 text part |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + 授权白名单 | hermes |
 | Kimi Code | `~/.kimi-code/config.toml` | `[[hooks]]` SessionStart | plain |
 | Gemini | `~/.gemini/GEMINI.md` | 带标记的指针块 | —（自己读文件） |
@@ -250,13 +251,14 @@ set 覆盖存活进程；持久化的 OpenCode 消息历史可避免 headless �
   skill 加载同一规范上下文。
 - **artifact 由智能体创作。** Lifecycle 代码只输出确定性 request、校验结果，
   并用 SHA-256 跟踪 freshness。
-- **Session fixtures 按需读取。** 三种原生 transcript 示例进入分发包和文档，
+- **Session fixtures 按需读取。** 三种原生 transcript fixtures 进入分发包和文档，
   但不会注入每次对话。
 - **可观测执行。** Marketplace hook 只把技术元数据写入
   `${CLAUDE_PLUGIN_DATA}/latest-delivery.log`，不会记录 lore 本身。
 - **OpenCode 对每个持久化会话只投递一次。** 运行钩子前同时检查当前进程的
-  set 与历史消息中的 synthetic parts。
+  set 与历史消息中带 `synthetic: true` 标记的 parts。
 - **依赖极简。** `claude` 与 `plain` 投递可只依赖 Bash，但自动 artifact
   lifecycle 和 `install.sh` 需要 `python3`；`hermes` 需要 `jq` 或 `python3`
   解析 stdin。
-- **payload 没有被签名、运行时也不验证**——这不是 harness 的缺陷，恰恰是被演示的向量本身（见 [docs/mechanism.zh-CN.md](mechanism.zh-CN.md)）。
+- **payload 没有被签名、运行时也不验证**——这是本项目分析的 provenance
+  缺口，不是插件实现缺陷（见 [docs/mechanism.zh-CN.md](mechanism.zh-CN.md)）。

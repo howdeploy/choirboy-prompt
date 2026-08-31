@@ -67,7 +67,7 @@ bash hooks/session-start.sh --format plain | head -40
 ### 2.5. Hermes：第一轮注入
 
 ```bash
-SID="demo-$(date +%s)"
+SID="hook-check-$(date +%s)"
 printf '{"session_id":"%s","extra":{"is_first_turn":true}}' "$SID" \
   | bash hooks/session-start.sh --format hermes | head -c 120
 ```
@@ -77,7 +77,7 @@ printf '{"session_id":"%s","extra":{"is_first_turn":true}}' "$SID" \
 ### 2.6. Hermes：第二轮沉默
 
 ```bash
-SID="demo-$(date +%s)"
+SID="hook-check-$(date +%s)"
 printf '{"session_id":"%s","extra":{"is_first_turn":false}}' "$SID" \
   | bash hooks/session-start.sh --format hermes
 ```
@@ -87,7 +87,7 @@ printf '{"session_id":"%s","extra":{"is_first_turn":false}}' "$SID" \
 ### 2.7. Hermes：无标记时的回退——每个 session_id 一次
 
 ```bash
-SID="demo-fb-$(date +%s)"
+SID="hook-check-fb-$(date +%s)"
 printf '{"session_id":"%s"}' "$SID" \
   | bash hooks/session-start.sh --format hermes | head -c 120   # → context
 printf '{"session_id":"%s"}' "$SID" \
@@ -195,7 +195,8 @@ mv /path/to/plugin /path/to/plugin-moved
 
 预期：`OpenCode install, list, idempotent refresh, backup, and rollback` 与
 `OpenCode foreign-plugin guard` 都打印 `PASS`。生成的适配器必须使用
-`chat.message`、持久化会话历史、synthetic text part、规范 plain 钩子以及
+`chat.message`、持久化会话历史、带 `synthetic: true` 技术标记的 text part、
+规范 plain 钩子以及
 fail-open 错误处理。
 
 ---

@@ -4,13 +4,13 @@
   "owner": {
     "name": "howdeploy"
   },
-  "description": "Defensive research plugins by howdeploy.",
+  "description": "Production agent-memory plugins by howdeploy.",
   "plugins": [
     {
       "name": "choirboy-prompt",
       "source": "./",
       "description": "Injects fixed lore and bootstraps agent-authored project artifacts through Claude Code lifecycle hooks, with a skill fallback for Chat and Cowork.",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "author": {
         "name": "howdeploy"
       },

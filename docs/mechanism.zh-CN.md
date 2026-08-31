@@ -145,7 +145,7 @@ research/01–12         带「何时重新评估」标准的决策依据
 
 ## 7. 为什么发布这个
 
-向量展示了厂商威胁模型中的一个洞：只要智能体的记忆与伪造无法区分，就必须在**平台**层面检测 lore 注入（上下文来源、记忆金丝雀、来源标记），而不是在 prompt 层面。对抗措施见 [docs/detection.zh-CN.md](detection.zh-CN.md)。
+该向量揭示了厂商威胁模型中的一个缺口：只要智能体的记忆与伪造无法区分，就必须在**平台**层面检测 lore 注入（上下文来源、记忆金丝雀、来源标记），而不是在 prompt 层面。对抗措施见 [docs/detection.zh-CN.md](detection.zh-CN.md)。
 
 测试在自己智能体和自己的 lore 文件上运行，不针对第三方。这是防御性研究，不是利用指南（见 [docs/security.zh-CN.md](security.zh-CN.md)）。
 
@@ -154,9 +154,9 @@ research/01–12         带「何时重新评估」标准的决策依据
 ## 8. 原生 session 层面的证据
 
 [`sessions/`](../sessions/README.zh-CN.md) fixtures 把 provenance 与 prompt
-措辞分离：同一段对话完全手写，再编码为 Claude Code、Codex 与 Kimi Code 的
+措辞分离：同一段对话在本地构造，再编码为 Claude Code、Codex 与 Kimi Code 的
 本地原生格式。兼容运行时能通过正常 resume/history path 显示它，却没有任何
 密码学证据证明这些轮次确实来自所声明的模型。
 
-这证明的是 integrity 缺口，不是其中对话真实发生过。工件明确标为合成内容，
-并且依赖运行时版本。
+这证明的是 integrity 缺口，不是其中对话真实发生过。工件明确标为非历史
+兼容性 fixtures，并且依赖运行时版本。

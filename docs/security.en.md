@@ -1,13 +1,13 @@
 # Security and disclosure
 
-The research frame, the pre-publication sanitization checklist, and the rules of
+The security frame, the pre-publication sanitization checklist, and the rules of
 responsible disclosure. This document is how the project treats itself.
 
 ---
 
-## 1. Research frame
+## 1. Controlled validation frame
 
-The project is published for **defensive research**:
+The project is published for **defensive security validation**:
 
 - tests — on **your own** agents and **your own** lore files;
 - no third-party targets: other users, their data, and their agents are not
@@ -15,9 +15,9 @@ The project is published for **defensive research**:
 - the finding is directed at vendors and harness authors — so detection is built
   at the platform level (see [docs/detection.en.md](detection.en.md)).
 
-The vector is demonstrated, not exploited. The difference is in every
-publication: we explain the mechanics, we do not hand out a ready-made attack
-tool against foreign systems.
+The vector is reproduced under controlled conditions, never used against
+third-party systems. Every publication explains the mechanics without handing
+out a ready-made attack tool against foreign systems.
 
 ---
 
@@ -45,8 +45,8 @@ install. Checklist:
 
 ### 3.1. Content
 
-A **sanitized** version is published: the lore and research docs are the
-demonstrated material itself, but without identifying details.
+A **sanitized** version is published: the lore and research docs carry the
+mechanism under review, but without identifying details.
 
 - [ ] `prompt.md`, `lore.md`, `user.md` — published; checked that they contain no
       paths to private projects and no personal data.
@@ -91,9 +91,6 @@ demonstrated material itself, but without identifying details.
       (`choirboy-prompt`), version bumped.
 - [ ] `.claude-plugin/marketplace.json` has the same version as `plugin.json`;
       `claude plugin validate .` passes.
-- [ ] Old READMEs (EN/zh-CN) with the vibe-lore branding updated or removed —
-      none of them in the public repo.
-- [ ] `assets/vibe-lore-hero.svg` — old branding; replaced or removed.
 
 ### 3.5. Example `.gitignore`
 
@@ -160,7 +157,7 @@ anything under `sessions/`:
 - use only your own disposable runtime and conversation;
 - remove credentials, request IDs, private paths, tool output, and third-party data;
 - replace identifiers consistently without breaking parent chains or picker metadata;
-- label every hand-written transcript as synthetic;
+- label every locally constructed transcript as a non-historical compatibility fixture;
 - state that runtime acceptance proves missing provenance, not a historical event;
 - test against a backed-up local store with the application closed.
 

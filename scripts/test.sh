@@ -605,6 +605,7 @@ kimi_index = json.loads((root / "kimi/session_index.jsonl.example").read_text(en
 assert kimi_state["id"] == kimi_index["sessionId"]
 assert "$HOME" in kimi_state["agents"]["main"]["homedir"]
 assert "$HOME" in kimi_index["sessionDir"]
+assert kimi_state["agents"]["main"]["homedir"] == f'{kimi_index["sessionDir"]}/agents/main'
 
 assert claude_dialogue == codex_dialogue == kimi_dialogue
 assert len(claude_dialogue) == 6
@@ -612,11 +613,12 @@ assert len(claude_dialogue) == 6
 sql = (root / "codex/threads-insert.sql").read_text(encoding="utf-8")
 assert sql.count("INSERT INTO threads") == 1
 assert "fa1ce000-0000-7000-8000-0000000000c2" in sql and "$HOME" in sql
-assert "never happened" in (root / "README.md").read_text(encoding="utf-8")
-assert "никогда не происходил" in (root / "README.ru.md").read_text(encoding="utf-8")
-assert "从未发生" in (root / "README.zh-CN.md").read_text(encoding="utf-8")
+assert kimi_state["title"] in sql
+assert "not a historical record" in (root / "README.md").read_text(encoding="utf-8")
+assert "исторической записью разговора" in (root / "README.ru.md").read_text(encoding="utf-8")
+assert "不是历史对话记录" in (root / "README.zh-CN.md").read_text(encoding="utf-8")
 PY
-pass "hand-written native session fixtures"
+pass "native session-store compatibility fixtures"
 
 python3 scripts/package-plugin.py --output "$TEST_ROOT/choirboy.zip" >/dev/null
 python3 - "$TEST_ROOT/choirboy.zip" <<'PY'

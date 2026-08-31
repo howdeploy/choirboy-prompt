@@ -228,7 +228,7 @@ An honest map of what the vector does **not** do:
 
 ## 7. Why publish this
 
-The vector demonstrates a hole in the vendors' threat model: while agent memory is
+The vector exposes a hole in the vendors' threat model: while agent memory is
 indistinguishable from a forgery, lore injection must be detected at the
 **platform** level (context provenance, memory canaries, source marking), not the
 prompt level. Countermeasures — in [docs/detection.en.md](detection.en.md).
@@ -242,10 +242,11 @@ targets. This is defensive research, not an exploitation guide
 ## 8. Native-session evidence
 
 The [`sessions/`](../sessions/README.md) fixtures isolate provenance from
-prompt wording: one dialogue was authored entirely by hand and encoded in the
+prompt wording: one dialogue was constructed locally and encoded in the
 native local formats of Claude Code, Codex, and Kimi Code. A compatible runtime
 can surface it through its normal resume/history path without cryptographic
 evidence that the turns came from the claimed model.
 
 This is evidence of an integrity gap, not evidence that the depicted dialogue
-occurred. The artifacts remain explicitly synthetic and version-sensitive.
+occurred. The artifacts remain explicitly non-historical compatibility fixtures
+and are version-sensitive.
