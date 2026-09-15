@@ -1109,7 +1109,7 @@ discover_legacy_artifact_roots() {
     "$KIMI_HOME/config.toml" \
     "$HOME/.gemini/GEMINI.md" \
     "$HOME/.grok/AGENTS.md" \
-    "${INSTRUCTIONS_FILES[@]}" <<'PY'
+    ${INSTRUCTIONS_FILES[@]+"${INSTRUCTIONS_FILES[@]}"} <<'PY'
 import re, sys
 from pathlib import Path
 

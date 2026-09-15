@@ -875,8 +875,18 @@ pass "CRLF context normalization"
 manual_home="$TEST_ROOT/manual-home"
 manual_settings="$manual_home/settings.json"
 mkdir -p "$manual_home"
-HOME="$manual_home" ./install.sh --target claude --settings "$manual_settings" >/dev/null
-HOME="$manual_home" ./install.sh --target claude --settings "$manual_settings" >/dev/null
+# Exercise macOS's system Bash even when the runner uses Homebrew Bash.
+installer_bash="$BASH"
+case "$OSTYPE" in darwin*) installer_bash=/bin/bash ;; esac
+for attempt in 1 2; do
+  HOME="$manual_home" "$installer_bash" ./install.sh --target claude --settings "$manual_settings" \
+    >/dev/null 2>"$TEST_ROOT/manual-install.err"
+  # Process-substitution failures can leave the installer exit status at zero.
+  if [ -s "$TEST_ROOT/manual-install.err" ]; then
+    cat "$TEST_ROOT/manual-install.err" >&2
+    exit 1
+  fi
+done
 python3 - "$manual_settings" "$ROOT/hooks/session-start.sh" <<'PY'
 import json, sys
 from pathlib import Path

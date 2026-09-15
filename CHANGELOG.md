@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.5.2 — 2026-09-15
+
+- Fixed an empty `--instructions` array causing `INSTRUCTIONS_FILES[@]: unbound
+  variable` during legacy artifact discovery on Bash 3.2. The installer test
+  now checks stderr and uses the system Bash on macOS.
+
 ## 1.5.1 — 2026-08-31
 
 - Removed the obsolete self-referential memory-security research line, its

@@ -10,7 +10,7 @@
       "name": "choirboy-prompt",
       "source": "./",
       "description": "Loads fixed lore, bootstraps agent-authored project artifacts, validates them, and delivers their contents as runtime memory.",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "author": {
         "name": "howdeploy"
       },
