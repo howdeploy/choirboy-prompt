@@ -105,9 +105,9 @@ claude_settings_file() {
 
 kimi_hooks_current() {
   python3 - "$KIMI_HOME/config.toml" "$REGISTRATION_MARK" \
-    "$KIMI_SESSION_HOOK_SCRIPT" "$KIMI_PROMPT_HOOK_SCRIPT" \
-    "$KIMI_STOP_HOOK_SCRIPT" <<'PY'
-import sys
+    "bash \"$KIMI_SESSION_HOOK_SCRIPT\"" "bash \"$KIMI_PROMPT_HOOK_SCRIPT\"" \
+    "bash \"$KIMI_STOP_HOOK_SCRIPT\"" <<'PY'
+import json, sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
@@ -122,23 +122,23 @@ expected_block = f'''# >>> {mark} >>>
 [[hooks]]
 event = "SessionStart"
 matcher = "^(startup|resume)$"
-command = "bash \\"{sys.argv[3]}\\""
+command = {json.dumps(sys.argv[3], ensure_ascii=False)}
 timeout = 30
 
 [[hooks]]
 event = "PreCompact"
 matcher = "^(manual|auto)$"
-command = "bash \\"{sys.argv[3]}\\""
+command = {json.dumps(sys.argv[3], ensure_ascii=False)}
 timeout = 30
 
 [[hooks]]
 event = "UserPromptSubmit"
-command = "bash \\"{sys.argv[4]}\\""
+command = {json.dumps(sys.argv[4], ensure_ascii=False)}
 timeout = 30
 
 [[hooks]]
 event = "Stop"
-command = "bash \\"{sys.argv[5]}\\""
+command = {json.dumps(sys.argv[5], ensure_ascii=False)}
 timeout = 30
 # <<< {mark} <<<'''
 if expected_block not in text:
@@ -170,10 +170,10 @@ hooks = config.get("hooks")
 if not isinstance(hooks, list):
     raise SystemExit(1)
 expected = (
-    ("SessionStart", f'bash "{sys.argv[3]}"', "^(startup|resume)$"),
-    ("PreCompact", f'bash "{sys.argv[3]}"', "^(manual|auto)$"),
-    ("UserPromptSubmit", f'bash "{sys.argv[4]}"', None),
-    ("Stop", f'bash "{sys.argv[5]}"', None),
+    ("SessionStart", sys.argv[3], "^(startup|resume)$"),
+    ("PreCompact", sys.argv[3], "^(manual|auto)$"),
+    ("UserPromptSubmit", sys.argv[4], None),
+    ("Stop", sys.argv[5], None),
 )
 for event, command, matcher in expected:
     matches = [

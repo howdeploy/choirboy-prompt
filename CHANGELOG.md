@@ -6,9 +6,11 @@
 
 - Emit the artifact lifecycle's stdin/stdout/stderr protocol as UTF-8 with LF
   line endings, including Windows pipes using an ANSI code page.
+- Keep Bash command paths intact when checking Kimi registrations on Windows.
 - Resolve the test workspace's physical path so macOS temporary-directory
   aliases do not fail artifact migration assertions, compare BSD `wc` output
-  numerically, and isolate Windows profile paths in fallback-root tests.
+  numerically, isolate Windows profile paths in fallback-root tests, and check
+  native and Bash path forms in installer tests.
 
 ## 1.5.2 — 2026-09-15
 

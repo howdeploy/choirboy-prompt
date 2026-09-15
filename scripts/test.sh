@@ -1295,10 +1295,19 @@ done
 grep -Eq '^grokbot[[:space:]]+prepared[[:space:]]+' "$TEST_ROOT/upgrade-after-list.txt"
 
 python3 - "$upgrade_home" "$upgrade_custom" "$legacy_root" "$ROOT" <<'PY'
-import json, sys, tomllib
+import json, subprocess, sys, tomllib
 from pathlib import Path
 
 home, custom, legacy, current = map(Path, sys.argv[1:])
+
+def path_in_text(path, text):
+    spellings = {str(path), path.as_posix()}
+    if sys.platform == "win32":
+        spellings.add(subprocess.check_output(
+            ["cygpath", "-u", str(path)], encoding="utf-8", timeout=10,
+        ).rstrip("\r\n"))
+    return any(value in text or json.dumps(value)[1:-1] in text for value in spellings)
+
 live = [
     home / ".claude/settings.json",
     home / ".codex/hooks.json",
@@ -1313,28 +1322,28 @@ live = [
 ]
 for path in live:
     text = path.read_text(encoding="utf-8")
-    assert str(legacy) not in text, f"stale checkout path remains in {path}"
+    assert not path_in_text(legacy, text), f"stale checkout path remains in {path}"
 
 claude = json.loads(live[0].read_text(encoding="utf-8"))["hooks"]
 codex = json.loads(live[1].read_text(encoding="utf-8"))["hooks"]
 for hooks in (claude, codex):
     flat = [handler for entries in hooks.values() for entry in entries for handler in entry["hooks"]]
     joined = json.dumps(flat)
-    assert str(current / "hooks/session-start.sh") in joined
-    assert str(current / "hooks/artifact-stop.sh") in joined
+    assert path_in_text(current / "hooks/session-start.sh", joined), joined
+    assert path_in_text(current / "hooks/artifact-stop.sh", joined), joined
     assert "foreign-" in joined
 
 opencode = live[2].read_text(encoding="utf-8")
-assert str(current / "hooks/session-start.sh") in opencode
+assert path_in_text(current / "hooks/session-start.sh", opencode)
 assert "agent-plugin:vibe-lore:registration=2" in opencode
 
 hermes = live[3].read_text(encoding="utf-8")
 allowlist = json.loads(live[4].read_text(encoding="utf-8"))["approvals"]
 assert "# hermes user sentinel" in hermes
-assert str(current / "hooks/session-start.sh") in hermes
+assert path_in_text(current / "hooks/session-start.sh", hermes)
 assert {"event": "pre_llm_call", "command": "foreign-hermes-hook"} in allowlist
 owned = [entry for entry in allowlist if "session-start.sh" in entry.get("command", "")]
-assert len(owned) == 1 and str(current / "hooks/session-start.sh") in owned[0]["command"]
+assert len(owned) == 1 and path_in_text(current / "hooks/session-start.sh", owned[0]["command"])
 
 kimi_text = live[5].read_text(encoding="utf-8")
 kimi = tomllib.loads(kimi_text)
@@ -1342,9 +1351,9 @@ assert "# kimi user sentinel" in kimi_text
 assert [hook["event"] for hook in kimi["hooks"]] == [
     "SessionStart", "PreCompact", "UserPromptSubmit", "Stop"
 ]
-assert str(current / "hooks/kimi-session-start.sh") in kimi_text
-assert str(current / "hooks/kimi-user-prompt.sh") in kimi_text
-assert str(current / "hooks/kimi-artifact-stop.sh") in kimi_text
+assert path_in_text(current / "hooks/kimi-session-start.sh", kimi_text)
+assert path_in_text(current / "hooks/kimi-user-prompt.sh", kimi_text)
+assert path_in_text(current / "hooks/kimi-artifact-stop.sh", kimi_text)
 
 for path, sentinel in (
     (live[6], "gemini user sentinel"),
@@ -1354,7 +1363,7 @@ for path, sentinel in (
     text = path.read_text(encoding="utf-8")
     assert sentinel in text
     assert "agent-plugin:vibe-lore:registration=2" in text
-    assert str(current / "scripts/artifact-generator.py") in text
+    assert path_in_text(current / "scripts/artifact-generator.py", text)
 
 grokbot = live[8].read_text(encoding="utf-8")
 assert "agent-plugin:vibe-lore:registration=2" in grokbot
