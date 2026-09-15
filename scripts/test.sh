@@ -929,25 +929,36 @@ codex_home="$TEST_ROOT/codex-home"
 mkdir -p "$codex_home/.codex"
 HOME="$codex_home" ./install.sh --target codex >/dev/null
 HOME="$codex_home" ./install.sh --target codex >/dev/null
-python3 - "$codex_home/.codex/hooks.json" "$ROOT" <<'PY'
-import json, sys
+python3 - "$codex_home/.codex/hooks.json" \
+  "bash \"$ROOT/hooks/session-start.sh\"" "bash \"$ROOT/hooks/artifact-stop.sh\"" \
+  "$installer_bash" <<'PY'
+import json, subprocess, sys
 from pathlib import Path
 
 doc = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["hooks"]
-root = Path(sys.argv[2])
 start = doc["SessionStart"][0]["hooks"][0]
 stop = doc["Stop"][0]["hooks"][0]
 assert start == {
     "type": "command",
-    "command": f'bash "{root / "hooks/session-start.sh"}"',
+    "command": sys.argv[2],
     "timeout": 15,
     "additionalContextLimit": 262144,
-}
+}, start
 assert stop == {
     "type": "command",
-    "command": f'bash "{root / "hooks/artifact-stop.sh"}"',
+    "command": sys.argv[3],
     "timeout": 15,
-}
+}, stop
+for handler in (start, stop):
+    result = subprocess.run(
+        [sys.argv[4], "-c", handler["command"]], input=b"{}\n", capture_output=True, timeout=20,
+    )
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    response = json.loads(result.stdout.decode("utf-8"))
+    if handler is start:
+        assert "CHOIRBOY_DOSSIER_CANARY_7f51c92d" in response["hookSpecificOutput"]["additionalContext"]
+    else:
+        assert response == {}
 PY
 HOME="$codex_home" ./install.sh --uninstall --target codex >/dev/null
 python3 - "$codex_home/.codex/hooks.json" <<'PY'
