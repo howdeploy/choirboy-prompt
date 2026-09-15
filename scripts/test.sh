@@ -6,6 +6,7 @@ cd "$ROOT"
 VERSION="$(python3 -c 'import json; print(json.load(open(".claude-plugin/plugin.json", encoding="utf-8"))["version"])')"
 
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/choirboy-test.XXXXXX")"
+TEST_ROOT="$(cd "$TEST_ROOT" && pwd -P)"
 export CHOIRBOY_ARTIFACTS_DIR="$TEST_ROOT/project-artifacts"
 cleanup() {
   if [ "${CHOIRBOY_TEST_KEEP_TMP:-0}" = 1 ]; then
@@ -210,7 +211,7 @@ grep -q 'yourself with the available file tools' "$TEST_ROOT/artifact-pending.tx
 grep -q 'Do not inspect Git history/diff/reflog' "$TEST_ROOT/artifact-pending.txt"
 pass "artifact prepare creates request metadata only"
 
-printf '{}\n' | bash hooks/artifact-stop.sh > "$TEST_ROOT/artifact-stop-pending.json"
+printf '{}\n' | PYTHONIOENCODING=cp1252 bash hooks/artifact-stop.sh > "$TEST_ROOT/artifact-stop-pending.json"
 printf '{"stop_hook_active":true}\n' \
   | bash hooks/artifact-stop.sh > "$TEST_ROOT/artifact-stop-active.json"
 printf 'malformed\n' | bash hooks/artifact-stop.sh > "$TEST_ROOT/artifact-stop-malformed.json"

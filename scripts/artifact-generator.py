@@ -912,6 +912,9 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
+    # Hook pipes carry UTF-8 on every platform, independent of the host locale.
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8", newline="\n")
     args = parser().parse_args()
     try:
         source_root = args.source_root.resolve()
