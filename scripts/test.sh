@@ -889,22 +889,31 @@ for attempt in 1 2; do
   fi
 done
 python3 - "$manual_settings" "$ROOT/hooks/session-start.sh" <<'PY'
-import json, sys
+import json, subprocess, sys
 from pathlib import Path
 
 doc = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 start_entries = doc["hooks"]["SessionStart"]
 stop_entries = doc["hooks"]["Stop"]
 assert len(start_entries) == len(stop_entries) == 1
-assert start_entries[0]["hooks"][0] == {
-    "type": "command", "command": "bash", "args": [sys.argv[2]], "timeout": 15,
-}
-assert stop_entries[0]["hooks"][0] == {
-    "type": "command",
-    "command": "bash",
-    "args": [str(Path(sys.argv[2]).with_name("artifact-stop.sh"))],
-    "timeout": 15,
-}
+for entries, script in (
+    (start_entries, Path(sys.argv[2])),
+    (stop_entries, Path(sys.argv[2]).with_name("artifact-stop.sh")),
+):
+    assert len(entries[0]["hooks"]) == 1
+    handler = dict(entries[0]["hooks"][0])
+    args = handler.pop("args")
+    assert len(args) == 1 and Path(args[0]) == script, (args, str(script))
+    assert handler == {"type": "command", "command": "bash", "timeout": 15}, handler
+    result = subprocess.run(
+        [handler["command"], *args], input="{}\n", capture_output=True,
+        encoding="utf-8", check=True, timeout=20,
+    )
+    response = json.loads(result.stdout)
+    if script.name == "session-start.sh":
+        assert "CHOIRBOY_DOSSIER_CANARY_7f51c92d" in response["hookSpecificOutput"]["additionalContext"]
+    else:
+        assert response == {}
 PY
 HOME="$manual_home" ./install.sh --uninstall --target claude --settings "$manual_settings" >/dev/null
 python3 - "$manual_settings" <<'PY'
