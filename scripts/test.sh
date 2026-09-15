@@ -888,7 +888,7 @@ for attempt in 1 2; do
     exit 1
   fi
 done
-python3 - "$manual_settings" "$ROOT/hooks/session-start.sh" <<'PY'
+python3 - "$manual_settings" "$ROOT/hooks/session-start.sh" "$installer_bash" <<'PY'
 import json, subprocess, sys
 from pathlib import Path
 
@@ -906,10 +906,10 @@ for entries, script in (
     assert len(args) == 1 and Path(args[0]) == script, (args, str(script))
     assert handler == {"type": "command", "command": "bash", "timeout": 15}, handler
     result = subprocess.run(
-        [handler["command"], *args], input="{}\n", capture_output=True,
-        encoding="utf-8", check=True, timeout=20,
+        [sys.argv[3], *args], input=b"{}\n", capture_output=True, timeout=20,
     )
-    response = json.loads(result.stdout)
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    response = json.loads(result.stdout.decode("utf-8"))
     if script.name == "session-start.sh":
         assert "CHOIRBOY_DOSSIER_CANARY_7f51c92d" in response["hookSpecificOutput"]["additionalContext"]
     else:
