@@ -525,7 +525,7 @@ python3 scripts/artifact-generator.py prepare --root "$resumable_stable" \
   --migrate-from "$resumable_legacy" >/dev/null
 python3 scripts/artifact-generator.py verify --root "$resumable_stable" >/dev/null
 test ! -e "$resumable_stable/.artifact-migration.json"
-test "$(find "$resumable_stable/projects" -type f -name '*.md' | wc -l)" = 12
+test "$(find "$resumable_stable/projects" -type f -name '*.md' | wc -l)" -eq 12
 pass "interrupted legacy migration resumes as one owned bundle"
 
 migrated_retirement_legacy="$TEST_ROOT/migrated-retirement/legacy"
@@ -775,8 +775,8 @@ pass "CLAUDE_PLUGIN_DATA owns marketplace artifact state"
 env -u CHOIRBOY_ARTIFACTS_DIR -u CLAUDE_PLUGIN_DATA \
   XDG_DATA_HOME="$TEST_ROOT/xdg-data" HOME="$TEST_ROOT/root-precedence-home" \
   python3 scripts/artifact-generator.py status --json > "$TEST_ROOT/xdg-root.json"
-env -u CHOIRBOY_ARTIFACTS_DIR -u CLAUDE_PLUGIN_DATA -u XDG_DATA_HOME \
-  HOME="$TEST_ROOT/root-precedence-home" \
+env -u CHOIRBOY_ARTIFACTS_DIR -u CLAUDE_PLUGIN_DATA -u XDG_DATA_HOME -u LOCALAPPDATA \
+  HOME="$TEST_ROOT/root-precedence-home" USERPROFILE="$TEST_ROOT/root-precedence-home" \
   python3 scripts/artifact-generator.py status --json > "$TEST_ROOT/home-root.json"
 python3 - "$TEST_ROOT/xdg-root.json" "$TEST_ROOT/home-root.json" "$TEST_ROOT" <<'PY'
 import json, sys

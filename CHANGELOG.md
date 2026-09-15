@@ -7,7 +7,8 @@
 - Emit the artifact lifecycle's stdin/stdout/stderr protocol as UTF-8 with LF
   line endings, including Windows pipes using an ANSI code page.
 - Resolve the test workspace's physical path so macOS temporary-directory
-  aliases do not fail artifact migration assertions.
+  aliases do not fail artifact migration assertions, compare BSD `wc` output
+  numerically, and isolate Windows profile paths in fallback-root tests.
 
 ## 1.5.2 — 2026-09-15
 
