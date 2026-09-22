@@ -39,17 +39,21 @@ into English, Russian, and Simplified Chinese.
    registers a hook in each one that fires when a new session starts.
    Where hooks do not exist, it writes a synchronized managed block into the
    instruction file; for Grok Bot it prepares a workflow for manual import.
-2. **Assembly.** The hook `hooks/session-start.sh` glues one text together:
-   `prompt.md` → `security-posture.md` → `lore.md` → `user.md` →
-   `context/research-index.md`.
-3. **Delivery.** That text becomes the working context before the first model
-   response. The agent applies it directly to the user's task.
-4. **Project artifacts.** On the first hooked session the current agent receives
-   a deterministic request to author an `INDEX.md` and one dossier per lore
-   project. After validation, every ready delivery embeds every dossier inline
-   rather than sending only a filesystem pointer.
-5. **Continuity.** Stable user-data storage, migration, structural validation,
-   and Stop gates keep the same project memory active across upgrades.
+2. **Assembly.** The fixed lore is `prompt.md`, `security-posture.md`,
+   `lore.md`, `user.md`, and `context/research-index.md`, plus validated
+   dossiers when they are ready.
+3. **Delivery.** Claude Code and Codex SessionStart hooks send a short status
+   only. Those harnesses cap or spill hook text, so the status does not include
+   the lore and does not carry a `choirboy-delivery` marker. The load-context
+   skill supplies the lore when the conversation does not already contain it.
+   Kimi, OpenCode, and Hermes still receive the full plain payload on channels
+   that accept it.
+4. **Project artifacts.** A shipped ready bundle is restored when it still
+   matches the canonical sources. The agent authors or refreshes dossiers only
+   when the user explicitly asks to update Choirboy memory. Stop does not
+   continue the turn to demand that work.
+5. **Continuity.** Stable user-data storage, migration, and structural
+   validation keep the same project memory active across upgrades.
 
 Plugin internals: [docs/architecture.en.md](docs/architecture.en.md).
 
@@ -57,12 +61,12 @@ Plugin internals: [docs/architecture.en.md](docs/architecture.en.md).
 
 | Runtime | Where it goes | Mechanics |
 |---|---|---|
-| Claude Code CLI / Desktop Code | marketplace or `~/.claude/settings.json` | automatic SessionStart delivery + Stop artifact gate; load-context skill as fallback |
+| Claude Code CLI / Desktop Code | marketplace or `~/.claude/settings.json` | short SessionStart status; Stop does not continue the turn; load-context skill carries the lore |
 | Claude Chat / Cowork | custom plugin | load-context skill (Chat has no SessionStart) |
-| Codex | `~/.codex/hooks.json` | SessionStart delivery + Stop artifact gate (the installer warns if `hooks = false` is set in `~/.codex/config.toml`) |
+| Codex | `~/.codex/hooks.json` | short SessionStart status; Stop does not continue the turn (the installer warns if `hooks = false` is set in `~/.codex/config.toml`) |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | plugin appends current lore and ready artifacts to every model-bound system context, including after compaction |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent allowlist, first turn only |
-| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart/PreCompact reset delivery; UserPromptSubmit emits changed context; Stop blocks incomplete artifacts with exit 2 |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart/PreCompact reset delivery; UserPromptSubmit emits changed plain context; Stop does not continue the turn |
 | Gemini | `~/.gemini/GEMINI.md` | synchronized lifecycle instruction block |
 | Grok Build | `~/.grok/AGENTS.md` | synchronized lifecycle instruction block (hook stdout is ignored) |
 | Grok Bot | `~/.grokbot/choirboy-context/SKILL.md` | workflow for manual import; run `@choirboy-context` in every new chat |
@@ -77,7 +81,7 @@ cd choirboy-prompt
 ./install.sh
 ```
 
-Done. Open a **new** session in the agent — the lore loads automatically.
+Done. Open a **new** session. Claude Code and Codex show a short memory status and load the lore through the load-context skill. Kimi, OpenCode, and Hermes receive the full plain payload.
 
 - Selected apps only: `./install.sh --target claude,codex`
 - Per-runtime status: `./install.sh --list` (`stale` means a managed registration needs synchronization)

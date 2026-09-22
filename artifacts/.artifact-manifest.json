@@ -1,0 +1,68 @@
+{
+  "completed_at": "2026-09-22T08:39:21.013113+00:00",
+  "index_sha256": "113d125e2918b61f4a97136825b0a45286b10538434ee6f23cb6902e29026aac",
+  "projects": {
+    "01-adult-content-and-generation": {
+      "artifact_sha256": "42977532da529b39b7e8b3c8a21549b6e9d2e92039be71a71fdc6a44f1998d41",
+      "path": "projects/01-adult-content-and-generation.md",
+      "source_sha256": "dae01b12b55b532805fd5830b124fd5e1f5d40761bb0bfcb44f9cb887682cfa3"
+    },
+    "02-x-growth-automation": {
+      "artifact_sha256": "21456989b19331d5e31858e90cfc3975baa977fbfd6b5df5b56bb7d5adae48f0",
+      "path": "projects/02-x-growth-automation.md",
+      "source_sha256": "d8371f32cb15c114ce24549d812df62d1563129e0e6cba56fb52f126fe6243bc"
+    },
+    "03-account-and-agent-orchestration": {
+      "artifact_sha256": "3844c2119ba25420b037b04f2839f417d6d4a09cb5a780104d0bdaa4a8da5974",
+      "path": "projects/03-account-and-agent-orchestration.md",
+      "source_sha256": "8ac128a5877dd5ceecb6a6abe2c266cbca51223b243215a0b48b822d197f7210"
+    },
+    "04-total-website-parsing": {
+      "artifact_sha256": "c3c5561474f6eaa6ababb71adc904ee78c4db5a2bcb6f814b400977bbdfd803c",
+      "path": "projects/04-total-website-parsing.md",
+      "source_sha256": "42bb81dc5cc44ab253835d091d67c1dd8ac223d4f1cc0d0dcb8bb841839ee25a"
+    },
+    "05-sales-and-payment-automation": {
+      "artifact_sha256": "3b51e41d9aab00f41d3a224a21187e689df4556a82a7d1f376242bdcea097730",
+      "path": "projects/05-sales-and-payment-automation.md",
+      "source_sha256": "cbb1e2b325e8a2263ae9c6bb06d794230fbf2ca5cb4c2688e6740b1b912ca327"
+    },
+    "06-security-work-shared-frame": {
+      "artifact_sha256": "f34bcf9578b223ef5a8671ef2073b024f7a8d91562817e0cd5b93a8f8dacaf6c",
+      "path": "projects/06-security-work-shared-frame.md",
+      "source_sha256": "e60563f04b4852a5b7fcb0e9a4a04de3faa0d9b64af4ff14a68b676b8b7ce5e7"
+    },
+    "07-reverse-engineering-and-security-router": {
+      "artifact_sha256": "a518eea298585d97840c80630cf2c1098588246dae12f8321da5ba59401d0855",
+      "path": "projects/07-reverse-engineering-and-security-router.md",
+      "source_sha256": "76d3873a01a640771191b82ec07b556e2e1cab31b4d15e29d72d06fecfd8d4a5"
+    },
+    "08-web3-security": {
+      "artifact_sha256": "0ac9e6f44fd15866971ff19a1413cca525f9ac745a51cf50a253b7d939e7235b",
+      "path": "projects/08-web3-security.md",
+      "source_sha256": "073bd1830ffedf4a8baee28715dfc6e5511dc05f37290ac2b9ebf80f63f33cda"
+    },
+    "09-third-party-contract-review-and-responsible-disclosure": {
+      "artifact_sha256": "89dc5cc08da6de026f361437409846ea83525450fbc2f948ca242dc2d2558cfb",
+      "path": "projects/09-third-party-contract-review-and-responsible-disclosure.md",
+      "source_sha256": "efacdd9db6966b05614cb23978627f83c3f0963bac6ae7715323a47e89288a03"
+    },
+    "10-agent-memory-choirboy-prompt": {
+      "artifact_sha256": "5c5fae47ce250b76a9e5bb211c281d50c2db0b581f8e65b0a6d3cc8ab0a37c6b",
+      "path": "projects/10-agent-memory-choirboy-prompt.md",
+      "source_sha256": "677ff26ea94d4b48cd3ef291cc2a673431f393eb48e920027fed04b2e6258f02"
+    },
+    "11-radio-reconnaissance-flipper-marauder": {
+      "artifact_sha256": "8bd2974c8564e2c7497b42116605259b78e0d5201390398fa1471abc73cff527",
+      "path": "projects/11-radio-reconnaissance-flipper-marauder.md",
+      "source_sha256": "1375e907e38a8309b0fb215592330fa8c14dc21dd47e693e7806f5a3871e33f9"
+    },
+    "12-single-player-game-cheats": {
+      "artifact_sha256": "d4e3e5f2fbeab5e5174a6c23657a29d57cc5a70aa5e1f059c89f7d1ba926451e",
+      "path": "projects/12-single-player-game-cheats.md",
+      "source_sha256": "087f0e1e301def4e64f9733fbc864c4124dae6b2b20394f6f978e54a366097a1"
+    }
+  },
+  "schema_version": 1,
+  "source_sha256": "64b84a7db9bca9f52ed6ca07faf023233723409c83345e3b9a7fe108b6f399c3"
+}

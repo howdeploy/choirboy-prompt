@@ -35,7 +35,7 @@ agent-plugin/
 │       └── sources.md
 ├── hooks/
 │   ├── session-start.sh      # payload assembly + claude / plain / hermes formats
-│   ├── artifact-stop.sh      # return unfinished bootstrap to the current agent
+│   ├── artifact-stop.sh      # restore a matching bundle, then return {}
 │   ├── kimi-session-start.sh # prepare state and reset Kimi delivery dedup
 │   ├── kimi-user-prompt.sh   # deliver Kimi context on the first user prompt
 │   ├── kimi-artifact-stop.sh # Kimi exit-2 gate for incomplete artifacts
@@ -133,9 +133,10 @@ After the canonical wrapper, each automatic delivery appends artifact lifecycle
 output. A `pending` request uses a `choirboy-project-artifacts` block;
 `ready` memory uses neutral Markdown. `artifact-generator.py` reads the complete
 lore and every research Markdown file, writes only request metadata, and
-computes lifecycle status. While status is `pending`, the current agent must use
-its own file tools to author `INDEX.md` and one dossier for every `###` project
-in `lore.md`. Canonical context, research, INDEX, and dossier content are always
+computes lifecycle status. A shipped ready bundle fills missing files when it still
+matches the canonical sources. An existing INDEX or dossier that differs from
+that bundle is kept, and `finalize` does not restore first. The agent authors `INDEX.md` and dossiers only
+when the user explicitly asks to update Choirboy memory. Canonical context, research, INDEX, and dossier content are always
 English; the validator rejects Cyrillic/CJK model-facing content. The script
 never writes dossier content.
 
@@ -148,8 +149,9 @@ not exposed as path/SHA wrappers. A missing, stale, edited, or malformed snapsho
 returns to `pending`.
 Canonical lore/research always overrides a derived summary.
 
-While status is `pending`, Claude/Codex `Stop` returns the bootstrap with
-`decision: block`. Kimi uses its native protocol instead: stderr plus exit 2.
+Claude Code and Codex `Stop` return `{}` whether memory is ready or pending.
+They do not use `decision: block` or Stop `additionalContext`, because both
+continue the turn. Kimi Stop also exits 0. A status is not an order to write files.
 Artifact state is independent of the checkout. Root precedence is
 `CHOIRBOY_ARTIFACTS_DIR` → `${CLAUDE_PLUGIN_DATA}/project-artifacts` →
 `${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
@@ -167,14 +169,17 @@ protocol via `--format`.
 
 ### 3.1. `claude` (default) — SessionStart JSON
 
-Claude Code / Codex contract: the hook prints JSON, the host pours
-`additionalContext` into the session.
+Claude Code / Codex contract: the hook prints JSON. `additionalContext` is a
+short status under 2,000 characters and does not include `<choirboy-delivery>`
+or `<choirboy-context>`. Claude Code caps that field at 10,000 characters and
+previews only the first 2,000; there is no setting to raise the cap. Codex
+spills oversized hook output. The full lore is the load-context skill.
 
 ```json
 {
   "hookSpecificOutput": {
     "hookEventName": "SessionStart",
-    "additionalContext": "<whole payload as one string>"
+    "additionalContext": "Choirboy memory status: ready\n..."
   }
 }
 ```
@@ -268,7 +273,7 @@ Hook timeout in the Hermes config — 15 seconds (set by install.sh).
 | Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | model-bound system-context transform | plain → system context on every model request |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent allowlist | hermes |
-| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart + PreCompact + UserPromptSubmit + Stop | changed payload / plain; Stop / exit 2 |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart + PreCompact + UserPromptSubmit + Stop | changed payload / plain; Stop exits 0 |
 | Gemini | `~/.gemini/GEMINI.md` | managed lifecycle instruction block | — (runs/reads files itself) |
 | any | `--instructions PATH` | managed lifecycle instruction block | — (runs/reads files itself) |
 

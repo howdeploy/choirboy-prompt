@@ -234,8 +234,8 @@ def is_ours(entry):
 - install: removes stale registrations of our script (folder moved), adds the
   exact handler if absent. Claude receives `command: bash`, one `args` path, and
   `timeout: 15`; Codex keeps its quoted command and sets
-  `additionalContextLimit: 262144` so the fixed lore and inline artifact memory
-  remain in the same startup context.
+  `additionalContextLimit: 4000` so the short SessionStart status is not spilled.
+  The fixed lore is not sent through this hook.
 - uninstall: removes all `is_ours()` entries.
 - Invalid JSON is never replaced; real changes are backed up and written
   atomically.

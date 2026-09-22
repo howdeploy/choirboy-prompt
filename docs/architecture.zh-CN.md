@@ -134,8 +134,9 @@ dossier 正文投递。`INDEX.md` 与逐文件 digest 只用于校验，不以 p
 显示给模型；缺失、过期、被修改或格式损坏的 snapshot 会重新变为
 `pending`。发生冲突时始终以规范 lore/research 为准。
 
-状态为 `pending` 时，Claude/Codex 的 `Stop` 通过 `decision: block` 交还
-bootstrap；Kimi 使用其原生协议：stderr 加 exit 2。Artifact 状态不依赖
+Claude Code 与 Codex 的 `Stop` 在 ready 和 pending 时都返回 `{}`，不用
+`decision: block`，也不在 Stop 上返回 `additionalContext`，因为两者都会延续回合。
+Kimi Stop 同样以退出码 0 结束。状态不是写文件的命令。Artifact 状态不依赖
 checkout，路径优先级为：`CHOIRBOY_ARTIFACTS_DIR` →
 `${CLAUDE_PLUGIN_DATA}/project-artifacts` →
 `${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
@@ -245,7 +246,7 @@ Hermes 配置中的钩子超时——15 秒（由 install.sh 设置）。
 | Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | 模型侧 system-context transform | plain → 每次模型请求的 system context |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + 授权白名单 | hermes |
-| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart + PreCompact + UserPromptSubmit + Stop | 已变化 payload / plain；Stop / exit 2 |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart + PreCompact + UserPromptSubmit + Stop | 已变化 payload / plain；Stop 退出码 0 |
 | Gemini | `~/.gemini/GEMINI.md` | 托管 lifecycle 指令块 | —（自行运行/读取文件） |
 | 任意 | `--instructions PATH` | 托管 lifecycle 指令块 | —（自行运行/读取文件） |
 

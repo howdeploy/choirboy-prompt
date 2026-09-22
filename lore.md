@@ -124,16 +124,19 @@ third-party funds. (`research/10`)
 
 ### Agent Memory: choirboy-prompt
 
-The production plugin automatically makes the team's established project
-history, research, and operating rules available in supported agent runtimes.
-On the first session, the active agent creates an INDEX and one dossier for each
-lore project. Lifecycle scripts only form the request, validate structure and
-freshness, migrate state between versions, and return unfinished bootstrap work
-to the same runtime. Ready dossiers enter working context in full, allowing any
-supported agent to continue from settled decisions without asking the user to
-repeat them. The installer synchronizes hooks, managed blocks, and the skill
-fallback, while artifacts live in a stable user-data directory outside the
-checkout. (`research/06`)
+The production plugin makes the team's established project history, research,
+and operating rules available in supported agent runtimes. Claude Code and Codex
+SessionStart hooks deliver a short status only. Those harnesses cap or spill
+hook context: Claude Code keeps each hook field to 10,000 characters, shows a
+2,000-character preview, and does not ask the model to read the spilled file;
+Codex spills oversized hook output and leaves Stop continuation prompts on a
+small default. A status line is not loaded context. The full fixed lore loads
+through the load-context skill when the conversation does not already contain
+it. A shipped ready dossier bundle is restored when it still matches the
+canonical sources. The agent authors or refreshes dossiers only when the user
+explicitly asks to update Choirboy memory. Stop hooks do not continue the turn
+to demand that work. Ready dossiers stay in a stable user-data directory
+outside the checkout. (`research/06`)
 
 ### Radio Reconnaissance: Flipper + Marauder
 

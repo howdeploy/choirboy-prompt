@@ -37,7 +37,7 @@ def render() -> str:
     version = plugin_version()
     return f'''---
 name: load-context
-description: Load the bundled Choirboy fixed lore when a choirboy-delivery marker is absent, at conversation bootstrap, or when the user asks to activate, restore, or reload Choirboy context. Do not invoke when the marker is already present.
+description: Load the bundled Choirboy fixed lore when the conversation does not already contain a choirboy-context block. A short SessionStart status that only names on-disk memory is not loaded context, even if a hook ran. Also invoke when the user asks to activate, restore, or reload Choirboy context. Do not invoke when a choirboy-context block is already present.
 ---
 
 # Choirboy context loader

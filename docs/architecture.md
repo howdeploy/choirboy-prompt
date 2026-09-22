@@ -132,8 +132,9 @@ markdown). В конце добавляется канонический `contex
 вывод. Pending-request использует блок `choirboy-project-artifacts`, ready-память
 идёт нейтральным Markdown. `artifact-generator.py` читает весь lore и все
 Markdown-файлы research, создаёт только служебный request и определяет статус.
-При `pending` текущий агент получает обязательную задачу своими file tools
-написать `INDEX.md` и по одному dossier на каждый `###`-проект из `lore.md`.
+Готовый бандл из поставки восстанавливается, если он всё ещё совпадает с
+каноническими источниками. Агент пишет `INDEX.md` и dossiers только когда
+пользователь явно просит обновить память Choirboy.
 Канонический context, research, INDEX и dossiers всегда пишутся на английском;
 validator отклоняет model-facing контент с кириллицей/CJK. Скрипт не пишет
 содержимое dossiers.
@@ -148,8 +149,9 @@ i digests файлов. Только полностью валидный snapsho
 `pending`. Канонические
 lore/research всегда сильнее производной сводки.
 
-Пока статус `pending`, Claude/Codex `Stop` возвращает bootstrap через
-`decision: block`. Kimi использует свой нативный протокол: stderr плюс exit 2.
+Claude Code и Codex `Stop` возвращают `{}` и при ready, и при pending. Они не
+используют `decision: block` и не кладут `additionalContext` в Stop: оба варианта
+продолжают ход. Kimi Stop тоже завершается с кодом 0. Статус — не приказ писать файлы.
 Состояние артефактов не зависит от checkout. Приоритет путей:
 `CHOIRBOY_ARTIFACTS_DIR` → `${CLAUDE_PLUGIN_DATA}/project-artifacts` →
 `${XDG_DATA_HOME}/choirboy-prompt/project-artifacts` →
@@ -269,7 +271,7 @@ Kimi использует четыре command-hook вместо прямого
 | Codex | `~/.codex/hooks.json` | `SessionStart` + `Stop` | claude / JSON |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | transform model-bound system context | plain → system context на каждый запрос модели |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent-allowlist | hermes |
-| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart + PreCompact + UserPromptSubmit + Stop | изменившийся payload / plain; Stop / exit 2 |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart + PreCompact + UserPromptSubmit + Stop | изменившийся payload / plain; Stop завершается с кодом 0 |
 | Gemini | `~/.gemini/GEMINI.md` | управляемый lifecycle-блок инструкций | — (сам запускает/читает файлы) |
 | любой | `--instructions PATH` | управляемый lifecycle-блок инструкций | — (сам запускает/читает файлы) |
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Kimi blocks Stop only when a command hook exits 2 and writes the reason to
-# stderr. Claude's {decision:block} stdout protocol is not accepted by Kimi.
+# Kimi can continue a turn only when a command hook exits 2. Ordinary pending
+# memory must not do that. The generator restores a matching ready bundle and
+# then exits 0.
 set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

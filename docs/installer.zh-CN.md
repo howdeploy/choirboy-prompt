@@ -212,9 +212,8 @@ def is_ours(entry):
 ```
 
 - install：删除过期注册并添加精确 handler。Claude 使用 `command: bash`、一个
-  `args` 路径和 `timeout: 15`；Codex 保留带引用路径的字符串命令，并为完整
-  启动 payload 设置 `additionalContextLimit: 262144`，使固定 lore 与内联
-  artifact memory 保持在同一 startup context 中。
+  `args` 路径和 `timeout: 15`；Codex 保留带引用路径的字符串命令，并设置
+  `additionalContextLimit: 4000`，只为短 SessionStart 状态留出余量。完整 lore 不通过该 hook 发送。
 - uninstall：删除所有 `is_ours()` 条目。
 - 无效 JSON 不会被替换；实际变化会先备份，再原子写入。
 

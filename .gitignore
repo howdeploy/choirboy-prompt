@@ -5,4 +5,6 @@
 *.swp
 __pycache__/
 dist/
-/artifacts/
+# Runtime request written into the shipped bundle when this checkout is used
+# as an artifact root. The ZIP and restore path do not ship it.
+artifacts/.artifact-request.json

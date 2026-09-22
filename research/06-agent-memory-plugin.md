@@ -18,21 +18,25 @@ recap burden?
 1. **Canonical context layer.** `prompt.md`, `security-posture.md`, `lore.md`,
    `user.md`, and `context/research-index.md` define the established team
    context. Detailed rationale remains in the referenced `research/` documents.
-2. **Deterministic bootstrap request.** The lifecycle derives an exact project
-   set from canonical lore and asks the currently active runtime agent to create
-   `INDEX.md` plus one dossier for every project.
-3. **Agent-authored dossiers.** The agent reads the canonical lore and relevant
-   research, then writes the dossier content with its own file tools. Lifecycle
-   scripts prepare the request and validate results; they do not generate the
-   dossier prose.
+2. **Deterministic project set.** The lifecycle derives an exact project set
+   from canonical lore. A shipped ready bundle is restored when it still matches
+   those sources. The agent creates or refreshes `INDEX.md` and the dossiers
+   only when the user explicitly asks to update Choirboy memory.
+3. **Agent-authored dossiers.** When that update is requested, the agent reads
+   the canonical lore and relevant research, then writes the dossier content
+   with its own file tools. Lifecycle scripts prepare the request and validate
+   results; they do not generate the dossier prose.
 4. **Strict readiness gate.** Required sections, exact project links, source
    references, project-set equality, and content digests are validated before
    artifacts become `ready`. `verify` returns a nonzero status while the bundle
    is incomplete or stale.
 5. **Persistent lifecycle.** Artifacts live in stable user-data storage outside
    a versioned checkout. Migration preserves existing authored dossiers across
-   upgrades, Stop hooks return incomplete bootstrap work to the same agent, and
-   validated dossier bodies are delivered inline as working project history.
+   upgrades. Claude Code and Codex receive a short SessionStart status rather
+   than the full canon, because those harnesses cap or spill hook context.
+   Stop hooks do not continue the turn. Kimi and OpenCode still receive the
+   full plain payload on the channels that accept it. The load-context skill
+   is the fallback when `choirboy-context` is not already in the conversation.
 
 ## Decision: established context plus agent-authored project artifacts
 

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Claude Code and Codex SessionStart now emit a short status under 2,000
+  characters and omit the `choirboy-delivery` marker. The full lore stays in
+  the load-context skill, which loads only when `choirboy-context` is absent.
+- Stop no longer continues the turn for pending memory on Claude, Codex, or
+  Kimi. A matching shipped bundle is still restored automatically.
+- Codex `additionalContextLimit` is 4000 tokens of headroom for that status,
+  not a channel for the full lore.
+- Bundle restore no longer runs before `finalize` and no longer replaces an
+  existing INDEX or dossier that differs from the shipped bundle.
+- The ready bundle under `artifacts/` is packed into the plugin ZIP even
+  though Git does not use it as runtime state.
+- Restore copies `retired-projects` and deletes the original only after the
+  replacement directory is in place. A failed rename no longer removes the archive.
+
 ## 1.5.3 — 2026-09-15
 
 - Emit the artifact lifecycle's stdin/stdout/stderr protocol as UTF-8 with LF

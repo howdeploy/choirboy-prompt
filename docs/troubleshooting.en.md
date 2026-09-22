@@ -28,8 +28,8 @@ Claude acknowledgement is not evidence that `SessionStart` ran.
 
 Marker delivery values:
 
-- `session-start` — the hook stdout reached the model;
-- `skill` — the load-context fallback supplied the lore.
+- `session-start` — a full plain payload (Kimi, OpenCode, Hermes) reached the model. Claude Code and Codex SessionStart do not emit this marker; they emit a short status;
+- `skill` — the load-context fallback supplied the lore. A short status is not this marker.
 
 ## Common failures
 

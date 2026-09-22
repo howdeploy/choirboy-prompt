@@ -2,10 +2,11 @@
 """Drive agent-authored project artifacts through lifecycle hooks.
 
 This script intentionally does not write artifact content. It discovers the
-projects described by the canonical lore, emits a deterministic SessionStart
-request for the currently running agent, validates the files that agent wrote,
-and records a freshness manifest. A Stop hook can use the same state to return
-the unfinished bootstrap to that same agent once.
+projects described by the canonical lore, validates dossiers the agent wrote
+when the user asked for an update, and records a freshness manifest. A missing
+or damaged artifact root is restored from the ready bundle shipped with the
+plugin when that bundle still matches the canonical sources. Stop hooks do not
+continue the turn and do not demand dossier authorship.
 """
 
 from __future__ import annotations
@@ -16,7 +17,6 @@ import html
 import json
 import os
 import re
-import shlex
 import shutil
 import sys
 import tempfile
@@ -33,6 +33,9 @@ MANIFEST_FILE = ".artifact-manifest.json"
 MIGRATION_FILE = ".artifact-migration.json"
 INDEX_FILE = "INDEX.md"
 PROJECTS_DIR = "projects"
+# Claude Code shows the model only the first 2,000 characters of an oversized
+# hook field and will not raise the 10,000-character cap. Stay under the preview.
+SESSION_STATUS_CHAR_LIMIT = 1800
 
 CORE_SOURCES = (
     "prompt.md",
@@ -542,6 +545,143 @@ def migrate_legacy_artifacts(legacy_root: Path, artifact_root: Path) -> bool:
     return True
 
 
+def bundle_root_for(source_root: Path) -> Path:
+    """Ready bundle shipped with the plugin; overridable for tests/recovery."""
+
+    configured = os.environ.get("CHOIRBOY_BUNDLE_DIR")
+    if configured:
+        return Path(configured).expanduser()
+    return source_root / "artifacts"
+
+
+def managed_markdown(root: Path) -> list[Path]:
+    """INDEX and dossier files. Symlinks are ignored so restore cannot follow them."""
+
+    found: list[Path] = []
+    index = root / INDEX_FILE
+    if index.is_file() and not index.is_symlink():
+        found.append(index)
+    projects = root / PROJECTS_DIR
+    if projects.is_dir() and not projects.is_symlink():
+        found.extend(
+            path
+            for path in sorted(projects.rglob("*.md"))
+            if path.is_file() and not path.is_symlink()
+        )
+    return found
+
+
+def restore_ready_bundle(bundle_root: Path, artifact_root: Path) -> None:
+    """Fill a non-ready root from the bundle without discarding user edits.
+
+    Missing managed files come from the bundle. An existing regular INDEX or
+    dossier that differs from the bundle is kept, and the bundle manifest is
+    not installed over that edit. Finalize is the command that records the
+    edited bytes.
+    """
+
+    sources: list[Path] = []
+    for relative in (INDEX_FILE, MANIFEST_FILE):
+        candidate = bundle_root / relative
+        if candidate.is_symlink() or not candidate.is_file():
+            raise ArtifactError(f"bundle artifact is missing or unsafe: {candidate}")
+        sources.append(candidate)
+    projects_root = bundle_root / PROJECTS_DIR
+    if projects_root.is_symlink() or not projects_root.is_dir():
+        raise ArtifactError(f"bundle projects directory is unsafe: {projects_root}")
+    for candidate in sorted(projects_root.rglob("*.md")):
+        if candidate.is_symlink() or not candidate.is_file():
+            raise ArtifactError(f"bundle artifact is missing or unsafe: {candidate}")
+        sources.append(candidate)
+
+    parent = artifact_root.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{artifact_root.name}.staging-", dir=parent))
+    backup: Path | None = None
+    try:
+        for source in sources:
+            destination = staging / source.relative_to(bundle_root)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+        preserved_edit = False
+        if artifact_root.is_dir() and not artifact_root.is_symlink():
+            for existing in managed_markdown(artifact_root):
+                relative = existing.relative_to(artifact_root)
+                staged = staging / relative
+                try:
+                    unchanged = (
+                        staged.is_file()
+                        and not staged.is_symlink()
+                        and staged.read_bytes() == existing.read_bytes()
+                    )
+                except OSError:
+                    unchanged = False
+                if unchanged:
+                    continue
+                staged.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(existing, staged)
+                preserved_edit = True
+            # Copy archives into the staging tree and leave the originals in place
+            # until the swap commits. A failed final rename must not delete them
+            # with the temporary directory.
+            for preserved in ("retired-projects",):
+                existing = artifact_root / preserved
+                if existing.is_dir() and not existing.is_symlink():
+                    shutil.copytree(
+                        existing,
+                        staging / preserved,
+                        symlinks=True,
+                        copy_function=shutil.copy2,
+                    )
+        if preserved_edit:
+            staged_manifest = staging / MANIFEST_FILE
+            if staged_manifest.is_file() and not staged_manifest.is_symlink():
+                staged_manifest.unlink()
+        if artifact_root.exists():
+            backup = parent / f".{artifact_root.name}.pre-restore-{os.getpid()}"
+            os.rename(artifact_root, backup)
+        try:
+            os.rename(staging, artifact_root)
+        except OSError:
+            if backup is not None and not artifact_root.exists():
+                os.rename(backup, artifact_root)
+                backup = None
+            raise
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    if backup is not None:
+        shutil.rmtree(backup, ignore_errors=True)
+
+
+def maybe_restore_bundle(
+    request: dict[str, Any], source_root: Path, artifact_root: Path
+) -> bool:
+    """Self-heal a missing/broken/half-written root from the shipped bundle.
+
+    The bundle only applies when it validates as ready against the current
+    canonical sources, so a lore upgrade still triggers a genuine re-authoring
+    bootstrap instead of restoring stale memory.
+    """
+
+    bundle = bundle_root_for(source_root)
+    if bundle.is_symlink() or not bundle.is_dir():
+        return False
+    bundle = bundle.resolve()
+    if (
+        bundle == artifact_root
+        or bundle in artifact_root.parents
+        or artifact_root in bundle.parents
+    ):
+        return False
+    if current_status(request, bundle)["status"] != "ready":
+        return False
+    if current_status(request, artifact_root)["status"] == "ready":
+        return False
+    restore_ready_bundle(bundle, artifact_root)
+    print(f"artifact-generator: restored ready artifact bundle from {bundle}", file=sys.stderr)
+    return True
+
+
 def load_json(path: Path) -> dict[str, Any] | None:
     if not path.is_file() or path.is_symlink():
         return None
@@ -741,67 +881,6 @@ def finalize(request: dict[str, Any], artifact_root: Path) -> dict[str, Any]:
     return status
 
 
-def quoted_command(source_root: Path, artifact_root: Path) -> str:
-    values = (
-        "python3",
-        str(source_root / "scripts/artifact-generator.py"),
-        "finalize",
-        "--source-root",
-        str(source_root),
-        "--root",
-        str(artifact_root),
-    )
-    return " ".join(shlex.quote(value) for value in values)
-
-
-def project_lines(request: dict[str, Any]) -> str:
-    lines = []
-    for project in request["projects"]:
-        references = ", ".join(project["research"]) or "canonical lore only"
-        lines.append(
-            f"- `{project['artifact']}` — {project['title']} (sources: {references})"
-        )
-    return "\n".join(lines)
-
-
-def bootstrap_instruction(request: dict[str, Any], artifact_root: Path) -> str:
-    source_root = Path(request["source_root"])
-    command = quoted_command(source_root, artifact_root)
-    return f"""Automatic project-artifact authoring is not complete yet.
-
-This is the one-time bootstrap for the current installation. Complete it
-yourself with the available file tools before normal project work, then continue
-the user's original task. The lifecycle script never generates dossier content
-and does not replace your authorship. Do not delegate this bootstrap to a
-subagent, background task, or another process: the current runtime agent must
-perform the writes, wait for validation, and reach `ready` in this session.
-
-1. Read `{source_root / 'lore.md'}`, `{source_root / 'prompt.md'}`,
-   `{source_root / 'security-posture.md'}`, `{source_root / 'user.md'}`, and
-   `{source_root / 'context/research-index.md'}` in full. For each dossier, then
-   read only the research files listed beside it; do not load unrelated
-   documents as one bulk block. Do not add facts that are absent from the
-   sources. Record gaps with the exact sentence "Not established in the
-   sources." Use only the current canonical files and current artifact request.
-   Do not inspect Git history/diff/reflog, deleted files, retired backups, or old
-   manifest records: they are not bootstrap sources.
-2. Remove managed `.md` files from `{artifact_root / PROJECTS_DIR}` when they
-   are not in the exact list below. Then update `{artifact_root / INDEX_FILE}`
-   and create exactly these dossiers. Write the INDEX and every dossier in
-   English. INDEX must include a useful English overview and must not reference
-   retired projects:
-{project_lines(request)}
-3. The first line of every dossier must be `# <exact project title>`, followed
-   by non-empty sections: {', '.join(f'`## {name}`' for name in REQUIRED_SECTIONS)}.
-   Under `## Sources`, cite `lore.md` and every listed research file. INDEX must
-   contain the title and relative link of every dossier.
-4. Validate and record completion with:
-   `{command}`
-5. If validation reports an error, repair the files and repeat the command. Do
-   not end bootstrap with a description of what should have been done.
-"""
-
-
 def artifact_memory(request: dict[str, Any], documents: dict[str, str]) -> str:
     projects = request["projects"]
     blocks = [
@@ -820,52 +899,68 @@ def session_context(request: dict[str, Any], artifact_root: Path) -> str:
         return artifact_memory(request, documents)
     root = html.escape(str(artifact_root), quote=True)
     digest = html.escape(request["source_sha256"], quote=True)
-    body = bootstrap_instruction(request, artifact_root)
+    body = (
+        "Project dossiers are not ready. This is a status, not a request to write files. "
+        "Load the load-context skill for the fixed lore. Author or refresh dossiers only "
+        "when the user explicitly asks to update Choirboy memory."
+    )
     return (
         f'<choirboy-project-artifacts status="pending" '
         f'source_sha256="{digest}" root="{root}">\n'
-        f"{body.rstrip()}\n"
+        f"{body}\n"
         "</choirboy-project-artifacts>"
     )
 
 
-def stop_response(request: dict[str, Any], artifact_root: Path, hook_input: str) -> dict[str, Any]:
-    try:
-        event = json.loads(hook_input) if hook_input.strip() else {}
-    except json.JSONDecodeError:
-        return {}
-    if not isinstance(event, dict):
-        return {}
-    if event.get("stop_hook_active") is True:
-        return {}
+def session_status_text(request: dict[str, Any], artifact_root: Path) -> str:
+    """Short factual status for Claude Code and Codex SessionStart hooks.
+
+    Those harnesses cap or spill hook context. The full lore stays in the
+    load-context skill and, when ready, on disk. This text must not look like
+    an already-loaded canon and must not order the model to write dossiers.
+    """
+
     status = current_status(request, artifact_root)
-    if status["status"] == "ready":
-        return {}
-    reason = (
-        bootstrap_instruction(request, artifact_root)
-        + "\nStop validation found an unfinished bootstrap. Continue now; after "
-        "a successful finalize, this hook will stop intervening."
-    )
-    return {"decision": "block", "reason": reason}
+    root = str(artifact_root)
+    if len(root) > 400:
+        root = root[:397] + "..."
+    lines = [
+        f"Choirboy memory status: {status['status']}",
+        f"Artifact root: {root}",
+        "This message is a status, not loaded team context. It does not contain the fixed lore or project dossiers.",
+        "Load the load-context skill when the task needs the team's established decisions.",
+        "Do not author or rewrite dossiers unless the user explicitly asks to update Choirboy memory.",
+    ]
+    if status["status"] != "ready":
+        reasons = [item for item in status.get("reasons", []) if isinstance(item, str)]
+        if reasons:
+            shown = "; ".join(reasons[:3])
+            if len(shown) > 400:
+                shown = shown[:397] + "..."
+            lines.append(f"Not ready because: {shown}")
+        lines.append(
+            "A shipped ready bundle is restored automatically when it still matches the canonical sources."
+        )
+    text = "\n".join(lines).strip() + "\n"
+    if len(text) > SESSION_STATUS_CHAR_LIMIT:
+        text = text[: SESSION_STATUS_CHAR_LIMIT - 1].rstrip() + "\n"
+    return text
+
+
+def stop_response(request: dict[str, Any], artifact_root: Path, hook_input: str) -> dict[str, Any]:
+    """Never continue the turn. Bundle restore already ran before this call."""
+
+    del request, artifact_root, hook_input
+    return {}
 
 
 def kimi_stop_reason(
     request: dict[str, Any], artifact_root: Path, hook_input: str
 ) -> str | None:
-    try:
-        event = json.loads(hook_input) if hook_input.strip() else {}
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(event, dict) or event.get("stop_hook_active") is True:
-        return None
-    status = current_status(request, artifact_root)
-    if status["status"] == "ready":
-        return None
-    return (
-        bootstrap_instruction(request, artifact_root)
-        + "\nKimi Stop validation found that the bootstrap is still incomplete. "
-        "Continue in this session, repair every validator error, and run finalize."
-    )
+    """Kimi Stop uses exit 2 as a continuation. Ordinary pending must not."""
+
+    del request, artifact_root, hook_input
+    return None
 
 
 def default_artifact_root() -> Path:
@@ -893,6 +988,7 @@ def parser() -> argparse.ArgumentParser:
             "status",
             "verify",
             "session-context",
+            "session-status",
             "stop",
             "stop-kimi",
             "finalize",
@@ -929,6 +1025,16 @@ def main() -> int:
                         file=sys.stderr,
                     )
                     break
+            request = build_request(source_root, artifact_root)
+            # Finalize records the files the user wrote. Restoring first would
+            # replace those edits with the shipped bundle and then report ready.
+            if args.command != "finalize":
+                try:
+                    maybe_restore_bundle(request, source_root, artifact_root)
+                except ArtifactError as exc:
+                    # A broken bundle must never break the hook; fall back to the
+                    # ordinary pending status.
+                    print(f"artifact-generator: bundle restore skipped: {exc}", file=sys.stderr)
             migration_marker = artifact_root / MIGRATION_FILE
             if migration_marker.exists():
                 raise ArtifactError(
@@ -949,6 +1055,8 @@ def main() -> int:
                 return 2
         elif args.command == "session-context":
             print(session_context(request, artifact_root))
+        elif args.command == "session-status":
+            print(session_status_text(request, artifact_root), end="")
         elif args.command == "stop":
             print(json.dumps(stop_response(request, artifact_root, sys.stdin.read()), ensure_ascii=False))
         elif args.command == "stop-kimi":

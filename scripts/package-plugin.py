@@ -89,7 +89,34 @@ def repository_files() -> list[Path]:
             for path in research_root.rglob("*.md")
             if path.is_file()
         )
+    # artifacts/ is the shipped ready bundle. It is not a git checkout of
+    # runtime state, so git ls-files cannot be the source of this list.
+    paths.update(bundle_files())
     return sorted(paths, key=lambda value: value.as_posix())
+
+
+def bundle_files() -> list[Path]:
+    """INDEX, manifest, and dossiers that restore uses on an empty root."""
+
+    root = ROOT / "artifacts"
+    if root.is_symlink() or not root.is_dir():
+        raise SystemExit("ready artifact bundle is missing: artifacts/")
+    required = (Path("artifacts/INDEX.md"), Path("artifacts/.artifact-manifest.json"))
+    for relative in required:
+        path = ROOT / relative
+        if path.is_symlink() or not path.is_file():
+            raise SystemExit(f"ready artifact bundle is missing: {relative.as_posix()}")
+    projects = root / "projects"
+    if projects.is_symlink() or not projects.is_dir():
+        raise SystemExit("ready artifact bundle has no projects directory")
+    dossiers = [
+        path.relative_to(ROOT)
+        for path in sorted(projects.rglob("*.md"))
+        if path.is_file() and not path.is_symlink()
+    ]
+    if not dossiers:
+        raise SystemExit("ready artifact bundle has no dossiers")
+    return [*required, *dossiers]
 
 
 def write_zip(output: Path) -> None:
@@ -116,6 +143,11 @@ def main() -> int:
     parser.add_argument("--output", type=Path, help="destination ZIP path")
     args = parser.parse_args()
     subprocess.run(["python3", "scripts/build-context.py", "--check"], cwd=ROOT, check=True)
+    subprocess.run(
+        ["python3", "scripts/artifact-generator.py", "verify", "--root", "artifacts"],
+        cwd=ROOT,
+        check=True,
+    )
     output = args.output or ROOT / "dist" / f"choirboy-prompt-{version()}.zip"
     if not output.is_absolute():
         output = ROOT / output

@@ -8,6 +8,9 @@ VERSION="$(python3 -c 'import json; print(json.load(open(".claude-plugin/plugin.
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/choirboy-test.XXXXXX")"
 TEST_ROOT="$(cd "$TEST_ROOT" && pwd -P)"
 export CHOIRBOY_ARTIFACTS_DIR="$TEST_ROOT/project-artifacts"
+# Keep the shipped ready-bundle auto-restore out of the classic pending-flow
+# tests; the bundle-restore scenarios below opt in explicitly per command.
+export CHOIRBOY_BUNDLE_DIR="$TEST_ROOT/bundle-absent"
 cleanup() {
   if [ "${CHOIRBOY_TEST_KEEP_TMP:-0}" = 1 ]; then
     printf 'Test artifacts preserved at %s\n' "$TEST_ROOT"
@@ -206,9 +209,12 @@ assert router["research"] == [
 ]
 PY
 grep -q '<choirboy-project-artifacts status="pending"' "$TEST_ROOT/artifact-pending.txt"
-grep -q 'Complete it' "$TEST_ROOT/artifact-pending.txt"
-grep -q 'yourself with the available file tools' "$TEST_ROOT/artifact-pending.txt"
-grep -q 'Do not inspect Git history/diff/reflog' "$TEST_ROOT/artifact-pending.txt"
+grep -q 'not a request to write files' "$TEST_ROOT/artifact-pending.txt"
+grep -q 'load-context skill' "$TEST_ROOT/artifact-pending.txt"
+if grep -q 'Complete it yourself' "$TEST_ROOT/artifact-pending.txt"; then
+  echo "pending status still orders the model to author dossiers" >&2
+  exit 1
+fi
 pass "artifact prepare creates request metadata only"
 
 printf '{}\n' | PYTHONIOENCODING=cp1252 bash hooks/artifact-stop.sh > "$TEST_ROOT/artifact-stop-pending.json"
@@ -223,11 +229,10 @@ from pathlib import Path
 pending, active, malformed = [
     json.loads(Path(path).read_text(encoding="utf-8")) for path in sys.argv[1:]
 ]
-assert pending["decision"] == "block"
-assert "unfinished bootstrap" in pending["reason"]
-assert active == malformed == {}
+assert pending == active == malformed == {}
+assert "decision" not in pending
 PY
-pass "Stop returns unfinished bootstrap to the same agent once"
+pass "Stop does not continue a turn for pending memory"
 
 # These temporary files stand in for file-tool writes by the runtime agent.
 # Production lifecycle code is forbidden from synthesizing dossier content.
@@ -740,16 +745,16 @@ from pathlib import Path
 
 doc = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 context = doc["hookSpecificOutput"]["additionalContext"]
-version = re.escape(sys.argv[2])
 assert doc["hookSpecificOutput"]["hookEventName"] == "SessionStart"
-hook_marker = re.search(rf'<choirboy-delivery version="{version}" delivery="session-start" context_sha256="([0-9a-f]{{64}})" nonce="[^"]+" />', context)
-skill_marker = re.search(rf'<choirboy-delivery version="{version}" delivery="skill" context_sha256="([0-9a-f]{{64}})" />', Path("skills/load-context/SKILL.md").read_text(encoding="utf-8"))
-assert hook_marker and skill_marker and hook_marker.group(1) == skill_marker.group(1)
-assert "<choirboy-context>" in context and "</choirboy-context>" in context
-assert "# Established project history" in context
-assert "<choirboy-artifact" not in context
-assert "CHOIRBOY_DOSSIER_CANARY_7f51c92d" in context
-assert "# Prompt" in context and "## Research — decision rationale" in context
+assert len(context) < 2000
+assert "Choirboy memory status: ready" in context
+assert "load-context skill" in context
+assert "not loaded team context" in context
+assert "<choirboy-delivery" not in context
+assert "<choirboy-context>" not in context
+assert "# Established project history" not in context
+assert "CHOIRBOY_DOSSIER_CANARY_7f51c92d" not in context
+assert "# Prompt" not in context
 PY
 test -s "$TEST_ROOT/plugin-data/latest-delivery.log"
 if grep -q -- '--arg ctx' hooks/session-start.sh; then
@@ -766,8 +771,11 @@ from pathlib import Path
 
 context = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["hookSpecificOutput"]["additionalContext"]
 root = Path(sys.argv[2])
-assert f'root="{root}"' in context
-assert '<choirboy-project-artifacts status="pending"' in context
+assert "Choirboy memory status: pending" in context
+assert str(root) in context
+assert "<choirboy-delivery" not in context
+assert "<choirboy-context>" not in context
+assert len(context) < 2000
 assert (root / ".artifact-request.json").is_file()
 PY
 pass "CLAUDE_PLUGIN_DATA owns marketplace artifact state"
@@ -833,7 +841,11 @@ for command in cat date dirname head mkdir mv sed; do
 done
 PATH="$minimal_path" /bin/bash hooks/session-start.sh --format claude > "$TEST_ROOT/minimal.json"
 python3 -m json.tool "$TEST_ROOT/minimal.json" >/dev/null
-grep -q 'context_sha256=\\"unavailable\\"' "$TEST_ROOT/minimal.json"
+grep -q 'Choirboy memory status: unavailable' "$TEST_ROOT/minimal.json"
+if grep -q '<choirboy-delivery' "$TEST_ROOT/minimal.json"; then
+  echo "dependency-free Claude status emitted a delivery marker" >&2
+  exit 1
+fi
 pass "dependency-free Bash JSON fallback"
 
 missing_root="$TEST_ROOT/missing-content"
@@ -861,12 +873,12 @@ for relative in ("prompt.md", "security-posture.md", "lore.md", "user.md", "cont
     path = root / relative
     path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
 PY
-bash "$crlf_root/hooks/session-start.sh" --format claude > "$TEST_ROOT/crlf.json"
-python3 - "$TEST_ROOT/crlf.json" "$crlf_root/skills/load-context/SKILL.md" <<'PY'
-import json, re, sys
+bash "$crlf_root/hooks/session-start.sh" --format plain > "$TEST_ROOT/crlf.txt"
+python3 - "$TEST_ROOT/crlf.txt" "$crlf_root/skills/load-context/SKILL.md" <<'PY'
+import re, sys
 from pathlib import Path
 
-context = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["hookSpecificOutput"]["additionalContext"]
+context = Path(sys.argv[1]).read_text(encoding="utf-8")
 hook_hash = re.search(r'delivery="session-start" context_sha256="([0-9a-f]{64})"', context).group(1)
 skill_hash = re.search(r'delivery="skill" context_sha256="([0-9a-f]{64})"', Path(sys.argv[2]).read_text(encoding="utf-8")).group(1)
 assert hook_hash == skill_hash
@@ -911,7 +923,10 @@ for entries, script in (
     assert result.returncode == 0, (result.stdout, result.stderr)
     response = json.loads(result.stdout.decode("utf-8"))
     if script.name == "session-start.sh":
-        assert "CHOIRBOY_DOSSIER_CANARY_7f51c92d" in response["hookSpecificOutput"]["additionalContext"]
+        context = response["hookSpecificOutput"]["additionalContext"]
+        assert "Choirboy memory status: ready" in context
+        assert len(context) < 2000
+        assert "<choirboy-delivery" not in context
     else:
         assert response == {}
 PY
@@ -942,7 +957,7 @@ assert start == {
     "type": "command",
     "command": sys.argv[2],
     "timeout": 15,
-    "additionalContextLimit": 262144,
+    "additionalContextLimit": 4000,
 }, start
 assert stop == {
     "type": "command",
@@ -956,7 +971,10 @@ for handler in (start, stop):
     assert result.returncode == 0, (result.stdout, result.stderr)
     response = json.loads(result.stdout.decode("utf-8"))
     if handler is start:
-        assert "CHOIRBOY_DOSSIER_CANARY_7f51c92d" in response["hookSpecificOutput"]["additionalContext"]
+        context = response["hookSpecificOutput"]["additionalContext"]
+        assert "Choirboy memory status: ready" in context
+        assert len(context) < 2000
+        assert "<choirboy-delivery" not in context
     else:
         assert response == {}
 PY
@@ -968,7 +986,7 @@ hooks = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["hooks"]
 assert hooks["SessionStart"] == []
 assert hooks["Stop"] == []
 PY
-pass "Codex lifecycle hooks and full-memory context limit"
+pass "Codex lifecycle hooks and short-status context limit"
 
 invalid_home="$TEST_ROOT/invalid-json-home"
 invalid_settings="$invalid_home/settings.json"
@@ -1156,22 +1174,17 @@ printf '{"hook_event_name":"Stop","session_id":"fixture-session","cwd":"/tmp","s
   | bash hooks/kimi-artifact-stop.sh > "$TEST_ROOT/kimi-stop-ready.out" 2> "$TEST_ROOT/kimi-stop-ready.err"
 test ! -s "$TEST_ROOT/kimi-stop-ready.out"
 test ! -s "$TEST_ROOT/kimi-stop-ready.err"
-if printf '{"hook_event_name":"Stop","session_id":"pending-session","cwd":"/tmp","stop_hook_active":false}\n' \
+printf '{"hook_event_name":"Stop","session_id":"pending-session","cwd":"/tmp","stop_hook_active":false}\n' \
   | CHOIRBOY_ARTIFACTS_DIR="$TEST_ROOT/kimi-pending-artifacts" \
-    bash hooks/kimi-artifact-stop.sh > "$TEST_ROOT/kimi-stop-pending.out" 2> "$TEST_ROOT/kimi-stop-pending.err"; then
-  echo "Kimi Stop accepted pending artifacts" >&2
-  exit 1
-else
-  test "$?" = 2
-fi
+    bash hooks/kimi-artifact-stop.sh > "$TEST_ROOT/kimi-stop-pending.out" 2> "$TEST_ROOT/kimi-stop-pending.err"
 test ! -s "$TEST_ROOT/kimi-stop-pending.out"
-grep -q 'bootstrap is still incomplete' "$TEST_ROOT/kimi-stop-pending.err"
+test ! -s "$TEST_ROOT/kimi-stop-pending.err"
 printf '{"hook_event_name":"Stop","session_id":"pending-session","cwd":"/tmp","stop_hook_active":true}\n' \
   | CHOIRBOY_ARTIFACTS_DIR="$TEST_ROOT/kimi-pending-artifacts" \
     bash hooks/kimi-artifact-stop.sh > "$TEST_ROOT/kimi-stop-active.out" 2> "$TEST_ROOT/kimi-stop-active.err"
 test ! -s "$TEST_ROOT/kimi-stop-active.out"
 test ! -s "$TEST_ROOT/kimi-stop-active.err"
-pass "Kimi model-visible delivery and exit-2 completion gate"
+pass "Kimi model-visible delivery does not block Stop"
 
 kimi_transition_root="$TEST_ROOT/kimi-transition-artifacts"
 kimi_transition_state="$TEST_ROOT/kimi-transition-state"
@@ -1486,6 +1499,8 @@ required = {
     "scripts/test-opencode-transition.ts",
     "skills/load-context/SKILL.md",
     "skills/diagnose/SKILL.md",
+    "artifacts/INDEX.md",
+    "artifacts/.artifact-manifest.json",
     "research/22-security-capability-router.md",
     "research/23-security-case-and-evidence-contract.md",
     "research/24-security-tool-registry-and-bootstrap.md",
@@ -1497,7 +1512,10 @@ required = {
     "research/30-security-reporting-and-knowledge-reuse.md",
 }
 with zipfile.ZipFile(sys.argv[1]) as archive:
-    assert required.issubset(archive.namelist())
+    names = archive.namelist()
+    assert required.issubset(names)
+    dossiers = [name for name in names if name.startswith("artifacts/projects/") and name.endswith(".md")]
+    assert len(dossiers) == 12, dossiers
     for executable in (
         "hooks/session-start.sh",
         "hooks/artifact-stop.sh",
@@ -1533,5 +1551,145 @@ for name in tracked:
 assert not missing, "broken local links:\n" + "\n".join(missing)
 PY
 pass "local documentation links"
+
+bundle_restore_root="$TEST_ROOT/bundle-restore/project-artifacts"
+env -u CHOIRBOY_BUNDLE_DIR CHOIRBOY_ARTIFACTS_DIR="$bundle_restore_root" \
+  python3 scripts/artifact-generator.py session-context > "$TEST_ROOT/bundle-restore-context.txt"
+grep -q '^# Established project history$' "$TEST_ROOT/bundle-restore-context.txt"
+test "$(env -u CHOIRBOY_BUNDLE_DIR CHOIRBOY_ARTIFACTS_DIR="$bundle_restore_root" \
+  python3 scripts/artifact-generator.py status)" = ready
+printf '{"session_id":"bundle-restore-session","stop_hook_active":false}\n' \
+  | env -u CHOIRBOY_BUNDLE_DIR CHOIRBOY_ARTIFACTS_DIR="$bundle_restore_root" \
+    bash hooks/artifact-stop.sh > "$TEST_ROOT/bundle-restore-stop.json"
+grep -qx '{}' "$TEST_ROOT/bundle-restore-stop.json"
+python3 - "$bundle_restore_root" <<'PY'
+import json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+manifest = json.loads((root / ".artifact-manifest.json").read_text(encoding="utf-8"))
+request = json.loads((root / ".artifact-request.json").read_text(encoding="utf-8"))
+assert Path(request["artifact_root"]) == root
+assert len(list((root / "projects").glob("*.md"))) == len(manifest["projects"]) == 12
+PY
+edited_dossier="$(python3 - "$bundle_restore_root" <<'PY'
+import json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+request = json.loads((root / ".artifact-request.json").read_text(encoding="utf-8"))
+print(root / request["projects"][0]["artifact"])
+PY
+)"
+user_edit="CHOIRBOY_USER_EDIT_4c1e9a2b remains part of this dossier."
+printf '\n%s\n' "$user_edit" >> "$edited_dossier"
+test "$(env -u CHOIRBOY_BUNDLE_DIR CHOIRBOY_ARTIFACTS_DIR="$bundle_restore_root" \
+  python3 scripts/artifact-generator.py status)" = pending
+env -u CHOIRBOY_BUNDLE_DIR CHOIRBOY_ARTIFACTS_DIR="$bundle_restore_root" \
+  python3 scripts/artifact-generator.py session-context > "$TEST_ROOT/bundle-keep-edit-context.txt"
+grep -qxF "$user_edit" "$edited_dossier"
+if grep -q '^# Established project history$' "$TEST_ROOT/bundle-keep-edit-context.txt"; then
+  echo "restore replaced a user dossier edit with ready bundle memory" >&2
+  exit 1
+fi
+printf '{"session_id":"bundle-edit-session","stop_hook_active":false}\n' \
+  | env -u CHOIRBOY_BUNDLE_DIR CHOIRBOY_ARTIFACTS_DIR="$bundle_restore_root" \
+    bash hooks/artifact-stop.sh > "$TEST_ROOT/bundle-keep-edit-stop.json"
+grep -qx '{}' "$TEST_ROOT/bundle-keep-edit-stop.json"
+grep -qxF "$user_edit" "$edited_dossier"
+env -u CHOIRBOY_BUNDLE_DIR CHOIRBOY_ARTIFACTS_DIR="$bundle_restore_root" \
+  python3 scripts/artifact-generator.py finalize >/dev/null
+grep -qxF "$user_edit" "$edited_dossier"
+test "$(env -u CHOIRBOY_BUNDLE_DIR CHOIRBOY_ARTIFACTS_DIR="$bundle_restore_root" \
+  python3 scripts/artifact-generator.py status)" = ready
+env -u CHOIRBOY_BUNDLE_DIR CHOIRBOY_ARTIFACTS_DIR="$bundle_restore_root" \
+  python3 scripts/artifact-generator.py session-context > "$TEST_ROOT/bundle-finalized-edit.txt"
+grep -q 'CHOIRBOY_USER_EDIT_4c1e9a2b' "$TEST_ROOT/bundle-finalized-edit.txt"
+pass "shipped bundle fills an empty root and keeps dossier edits through finalize"
+
+stop_cap_root="$TEST_ROOT/stop-cap/project-artifacts"
+CHOIRBOY_ARTIFACTS_DIR="$stop_cap_root" python3 scripts/artifact-generator.py prepare >/dev/null
+for attempt in 1 2 3 4; do
+  printf '{"session_id":"cap-session","stop_hook_active":false}\n' \
+    | CHOIRBOY_ARTIFACTS_DIR="$stop_cap_root" \
+      bash hooks/artifact-stop.sh > "$TEST_ROOT/stop-cap-$attempt.json"
+done
+printf '{"session_id":"cap-other-session","stop_hook_active":false}\n' \
+  | CHOIRBOY_ARTIFACTS_DIR="$stop_cap_root" \
+    bash hooks/artifact-stop.sh > "$TEST_ROOT/stop-cap-other.json"
+python3 - "$stop_cap_root" "$TEST_ROOT" <<'PY'
+import json, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+out = Path(sys.argv[2])
+responses = [
+    json.loads((out / f"stop-cap-{attempt}.json").read_text(encoding="utf-8"))
+    for attempt in (1, 2, 3, 4)
+]
+assert responses == [{}, {}, {}, {}], responses
+other = json.loads((out / "stop-cap-other.json").read_text(encoding="utf-8"))
+assert other == {}
+assert not (root / ".artifact-stop-blocks").exists()
+PY
+pass "Stop stays open while memory is pending and the bundle is absent"
+
+python3 - "$TEST_ROOT/archive-rename-failure" "$ROOT/scripts/artifact-generator.py" <<'PY'
+import importlib.util
+import os
+import shutil
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+script = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("choirboy_artifact_generator", script)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+base = root / "case"
+bundle = base / "bundle"
+projects = bundle / "projects"
+projects.mkdir(parents=True)
+(bundle / "INDEX.md").write_text("# Index\n\nEstablished project index for the restore failure test.\n", encoding="utf-8")
+(bundle / ".artifact-manifest.json").write_text("{}\n", encoding="utf-8")
+(projects / "01.md").write_text("# One\n\nA shipped dossier used only to exercise restore.\n", encoding="utf-8")
+
+artifact_root = base / "project-artifacts"
+archive = artifact_root / "retired-projects"
+archive.mkdir(parents=True)
+sentinel = archive / "kept.md"
+sentinel.write_text("archive sentinel\n", encoding="utf-8")
+
+real_rename = os.rename
+
+def fail_final_swap(src, dst):
+    if ".staging-" in str(src) and ".pre-restore-" not in str(dst):
+        raise OSError("simulated final rename failure")
+    return real_rename(src, dst)
+
+os.rename = fail_final_swap
+try:
+    try:
+        module.restore_ready_bundle(bundle, artifact_root)
+    except OSError as exc:
+        assert "simulated final rename failure" in str(exc)
+    else:
+        raise SystemExit("final rename failure was not raised")
+finally:
+    os.rename = real_rename
+
+assert sentinel.is_file(), "retired archive was deleted when the swap failed"
+assert sentinel.read_text(encoding="utf-8") == "archive sentinel\n"
+assert artifact_root.is_dir()
+assert not list(base.glob(".project-artifacts.staging-*"))
+assert not list(base.glob(".project-artifacts.pre-restore-*"))
+
+module.restore_ready_bundle(bundle, artifact_root)
+assert (artifact_root / "retired-projects" / "kept.md").read_text(encoding="utf-8") == "archive sentinel\n"
+assert not sentinel.exists() or sentinel == artifact_root / "retired-projects" / "kept.md"
+assert not list(base.glob(".project-artifacts.pre-restore-*"))
+assert not list(base.glob(".project-artifacts.staging-*"))
+PY
+pass "failed restore keeps the retired-projects archive"
 
 printf 'All tests passed.\n'

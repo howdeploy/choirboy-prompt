@@ -6,6 +6,10 @@
 # sources also generate skills/load-context/SKILL.md.
 #
 #   --format claude   Claude Code / Codex SessionStart JSON (default):
+#                     a short status only. Those harnesses cap or spill hook
+#                     context, so the full lore is not placed in additionalContext
+#                     and the choirboy-delivery marker is omitted. The load-context
+#                     skill carries the canon when the task needs it.
 #                     {"hookSpecificOutput": {"hookEventName": "SessionStart",
 #                      "additionalContext": ...}}
 #   --format plain    Raw context text on stdout (runtimes that append hook
@@ -171,6 +175,18 @@ elif node is not None:
 
 case "$FORMAT" in
   claude)
+    # Claude Code hard-caps additionalContext at 10,000 characters and shows
+    # only a 2,000-character preview. Codex spills oversized hook output and
+    # does not apply additionalContextLimit to Stop continuation text. Deliver
+    # a short status with no delivery marker so a truncated preview cannot
+    # look like loaded canon.
+    status_payload="Choirboy memory status: unavailable. Python or the artifact generator is missing. Load the load-context skill for the fixed lore. This message is a status, not loaded team context. Do not author dossiers unless the user explicitly asks to update Choirboy memory."
+    if command -v python3 >/dev/null 2>&1 && [ -f "$artifact_generator" ]; then
+      if generated="$(python3 "$artifact_generator" session-status)"; then
+        status_payload="$generated"
+      fi
+    fi
+    payload="$status_payload"
     if command -v jq >/dev/null 2>&1; then
       printf '%s' "$payload" | jq -Rs \
         '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: .}}'

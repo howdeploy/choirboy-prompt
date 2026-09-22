@@ -39,17 +39,19 @@ dossiers пишутся только на английском. На три яз
    регистрирует в каждом хук, который срабатывает на старте новой сессии.
    Там, где хуков нет, — синхронизируемый управляемый блок в файле инструкций,
    а для Grok Bot — workflow для ручного импорта.
-2. **Сборка.** Хук `hooks/session-start.sh` склеивает один текст:
-   `prompt.md` → `security-posture.md` → `lore.md` → `user.md` →
-   `context/research-index.md`.
-3. **Доставка.** Этот текст становится рабочим контекстом до первого ответа
-   модели. Агент сразу применяет его к задаче пользователя.
-4. **Проектные артефакты.** В первой сессии с lifecycle-хуками текущий агент
-   получает детерминированный request и сам создаёт `INDEX.md` и dossier для
-   каждого проекта из лора. После валидации ready-доставка вкладывает все
-   dossiers прямо в контекст, а не передаёт только путь в файловой системе.
-5. **Непрерывность.** Стабильное user-data хранилище, миграция, строгая
-   проверка и Stop-gate сохраняют одну память проектов между обновлениями.
+2. **Сборка.** Фиксированный лор — это `prompt.md`, `security-posture.md`,
+   `lore.md`, `user.md` и `context/research-index.md`, плюс готовые dossiers.
+3. **Доставка.** SessionStart у Claude Code и Codex отдаёт только короткий
+   статус. Эти харнессы режут или выносят длинный текст хука, поэтому в статусе
+   нет лора и нет маркера `choirboy-delivery`. Skill load-context догружает лор,
+   если в разговоре ещё нет блока `choirboy-context`. Kimi, OpenCode и Hermes
+   по-прежнему получают полный plain-payload на каналах, которые его принимают.
+4. **Проектные артефакты.** Готовый бандл из поставки восстанавливается, если
+   он всё ещё совпадает с каноническими источниками. Агент пишет или обновляет
+   dossiers только когда пользователь явно просит обновить память Choirboy.
+   Stop не продолжает ход, чтобы это потребовать.
+5. **Непрерывность.** Стабильное user-data хранилище, миграция и структурная
+   проверка сохраняют одну память проектов между обновлениями.
 
 Устройство плагина изнутри: [docs/architecture.md](docs/architecture.md).
 
@@ -57,12 +59,12 @@ dossiers пишутся только на английском. На три яз
 
 | Рантайм | Куда ставится | Механика |
 |---|---|---|
-| Claude Code CLI / Desktop Code | marketplace или `~/.claude/settings.json` | автоматическая SessionStart-доставка + Stop-gate артефактов; skill load-context как fallback |
+| Claude Code CLI / Desktop Code | marketplace или `~/.claude/settings.json` | короткий статус SessionStart; Stop не продолжает ход; lore несёт skill load-context |
 | Claude Chat / Cowork | custom plugin | skill load-context (в Chat нет SessionStart) |
-| Codex | `~/.codex/hooks.json` | SessionStart-доставка + Stop-gate артефактов (инсталлер предупреждает, если в `~/.codex/config.toml` задано `hooks = false`) |
+| Codex | `~/.codex/hooks.json` | короткий статус SessionStart; Stop не продолжает ход (инсталлер предупреждает, если в `~/.codex/config.toml` задано `hooks = false`) |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | плагин добавляет актуальный лор и ready-артефакты в каждый model-bound system context, включая запрос после compaction |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent-allowlist, только первый ход |
-| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart/PreCompact сбрасывают доставку; UserPromptSubmit выдаёт изменившийся контекст; Stop блокирует незавершённые артефакты через exit 2 |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart/PreCompact сбрасывают доставку; UserPromptSubmit выдаёт изменившийся plain-контекст; Stop не продолжает ход |
 | Gemini | `~/.gemini/GEMINI.md` | синхронизируемый lifecycle-блок инструкций |
 | Grok Build | `~/.grok/AGENTS.md` | синхронизируемый lifecycle-блок инструкций (stdout хука игнорируется) |
 | Grok Bot | `~/.grokbot/choirboy-context/SKILL.md` | workflow для ручного импорта; `@choirboy-context` в каждом новом чате |
@@ -77,7 +79,7 @@ cd choirboy-prompt
 ./install.sh
 ```
 
-Готово. Открой **новую** сессию в агенте — лор подхватится автоматически.
+Готово. Открой **новую** сессию. Claude Code и Codex покажут короткий статус памяти, а лор подгрузит skill load-context. Kimi, OpenCode и Hermes получают полный plain-payload.
 
 - Только выбранные приложения: `./install.sh --target claude,codex`
 - Статусы по рантаймам: `./install.sh --list` (`stale` означает, что управляемую регистрацию надо синхронизировать)

@@ -42,7 +42,10 @@ KIMI_SESSION_HOOK_SCRIPT="$PLUGIN_ROOT/hooks/kimi-session-start.sh"
 KIMI_PROMPT_HOOK_SCRIPT="$PLUGIN_ROOT/hooks/kimi-user-prompt.sh"
 KIMI_STOP_HOOK_SCRIPT="$PLUGIN_ROOT/hooks/kimi-artifact-stop.sh"
 ARTIFACT_GENERATOR="$PLUGIN_ROOT/scripts/artifact-generator.py"
-CODEX_CONTEXT_LIMIT="262144"
+# Token headroom for the short SessionStart status. Codex's default spill
+# threshold is about 2,500 tokens; the status stays under 1,800 characters.
+# The full lore is not sent through this hook.
+CODEX_CONTEXT_LIMIT="4000"
 KIMI_HOME="${KIMI_CODE_HOME:-$HOME/.kimi-code}"
 ALL_TARGETS="claude codex opencode hermes kimi gemini grok grokbot"
 
@@ -416,8 +419,8 @@ PY
 # json_hook FILE CMD install|uninstall DOTPATH [ARG] [TIMEOUT]
 #           [CONTEXT_LIMIT] [SCRIPT_ID] — safely add/remove one command hook in
 # a Claude-Code-shaped hooks JSON file. ARG enables Claude's shell-free form;
-# CONTEXT_LIMIT keeps Codex's complete lore plus inline artifact memory in the
-# same SessionStart context instead of truncating it at the old 20-KB setting.
+# CONTEXT_LIMIT is Codex token headroom for the short SessionStart status.
+# It is not a channel for the full lore.
 json_hook() {
   HOOK_CMD="$2" MODE="$3" DOTPATH="$4" HOOK_ARG="${5-}" HOOK_TIMEOUT="${6-}" \
   HOOK_CONTEXT_LIMIT="${7-}" HOOK_ID="${8-}" \
@@ -853,11 +856,13 @@ At session start, read these plugin files and work from their context:
 - $PLUGIN_ROOT/research/ — decision rationale, read on demand
 
 At session start, run
-\`python3 "$ARTIFACT_GENERATOR" session-context\` and complete the returned
-instruction. You author the project dossiers yourself; the lifecycle script only
-prepares the request, validates the files, and records freshness. When status is
-\`ready\`, the command returns INDEX and every validated dossier in full. Use
-that output as project memory instead of stopping at a path reference.
+\`python3 "$ARTIFACT_GENERATOR" session-context\`.
+When the output begins with \`# Established project history\`, the dossiers are
+ready: use that output as project memory. Any other output is a status, not a
+request to write files. Load the fixed lore from the files listed above. Author
+or refresh dossiers only when the user explicitly asks to update Choirboy
+memory. The lifecycle script restores a shipped ready bundle when it still
+matches the canonical sources; it does not generate dossier prose.
 
 Do not reopen settled decisions without cause. If you propose a departure,
 state what changed since the relevant research document.

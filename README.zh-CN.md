@@ -37,16 +37,17 @@ choirboy-prompt 是面向生产的智能体记忆插件。它把既定项目历�
 1. **安装。** `./install.sh` 会找出机器上已安装的智能体，并在每个应用中
    注册一个在新会话启动时触发的钩子。对于没有钩子的运行时，则写入会自动
    同步的托管指令块；Grok Bot 会生成一个供手动导入的 workflow。
-2. **组装。** 钩子 `hooks/session-start.sh` 把以下文件粘合成一段文本：
-   `prompt.md` → `security-posture.md` → `lore.md` → `user.md` →
-   `context/research-index.md`。
-3. **投递。** 这段文本在模型首次回复前成为工作上下文，智能体直接用于
-   当前用户任务。
-4. **项目 artifacts。** 第一个启用 lifecycle 钩子的会话会向当前智能体发送
-   确定性 request，由智能体自行创建 `INDEX.md` 和每个 lore 项目的 dossier。
-   校验通过后，ready 投递会把全部 dossiers 内联到上下文，而不是只传路径。
-5. **连续性。** 稳定 user-data 存储、迁移、严格校验和 Stop gate 让项目记忆
-   在升级后继续有效。
+2. **组装。** 固定 lore 由 `prompt.md`、`security-posture.md`、`lore.md`、
+   `user.md` 和 `context/research-index.md` 组成，外加已就绪的 dossiers。
+3. **投递。** Claude Code 与 Codex 的 SessionStart 只发送短状态。这些 harness
+   会截断或溢出过长的 hook 文本，因此状态里没有 lore，也没有
+   `choirboy-delivery` 标记。对话里还没有 `choirboy-context` 时，由
+   load-context skill 提供 lore。Kimi、OpenCode 和 Hermes 仍在能够接受的通道上
+   收到完整 plain payload。
+4. **项目 artifacts。** 随插件提供的 ready bundle 在仍与规范源一致时自动恢复。
+   只有用户明确要求更新 Choirboy 记忆时，智能体才编写或刷新 dossiers。Stop
+   不会为了强迫这件事而延续回合。
+5. **连续性。** 稳定的 user-data 存储、迁移和结构校验让项目记忆在升级后继续有效。
 
 插件内部结构：[docs/architecture.zh-CN.md](docs/architecture.zh-CN.md)。
 
@@ -54,12 +55,12 @@ choirboy-prompt 是面向生产的智能体记忆插件。它把既定项目历�
 
 | 运行时 | 写入位置 | 机制 |
 |---|---|---|
-| Claude Code CLI / Desktop Code | marketplace 或 `~/.claude/settings.json` | 自动 SessionStart 投递 + Stop artifact gate；load-context skill 作为回退 |
+| Claude Code CLI / Desktop Code | marketplace 或 `~/.claude/settings.json` | SessionStart 只给短状态；Stop 不延续回合；lore 由 load-context skill 提供 |
 | Claude Chat / Cowork | custom plugin | load-context skill（Chat 没有 SessionStart） |
-| Codex | `~/.codex/hooks.json` | SessionStart 投递 + Stop artifact gate（若 `~/.codex/config.toml` 中设置了 `hooks = false`，安装器会发出警告） |
+| Codex | `~/.codex/hooks.json` | SessionStart 只给短状态；Stop 不延续回合（若 `~/.codex/config.toml` 中设置了 `hooks = false`，安装器会发出警告） |
 | OpenCode | `~/.config/opencode/plugins/agent-plugin.ts` | 插件把当前 lore 与 ready artifacts 加入每次模型请求的 system context，包括 compaction 之后 |
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + 授权白名单，仅第一轮 |
-| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart/PreCompact 重置投递；UserPromptSubmit 输出已变化的上下文；Stop 以 exit 2 阻止未完成 artifacts |
+| Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart/PreCompact 重置投递；UserPromptSubmit 输出已变化的 plain 上下文；Stop 不延续回合 |
 | Gemini | `~/.gemini/GEMINI.md` | 自动同步的 lifecycle 指令块 |
 | Grok Build | `~/.grok/AGENTS.md` | 自动同步的 lifecycle 指令块（钩子 stdout 会被忽略） |
 | Grok Bot | `~/.grokbot/choirboy-context/SKILL.md` | 供手动导入的 workflow；每个新对话运行 `@choirboy-context` |
@@ -74,7 +75,7 @@ cd choirboy-prompt
 ./install.sh
 ```
 
-完成。在智能体中打开一个**新**会话——lore 会自动加载。
+完成。打开一个**新**会话。Claude Code 和 Codex 会看到短状态，lore 由 load-context skill 加载。Kimi、OpenCode 和 Hermes 收到完整 plain payload。
 
 - 只安装到指定应用：`./install.sh --target claude,codex`
 - 查看各运行时状态：`./install.sh --list`（`stale` 表示托管注册需要同步）

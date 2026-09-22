@@ -1,7 +1,7 @@
 {
   "name": "choirboy-prompt",
   "version": "1.5.3",
-  "description": "Persistent agent memory with agent-authored project artifacts, strict validation, inline runtime delivery, upgrade migration, and skill fallback.",
+  "description": "Persistent agent memory with a shipped ready bundle, strict validation, a short SessionStart status, skill fallback, and upgrade migration.",
   "author": {
     "name": "howdeploy"
   },

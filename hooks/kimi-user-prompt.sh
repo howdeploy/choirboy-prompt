@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Kimi 0.39.x appends UserPromptSubmit stdout to the model request. Deliver the
 # full fixed lore plus validated artifact memory when its fingerprint changes.
-# A pending bootstrap repeats until the next prompt can deliver the ready bundle.
+# A pending status repeats until a restored or finalized bundle is ready. It
+# does not order the model to write dossiers.
 set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Keep the current runtime agent working until the one-time artifact bootstrap
-# has been authored and validated. The Python lifecycle never writes dossiers.
+# Restore a shipped ready bundle when it still matches the canonical sources,
+# then return {}. Do not continue the turn to force dossier authorship.
 set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
