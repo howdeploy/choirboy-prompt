@@ -132,6 +132,9 @@ Each target writes to its own file:
 | gemini | `~/.gemini/GEMINI.md` | marked HTML lifecycle instruction block |
 | grok | `~/.grok/AGENTS.md` | marked HTML lifecycle instruction block (Grok Build global rules) |
 | grokbot | `~/.grokbot/choirboy-context/SKILL.md` | prepared importable workflow (not auto-loaded) |
+| pi | `~/.pi/agent/APPEND_SYSTEM.md` | instruction block plus `skills/load-context` symlink |
+| omp | `~/.omp/agent/AGENTS.md` | instruction block plus `skills/load-context` symlink |
+| llama | `~/.config/llama.cpp/choirboy-ui.json` | UI `systemMessage` plus skill symlink |
 | `--instructions FILE` | any file | marked lifecycle instruction block (HTML or `#`) |
 
 ---

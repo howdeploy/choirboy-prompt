@@ -68,6 +68,9 @@ dossiers пишутся только на английском. На три яз
 | Gemini | `~/.gemini/GEMINI.md` | синхронизируемый lifecycle-блок инструкций |
 | Grok Build | `~/.grok/AGENTS.md` | синхронизируемый lifecycle-блок инструкций (stdout хука игнорируется) |
 | Grok Bot | `~/.grokbot/choirboy-context/SKILL.md` | workflow для ручного импорта; `@choirboy-context` в каждом новом чате |
+| Pi | `~/.pi/agent/APPEND_SYSTEM.md` | тот же контракт инструкций, что у Gemini, плюс skill `load-context` |
+| Oh My Pi (`omp`) | `~/.omp/agent/AGENTS.md` | тот же контракт инструкций, что у Gemini, плюс skill `load-context` |
+| llama-server UI | `~/.config/llama.cpp/choirboy-ui.json` | стартовый `systemMessage` с тем же контрактом; запускать с `--ui-config-file` |
 
 ## Установка
 

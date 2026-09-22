@@ -130,6 +130,9 @@ grokbot) command -v grokbot >/dev/null 2>&1 || command -v grok-bot >/dev/null 2>
 | gemini | `~/.gemini/GEMINI.md` | маркированный HTML lifecycle-блок инструкций |
 | grok | `~/.grok/AGENTS.md` | маркированный HTML lifecycle-блок (глобальные правила Grok Build) |
 | grokbot | `~/.grokbot/choirboy-context/SKILL.md` | подготовленный импортируемый workflow (не автозагружается) |
+| pi | `~/.pi/agent/APPEND_SYSTEM.md` | блок инструкций и ссылка `skills/load-context` |
+| omp | `~/.omp/agent/AGENTS.md` | блок инструкций и ссылка `skills/load-context` |
+| llama | `~/.config/llama.cpp/choirboy-ui.json` | `systemMessage` UI и ссылка на skill |
 | `--instructions FILE` | любой файл | маркированный lifecycle-блок инструкций (HTML или `#`) |
 
 ---

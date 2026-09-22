@@ -124,6 +124,9 @@ grokbot) command -v grokbot >/dev/null 2>&1 || command -v grok-bot >/dev/null 2>
 | gemini | `~/.gemini/GEMINI.md` | 带标记的 HTML lifecycle 指令块 |
 | grok | `~/.grok/AGENTS.md` | 带标记的 HTML lifecycle 指令块（Grok Build 全局规则） |
 | grokbot | `~/.grokbot/choirboy-context/SKILL.md` | 准备好的可导入 workflow（不自动加载） |
+| pi | `~/.pi/agent/APPEND_SYSTEM.md` | 指令块加 `skills/load-context` 符号链接 |
+| omp | `~/.omp/agent/AGENTS.md` | 指令块加 `skills/load-context` 符号链接 |
+| llama | `~/.config/llama.cpp/choirboy-ui.json` | UI `systemMessage` 加 skill 符号链接 |
 | `--instructions FILE` | 任意文件 | 带标记的 lifecycle 指令块（HTML 或 `#`） |
 
 ---

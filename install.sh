@@ -26,6 +26,10 @@
 #   grok     ~/.grok/AGENTS.md           Grok Build global rules
 #   grokbot  ~/.grokbot/choirboy-context/SKILL.md
 #                                         importable Grok Bot workflow
+#   pi       ~/.pi/agent/APPEND_SYSTEM.md
+#                                         always-on instruction block + load-context skill
+#   omp      ~/.omp/agent/AGENTS.md      Oh My Pi user context + load-context skill
+#   llama    ~/.config/llama.cpp/        llama-server UI system message + skill
 #
 # Any other agent that reads an instructions file can be wired up with
 # --instructions PATH (repeatable). All changes are idempotent, marked with
@@ -47,7 +51,7 @@ ARTIFACT_GENERATOR="$PLUGIN_ROOT/scripts/artifact-generator.py"
 # The full lore is not sent through this hook.
 CODEX_CONTEXT_LIMIT="4000"
 KIMI_HOME="${KIMI_CODE_HOME:-$HOME/.kimi-code}"
-ALL_TARGETS="claude codex opencode hermes kimi gemini grok grokbot"
+ALL_TARGETS="claude codex opencode hermes kimi gemini grok grokbot pi omp llama"
 
 UNINSTALL=0
 LIST_ONLY=0
@@ -96,6 +100,13 @@ target_present() {
     grokbot) command -v grokbot >/dev/null 2>&1 \
                || command -v grok-bot >/dev/null 2>&1 \
                || [ -d "$HOME/.grokbot" ] ;;
+    pi)     command -v pi >/dev/null 2>&1 || [ -d "$HOME/.pi" ] ;;
+    omp)    command -v omp >/dev/null 2>&1 || [ -d "$HOME/.omp" ] ;;
+    llama)  command -v llama-server >/dev/null 2>&1 \
+              || command -v llama-cli >/dev/null 2>&1 \
+              || command -v llamafile >/dev/null 2>&1 \
+              || [ -d "$HOME/.config/llama.cpp" ] \
+              || [ -d "$HOME/.llama" ] ;;
     *) return 1 ;;
   esac
 }
@@ -212,6 +223,13 @@ target_installed() {
     grok)   grep -qF "$REGISTRATION_MARK" "$HOME/.grok/AGENTS.md" 2>/dev/null \
               && grep -qF "$ARTIFACT_GENERATOR" "$HOME/.grok/AGENTS.md" 2>/dev/null ;;
     grokbot) [ "$(grokbot_workflow "$HOME/.grokbot/choirboy-context/SKILL.md" status 2>/dev/null || true)" = current ] ;;
+    pi)     instruction_current "$HOME/.pi/agent/APPEND_SYSTEM.md" \
+              && skill_link_current "$HOME/.pi/agent/skills/load-context" ;;
+    omp)    instruction_current "$HOME/.omp/agent/AGENTS.md" \
+              && skill_link_current "$HOME/.omp/agent/skills/load-context" ;;
+    llama)  instruction_current "$HOME/.config/llama.cpp/choirboy-system-prompt.md" \
+              && skill_link_current "$HOME/.config/llama.cpp/skills/load-context" \
+              && llama_ui_current ;;
     *) return 1 ;;
   esac
 }
@@ -228,6 +246,13 @@ target_managed_present() {
     gemini) grep -qF "$MARK" "$HOME/.gemini/GEMINI.md" 2>/dev/null ;;
     grok) grep -qF "$MARK" "$HOME/.grok/AGENTS.md" 2>/dev/null ;;
     grokbot) grep -qF "$MARK" "$HOME/.grokbot/choirboy-context/SKILL.md" 2>/dev/null ;;
+    pi)     grep -qF "$MARK" "$HOME/.pi/agent/APPEND_SYSTEM.md" 2>/dev/null \
+              || [ -e "$HOME/.pi/agent/skills/load-context" ] ;;
+    omp)    grep -qF "$MARK" "$HOME/.omp/agent/AGENTS.md" 2>/dev/null \
+              || [ -e "$HOME/.omp/agent/skills/load-context" ] ;;
+    llama)  grep -qF "$MARK" "$HOME/.config/llama.cpp/choirboy-system-prompt.md" 2>/dev/null \
+              || [ -e "$HOME/.config/llama.cpp/skills/load-context" ] \
+              || [ -f "$HOME/.config/llama.cpp/choirboy-ui.json" ] ;;
     *) return 1 ;;
   esac
 }
@@ -1045,6 +1070,135 @@ EOF
   fi
 }
 
+# skill_link_current DEST — true when DEST is a symlink to this checkout's skill.
+skill_link_current() {
+  local dest="$1" src got
+  [ -L "$dest" ] || return 1
+  src="$(cd "$PLUGIN_ROOT/skills/load-context" && pwd -P)"
+  got="$(cd "$dest" 2>/dev/null && pwd -P)" || return 1
+  [ "$got" = "$src" ]
+}
+
+# install_skill_link DEST — symlink this checkout's load-context skill into a
+# harness skill directory. A real directory or a foreign symlink is refused.
+install_skill_link() {
+  local dest="$1"
+  local src="$PLUGIN_ROOT/skills/load-context"
+  if [ "$UNINSTALL" = 1 ]; then
+    if skill_link_current "$dest"; then
+      rm "$dest"
+      echo "  skill link removed: $dest"
+    elif [ -L "$dest" ] || [ -e "$dest" ]; then
+      echo "  skill at $dest is not ours — left in place"
+    else
+      echo "  skill link was not present"
+    fi
+    return 0
+  fi
+  mkdir -p "$(dirname "$dest")"
+  if [ -e "$dest" ] && [ ! -L "$dest" ]; then
+    die "refusing to replace an existing skill directory: $dest"
+  fi
+  if [ -L "$dest" ] && ! skill_link_current "$dest"; then
+    die "refusing to replace a foreign skill link: $dest"
+  fi
+  ln -sfn "$src" "$dest"
+  echo "  skill linked: $dest"
+}
+
+instruction_current() {
+  local file="$1"
+  grep -qF "$REGISTRATION_MARK" "$file" 2>/dev/null \
+    && grep -qF "$ARTIFACT_GENERATOR" "$file" 2>/dev/null
+}
+
+llama_ui_file() {
+  printf '%s' "$HOME/.config/llama.cpp/choirboy-ui.json"
+}
+
+llama_ui_current() {
+  python3 - "$(llama_ui_file)" "$HOME/.config/llama.cpp/choirboy-system-prompt.md" "$REGISTRATION_MARK" <<'PY'
+import json, sys
+from pathlib import Path
+ui, prompt, mark = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+try:
+    data = json.loads(ui.read_text(encoding="utf-8"))
+    text = prompt.read_text(encoding="utf-8")
+except (OSError, ValueError):
+    raise SystemExit(1)
+if not isinstance(data, dict) or data.get("systemMessage") != text or mark not in text:
+    raise SystemExit(1)
+PY
+}
+
+llama_ui_sync() {
+  local prompt_file="$1" mode="$2"
+  local ui
+  ui="$(llama_ui_file)"
+  python3 - "$ui" "$prompt_file" "$mode" "$MARK" <<'PY'
+import json, os, sys
+from pathlib import Path
+ui, prompt, mode, mark = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], sys.argv[4]
+data = {}
+if ui.is_file() and not ui.is_symlink():
+    try:
+        loaded = json.loads(ui.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"llama: refusing invalid UI config {ui}: {exc}", file=sys.stderr)
+        raise SystemExit(2)
+    if not isinstance(loaded, dict):
+        print(f"llama: refusing non-object UI config {ui}", file=sys.stderr)
+        raise SystemExit(2)
+    data = loaded
+message = data.get("systemMessage")
+ours = isinstance(message, str) and mark in message
+if mode == "uninstall":
+    if not ours:
+        print("unchanged")
+        raise SystemExit(0)
+    data["systemMessage"] = ""
+else:
+    text = prompt.read_text(encoding="utf-8")
+    if data.get("systemMessage") == text and data.get("showSystemMessage") is True:
+        print("unchanged")
+        raise SystemExit(0)
+    data["systemMessage"] = text
+    data["showSystemMessage"] = True
+ui.parent.mkdir(parents=True, exist_ok=True)
+temporary = ui.with_name(ui.name + ".tmp")
+temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+os.replace(temporary, ui)
+print("changed")
+PY
+}
+
+do_pi() {
+  do_instructions "$HOME/.pi/agent/APPEND_SYSTEM.md" html "pi"
+  install_skill_link "$HOME/.pi/agent/skills/load-context"
+}
+
+do_omp() {
+  do_instructions "$HOME/.omp/agent/AGENTS.md" html "omp"
+  install_skill_link "$HOME/.omp/agent/skills/load-context"
+}
+
+do_llama() {
+  local prompt="$HOME/.config/llama.cpp/choirboy-system-prompt.md" status
+  do_instructions "$prompt" html "llama"
+  install_skill_link "$HOME/.config/llama.cpp/skills/load-context"
+  if [ "$UNINSTALL" = 1 ]; then
+    echo "llama: clearing choirboy system message in $(llama_ui_file)"
+    llama_ui_sync "$prompt" uninstall
+  else
+    echo "llama: writing UI default system message to $(llama_ui_file)"
+    if ! status="$(llama_ui_sync "$prompt" install)"; then
+      die "llama: could not update $(llama_ui_file)"
+    fi
+    [ "$status" = "changed" ] && echo "  UI config updated" || echo "  UI config already current — skipped"
+    echo "  next: start llama-server with --ui-config-file $(llama_ui_file)"
+  fi
+}
+
 do_gemini() {
   do_instructions "$HOME/.gemini/GEMINI.md" html "gemini"
 }
@@ -1114,6 +1268,9 @@ discover_legacy_artifact_roots() {
     "$KIMI_HOME/config.toml" \
     "$HOME/.gemini/GEMINI.md" \
     "$HOME/.grok/AGENTS.md" \
+    "$HOME/.pi/agent/APPEND_SYSTEM.md" \
+    "$HOME/.omp/agent/AGENTS.md" \
+    "$HOME/.config/llama.cpp/choirboy-system-prompt.md" \
     ${INSTRUCTIONS_FILES[@]+"${INSTRUCTIONS_FILES[@]}"} <<'PY'
 import re, sys
 from pathlib import Path
@@ -1168,6 +1325,9 @@ if [ "$LIST_ONLY" = 1 ]; then
       gemini) loc="$HOME/.gemini/GEMINI.md" ;;
       grok)   loc="$HOME/.grok/AGENTS.md" ;;
       grokbot) loc="$HOME/.grokbot/choirboy-context/SKILL.md" ;;
+      pi)     loc="$HOME/.pi/agent/APPEND_SYSTEM.md" ;;
+      omp)    loc="$HOME/.omp/agent/AGENTS.md" ;;
+      llama)  loc="$HOME/.config/llama.cpp/choirboy-system-prompt.md" ;;
     esac
     printf '%-8s %-10s %s\n' "$t" "$s" "$loc"
   done
@@ -1191,7 +1351,7 @@ fi
 
 for t in $TARGETS; do
   case "$t" in
-    claude|codex|opencode|hermes|kimi|gemini|grok|grokbot) "do_$t" ;;
+    claude|codex|opencode|hermes|kimi|gemini|grok|grokbot|pi|omp|llama) "do_$t" ;;
     *) die "unknown target: $t (known: $(echo "$ALL_TARGETS" | tr ' ' ','))" ;;
   esac
 done

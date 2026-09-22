@@ -70,6 +70,9 @@ Plugin internals: [docs/architecture.en.md](docs/architecture.en.md).
 | Gemini | `~/.gemini/GEMINI.md` | synchronized lifecycle instruction block |
 | Grok Build | `~/.grok/AGENTS.md` | synchronized lifecycle instruction block (hook stdout is ignored) |
 | Grok Bot | `~/.grokbot/choirboy-context/SKILL.md` | workflow for manual import; run `@choirboy-context` in every new chat |
+| Pi | `~/.pi/agent/APPEND_SYSTEM.md` | same instruction contract as Gemini, plus the `load-context` skill |
+| Oh My Pi (`omp`) | `~/.omp/agent/AGENTS.md` | same instruction contract as Gemini, plus the `load-context` skill |
+| llama-server UI | `~/.config/llama.cpp/choirboy-ui.json` | default `systemMessage` with the same contract; pass `--ui-config-file` |
 
 ## Install
 

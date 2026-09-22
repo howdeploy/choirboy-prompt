@@ -1097,6 +1097,77 @@ HOME="$grokbot_binary_home" PATH="$grokbot_binary_path:$PATH" \
 grep -Eq '^grokbot[[:space:]]+detected[[:space:]]+' "$TEST_ROOT/grokbot-binary-list.txt"
 pass "fresh Grok Bot binary detection"
 
+local_home="$TEST_ROOT/local-harness-home"
+mkdir -p "$local_home/.pi/agent" "$local_home/.omp/agent" "$local_home/.config/llama.cpp"
+printf '%s\n' 'pi user sentinel' > "$local_home/.pi/agent/APPEND_SYSTEM.md"
+printf '%s\n' 'omp user sentinel' > "$local_home/.omp/agent/AGENTS.md"
+HOME="$local_home" ./install.sh --target pi,omp,llama > "$TEST_ROOT/local-harness-install.txt"
+HOME="$local_home" ./install.sh --target pi,omp,llama >/dev/null
+HOME="$local_home" ./install.sh --list > "$TEST_ROOT/local-harness-list.txt"
+python3 - "$local_home" "$ROOT" <<'PY'
+import json, sys
+from pathlib import Path
+
+home, root = Path(sys.argv[1]), Path(sys.argv[2])
+skill = (root / "skills/load-context").resolve()
+cases = (
+    home / ".pi/agent/APPEND_SYSTEM.md",
+    home / ".omp/agent/AGENTS.md",
+    home / ".config/llama.cpp/choirboy-system-prompt.md",
+)
+links = (
+    home / ".pi/agent/skills/load-context",
+    home / ".omp/agent/skills/load-context",
+    home / ".config/llama.cpp/skills/load-context",
+)
+for path, link in zip(cases, links):
+    text = path.read_text(encoding="utf-8")
+    assert "agent-plugin:vibe-lore:registration=2" in text
+    assert str(root / "scripts/artifact-generator.py") in text
+    assert "session-context" in text
+    assert link.is_symlink()
+    assert link.resolve() == skill
+pi = (home / ".pi/agent/APPEND_SYSTEM.md").read_text(encoding="utf-8")
+omp = (home / ".omp/agent/AGENTS.md").read_text(encoding="utf-8")
+assert pi.startswith("pi user sentinel\n")
+assert omp.startswith("omp user sentinel\n")
+ui = json.loads((home / ".config/llama.cpp/choirboy-ui.json").read_text(encoding="utf-8"))
+prompt = (home / ".config/llama.cpp/choirboy-system-prompt.md").read_text(encoding="utf-8")
+assert ui["systemMessage"] == prompt
+assert ui["showSystemMessage"] is True
+PY
+grep -Eq '^pi[[:space:]]+installed[[:space:]]+' "$TEST_ROOT/local-harness-list.txt"
+grep -Eq '^omp[[:space:]]+installed[[:space:]]+' "$TEST_ROOT/local-harness-list.txt"
+grep -Eq '^llama[[:space:]]+installed[[:space:]]+' "$TEST_ROOT/local-harness-list.txt"
+# A foreign skill directory must not be replaced.
+foreign_home="$TEST_ROOT/local-harness-foreign"
+mkdir -p "$foreign_home/.pi/agent/skills/load-context"
+printf '%s\n' 'foreign skill' > "$foreign_home/.pi/agent/skills/load-context/SKILL.md"
+if HOME="$foreign_home" ./install.sh --target pi >/dev/null 2>"$TEST_ROOT/local-harness-foreign.err"; then
+  echo "installer replaced a foreign Pi skill directory" >&2
+  exit 1
+fi
+grep -q 'refusing to replace an existing skill directory' "$TEST_ROOT/local-harness-foreign.err"
+grep -qxF 'foreign skill' "$foreign_home/.pi/agent/skills/load-context/SKILL.md"
+HOME="$local_home" ./install.sh --uninstall --target pi,omp,llama >/dev/null
+python3 - "$local_home" <<'PY'
+import json, sys
+from pathlib import Path
+home = Path(sys.argv[1])
+pi = (home / ".pi/agent/APPEND_SYSTEM.md").read_text(encoding="utf-8")
+omp = (home / ".omp/agent/AGENTS.md").read_text(encoding="utf-8")
+assert pi == "pi user sentinel\n"
+assert omp == "omp user sentinel\n"
+assert "agent-plugin:vibe-lore" not in pi
+assert "agent-plugin:vibe-lore" not in omp
+assert not (home / ".pi/agent/skills/load-context").exists()
+assert not (home / ".omp/agent/skills/load-context").exists()
+assert not (home / ".config/llama.cpp/skills/load-context").exists()
+ui = json.loads((home / ".config/llama.cpp/choirboy-ui.json").read_text(encoding="utf-8"))
+assert ui["systemMessage"] == ""
+PY
+pass "Pi, OMP, and llama harness install, skill link, and uninstall"
+
 runtime_home="$TEST_ROOT/runtime-home"
 mkdir -p "$runtime_home"
 HOME="$runtime_home" ./install.sh --target hermes,kimi >/dev/null

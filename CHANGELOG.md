@@ -15,6 +15,8 @@
   though Git does not use it as runtime state.
 - Restore copies `retired-projects` and deletes the original only after the
   replacement directory is in place. A failed rename no longer removes the archive.
+- Pi, Oh My Pi (`omp`), and llama-server UI are installer targets. Each gets
+  the same instruction contract as Gemini plus the `load-context` skill.
 
 ## 1.5.3 — 2026-09-15
 

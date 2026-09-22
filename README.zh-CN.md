@@ -64,6 +64,9 @@ choirboy-prompt 是面向生产的智能体记忆插件。它把既定项目历�
 | Gemini | `~/.gemini/GEMINI.md` | 自动同步的 lifecycle 指令块 |
 | Grok Build | `~/.grok/AGENTS.md` | 自动同步的 lifecycle 指令块（钩子 stdout 会被忽略） |
 | Grok Bot | `~/.grokbot/choirboy-context/SKILL.md` | 供手动导入的 workflow；每个新对话运行 `@choirboy-context` |
+| Pi | `~/.pi/agent/APPEND_SYSTEM.md` | 与 Gemini 相同的指令合同，外加 `load-context` skill |
+| Oh My Pi (`omp`) | `~/.omp/agent/AGENTS.md` | 与 Gemini 相同的指令合同，外加 `load-context` skill |
+| llama-server UI | `~/.config/llama.cpp/choirboy-ui.json` | 默认 `systemMessage` 使用同一合同；启动时加 `--ui-config-file` |
 
 ## 安装
 
