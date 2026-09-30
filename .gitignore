@@ -1,4 +1,4 @@
-# local backups created by install.sh
+# local backups created by the installers
 *.bak.*
 # editor/OS noise
 .DS_Store
