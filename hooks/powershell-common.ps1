@@ -1,13 +1,22 @@
 # Shared helpers for the native PowerShell runtime hooks.
 
+function Test-ChoirboyPython3Candidate([string] $Executable, [string[]] $Prefix) {
+    try {
+        & $Executable @Prefix -c 'import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)' *> $null
+        return $LASTEXITCODE -eq 0
+    } catch { return $false }
+}
+
 function Get-ChoirboyPython {
     foreach ($name in @('python3', 'python', 'py')) {
         $command = Get-Command -Name $name -CommandType Application -ErrorAction SilentlyContinue |
             Select-Object -First 1
         if ($null -ne $command) {
+            $prefix = if ($name -eq 'py') { @('-3') } else { @() }
+            if (-not (Test-ChoirboyPython3Candidate $command.Source $prefix)) { continue }
             return [pscustomobject]@{
                 Executable = $command.Source
-                Prefix = if ($name -eq 'py') { @('-3') } else { @() }
+                Prefix = $prefix
             }
         }
     }

@@ -53,14 +53,23 @@ function Stop-Installer([string] $Message) {
     throw $Message
 }
 
+function Test-Python3Candidate([string] $Executable, [string[]] $Prefix) {
+    try {
+        & $Executable @Prefix -c 'import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)' *> $null
+        return $LASTEXITCODE -eq 0
+    } catch { return $false }
+}
+
 function Resolve-Python {
     $script:PythonPrefix = @()
     foreach ($name in @('python3', 'python', 'py')) {
         $candidate = Get-Command -Name $name -CommandType Application -ErrorAction SilentlyContinue |
             Select-Object -First 1
         if ($null -ne $candidate) {
+            $prefix = if ($name -eq 'py') { @('-3') } else { @() }
+            if (-not (Test-Python3Candidate $candidate.Source $prefix)) { continue }
             $script:PythonExe = $candidate.Source
-            if ($name -eq 'py') { $script:PythonPrefix = @('-3') }
+            $script:PythonPrefix = $prefix
             return
         }
     }
@@ -316,8 +325,8 @@ function Test-HookHandlerExact($Entry, [string] $Command, [string] $Argument, [N
         if ($hook.args -isnot [Collections.IList] -or $hook.args.Count -ne 1 -or $hook.args[0] -cne $Argument) { return $false }
         $expectedFieldCount++
     } elseif ($hook.Contains('args')) { return $false }
-    if ($null -ne $Timeout) { if ($hook.timeout -ne $Timeout.Value) { return $false }; $expectedFieldCount++ } elseif ($hook.Contains('timeout')) { return $false }
-    if ($null -ne $ContextLimit) { if ($hook.additionalContextLimit -ne $ContextLimit.Value) { return $false }; $expectedFieldCount++ } elseif ($hook.Contains('additionalContextLimit')) { return $false }
+    if ($null -ne $Timeout) { if ($hook.timeout -ne $Timeout) { return $false }; $expectedFieldCount++ } elseif ($hook.Contains('timeout')) { return $false }
+    if ($null -ne $ContextLimit) { if ($hook.additionalContextLimit -ne $ContextLimit) { return $false }; $expectedFieldCount++ } elseif ($hook.Contains('additionalContextLimit')) { return $false }
     if ($hook.type -cne 'command' -or $hook.Count -ne $expectedFieldCount) { return $false }
     return $true
 }
@@ -356,8 +365,8 @@ function Set-JsonHook([string] $Path, [string] $Command, [string] $Mode, [string
         $entries = $kept
         $handler = [ordered]@{ type = 'command'; command = $Command }
         if ($Argument) { $handler.args = @($Argument) }
-        if ($null -ne $Timeout) { $handler.timeout = $Timeout.Value }
-        if ($null -ne $ContextLimit) { $handler.additionalContextLimit = $ContextLimit.Value }
+        if ($null -ne $Timeout) { $handler.timeout = $Timeout }
+        if ($null -ne $ContextLimit) { $handler.additionalContextLimit = $ContextLimit }
         $entry = [ordered]@{ hooks = @($handler) }
         $entries.Add($entry)
     } else {
@@ -685,14 +694,34 @@ function Write-InstructionBlock([string] $Path, [string] $Style, [string] $Label
     }
 }
 
+function Resolve-DirectoryLinkPath([string] $Path) {
+    $current = [IO.Path]::GetFullPath($Path)
+    $comparison = if ($IsWindows) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }
+    $seen = [Collections.Generic.HashSet[string]]::new($comparison)
+    for ($depth = 0; $depth -lt 64; $depth++) {
+        if (-not $seen.Add($current)) { return $null }
+        $item = Get-Item -LiteralPath $current -Force
+        if ($item.LinkType -notin @('SymbolicLink', 'Junction')) { return $current }
+        $targets = @($item.Target)
+        if ($targets.Count -ne 1 -or -not $targets[0]) { return $null }
+        $target = [string]$targets[0]
+        if (-not [IO.Path]::IsPathRooted($target)) {
+            $target = Join-Path (Split-Path -Parent $current) $target
+        }
+        $current = [IO.Path]::GetFullPath($target)
+    }
+    return $null
+}
+
 function Test-SkillLinkCurrent([string] $Destination) {
-    if (-not (Test-Path -LiteralPath $Destination)) { return $false }
     try {
         $item = Get-Item -LiteralPath $Destination -Force
         if ($item.LinkType -notin @('SymbolicLink', 'Junction')) { return $false }
-        $resolved = (Resolve-Path -LiteralPath $Destination).Path
-        $source = (Resolve-Path -LiteralPath (Join-Path $script:PluginRoot 'skills/load-context')).Path
-        return [IO.Path]::GetFullPath($resolved) -eq [IO.Path]::GetFullPath($source)
+        $targetPath = Resolve-DirectoryLinkPath $Destination
+        $sourcePath = Resolve-DirectoryLinkPath (Join-Path $script:PluginRoot 'skills/load-context')
+        if (-not $targetPath -or -not $sourcePath) { return $false }
+        $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+        return [string]::Equals($targetPath, $sourcePath, $comparison)
     } catch { return $false }
 }
 
@@ -709,25 +738,22 @@ function Set-SkillLink([string] $Destination) {
     }
     $parent = Split-Path -Parent $Destination
     [IO.Directory]::CreateDirectory($parent) | Out-Null
-    if (Test-Path -LiteralPath $Destination) {
-        if (-not (Test-SkillLinkCurrent $Destination)) {
-            $sourceSkill = Join-Path $source 'SKILL.md'
-            $destinationSkill = Join-Path $Destination 'SKILL.md'
-            if (Test-Path -LiteralPath $destinationSkill -PathType Leaf) {
-                Write-AtomicText $destinationSkill (Read-Text $sourceSkill) -Backup
-                Write-Host "  skill updated: $destinationSkill"
-            } else {
-                Write-Host "  existing skill path has no SKILL.md; left in place: $Destination"
-            }
-            return
+    $existing = Get-Item -LiteralPath $Destination -Force -ErrorAction SilentlyContinue
+    if ($null -ne $existing) {
+        if (Test-SkillLinkCurrent $Destination) {
+            Write-Host "  skill link already current: $Destination"
+        } else {
+            Stop-Installer "refusing to replace an existing skill path not owned by this installer: $Destination"
         }
-    } else {
-        try { New-Item -ItemType SymbolicLink -Path $Destination -Target $source | Out-Null }
-        catch {
-            if (-not $IsWindows) { throw }
-            New-Item -ItemType Junction -Path $Destination -Target $source | Out-Null
-        }
+        return
     }
+
+    try { New-Item -ItemType SymbolicLink -Path $Destination -Target $source | Out-Null }
+    catch {
+        if (-not $IsWindows) { throw }
+        New-Item -ItemType Junction -Path $Destination -Target $source | Out-Null
+    }
+    if (-not (Test-SkillLinkCurrent $Destination)) { Stop-Installer "created skill link could not be verified: $Destination" }
     Write-Host "  skill linked: $Destination"
 }
 
