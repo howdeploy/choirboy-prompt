@@ -35,8 +35,8 @@ into English, Russian, and Simplified Chinese.
 
 ## How it works
 
-1. **Install.** `./install.sh` finds the agent apps on your machine and
-   registers a hook in each one that fires when a new session starts.
+1. **Install.** `./install.sh` on Linux or `install.ps1` on Windows finds the
+   agent apps on your machine and registers a hook in each one that fires when a new session starts.
    Where hooks do not exist, it writes a synchronized managed block into the
    instruction file; for Grok Bot it prepares a workflow for manual import.
 2. **Assembly.** The fixed lore is `prompt.md`, `security-posture.md`,
@@ -76,6 +76,8 @@ Plugin internals: [docs/architecture.en.md](docs/architecture.en.md).
 
 ## Install
 
+### Linux
+
 You need `git`, `bash`, and `python3`. Check: `git --version && python3 --version && bash --version`.
 
 ```bash
@@ -90,6 +92,23 @@ Done. Open a **new** session. Claude Code and Codex show a short memory status a
 - Per-runtime status: `./install.sh --list` (`stale` means a managed registration needs synchronization)
 - Rollback: `./install.sh --uninstall` (timestamped `*.bak.*` backups stay next to the configs)
 - `Permission denied` on launch: `chmod +x install.sh` and retry
+
+### Windows (PowerShell 7)
+
+Install PowerShell 7 and Python 3. Git is needed only to clone the repository. Windows registrations use PowerShell hooks; Git Bash is not required.
+
+```powershell
+git clone https://github.com/howdeploy/choirboy-prompt.git
+Set-Location choirboy-prompt
+pwsh -NoProfile -File .\install.ps1
+```
+
+The installer uses Python helpers and context files from the checked-out
+repository, so run it from that checkout.
+
+- Selected apps only: `pwsh -NoProfile -File .\install.ps1 --target claude,codex`
+- Per-runtime status: `pwsh -NoProfile -File .\install.ps1 --list`
+- Rollback: `pwsh -NoProfile -File .\install.ps1 --uninstall`
 
 Project artifacts live outside a manual checkout. Location precedence is
 `CHOIRBOY_ARTIFACTS_DIR` → `${CLAUDE_PLUGIN_DATA}/project-artifacts` →
