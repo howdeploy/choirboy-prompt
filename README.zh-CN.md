@@ -70,6 +70,8 @@ choirboy-prompt 是面向生产的智能体记忆插件。它把既定项目历�
 
 ## 安装
 
+### Linux
+
 需要 `git`、`bash` 和 `python3`。检查：`git --version && python3 --version && bash --version`。
 
 ```bash
@@ -84,6 +86,29 @@ cd choirboy-prompt
 - 查看各运行时状态：`./install.sh --list`（`stale` 表示托管注册需要同步）
 - 回滚：`./install.sh --uninstall`（带时间戳的 `*.bak.*` 备份保留在配置文件旁）
 - 运行时提示 `Permission denied`：先执行 `chmod +x install.sh` 再重试
+
+### Windows（任意 PowerShell）
+
+需要 Python 3。Git 只用于克隆仓库。Windows 上注册的是 PowerShell hooks，不需要 Git Bash。在系统自带的 Windows PowerShell 或 PowerShell 7 中运行：
+
+```powershell
+git clone https://github.com/howdeploy/choirboy-prompt.git
+Set-Location choirboy-prompt
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+`install.ps1` 可以在任意 PowerShell 中启动，包括 Windows 自带的 Windows
+PowerShell 5.1。hooks 需要 PowerShell 7（`pwsh`）。如果没有安装，安装器会
+自动安装：先用 `winget`，失败时改用 PowerShell GitHub releases 中由 Microsoft
+签名的 MSI（Windows 会请求管理员确认）。首次安装后，请重启已打开的终端和
+agent 应用，让它们找到 `pwsh`。`-ExecutionPolicy Bypass` 只作用于这一次运行，
+不会修改系统策略。
+
+安装器使用克隆仓库中的 Python 辅助脚本和上下文文件，因此请在仓库目录中运行。
+
+- 只安装到指定应用：`powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --target claude,codex`
+- 查看各运行时状态：`powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --list`
+- 回滚：`powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --uninstall`
 
 项目 artifacts 存放在手动 checkout 之外，路径优先级为：
 `CHOIRBOY_ARTIFACTS_DIR` → `${CLAUDE_PLUGIN_DATA}/project-artifacts` →

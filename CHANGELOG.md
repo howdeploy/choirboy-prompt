@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `install.ps1` on Windows is now a bootstrap that runs in any PowerShell,
+  including Windows PowerShell 5.1. When PowerShell 7 is missing it installs
+  it with `winget`, falling back to the Microsoft-signed MSI from the
+  PowerShell GitHub releases, then runs the installer, which moved to
+  `scripts/install-core.ps1`, under `pwsh`. The documented command is now
+  `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1`, and
+  the Russian and Chinese READMEs gained the Windows section.
 - Claude Code and Codex SessionStart now emit a short status under 2,000
   characters and omit the `choirboy-delivery` marker. The full lore stays in
   the load-context skill, which loads only when `choirboy-context` is absent.

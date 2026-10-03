@@ -74,6 +74,8 @@ dossiers пишутся только на английском. На три яз
 
 ## Установка
 
+### Linux
+
 Нужны `git`, `bash` и `python3`. Проверка: `git --version && python3 --version && bash --version`.
 
 ```bash
@@ -88,6 +90,31 @@ cd choirboy-prompt
 - Статусы по рантаймам: `./install.sh --list` (`stale` означает, что управляемую регистрацию надо синхронизировать)
 - Откат: `./install.sh --uninstall` (timestamp-бэкапы `*.bak.*` остаются рядом с конфигами)
 - `Permission denied` при запуске: `chmod +x install.sh` и повтори
+
+### Windows (любой PowerShell)
+
+Нужен Python 3. Git нужен только для клонирования репозитория. На Windows регистрируются PowerShell-хуки, Git Bash не нужен. Команды запускай в обычном Windows PowerShell или в PowerShell 7:
+
+```powershell
+git clone https://github.com/howdeploy/choirboy-prompt.git
+Set-Location choirboy-prompt
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+`install.ps1` запускается в любом PowerShell, включая встроенный в Windows
+Windows PowerShell 5.1. Хукам нужен PowerShell 7 (`pwsh`). Если его нет,
+установщик ставит его сам: сначала через `winget`, а если не вышло — из
+подписанного Microsoft MSI в релизах PowerShell на GitHub (Windows попросит
+подтверждение администратора). После такой первой установки перезапусти открытые
+терминалы и приложения агентов, чтобы они нашли `pwsh`. `-ExecutionPolicy Bypass`
+действует только на этот запуск и не меняет системную политику.
+
+Установщик использует Python-хелперы и контекстные файлы из клона, поэтому
+запускай его из папки репозитория.
+
+- Только выбранные приложения: `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --target claude,codex`
+- Статусы по рантаймам: `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --list`
+- Откат: `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --uninstall`
 
 Проектные артефакты хранятся вне ручного checkout. Приоритет путей:
 `CHOIRBOY_ARTIFACTS_DIR` → `${CLAUDE_PLUGIN_DATA}/project-artifacts` →

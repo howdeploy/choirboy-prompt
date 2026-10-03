@@ -51,6 +51,13 @@ Chat 不执行 `SessionStart`。请选择 **load-context** skill，或要求 Cla
 仍需要 `PATH` 中存在 `bash`。安装 Git for Windows，或使用 skill。skill 本身
 不依赖 Bash、jq、Python 或 Node。
 
+### Windows 提示无法识别 `pwsh`
+
+旧命令 `pwsh -NoProfile -File .\install.ps1` 需要预先安装 PowerShell 7。
+请改用 `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1`：
+它可在 Windows PowerShell 5.1 中运行，并会自动安装 PowerShell 7。如果安装后
+hooks 提示找不到 `pwsh`，请重启终端和 agent 应用，让它们读取新的 `PATH`。
+
 ### Hook 运行两次
 
 Marketplace plugin 与 `./install.sh --target claude` 同时启用。删除其中一个；

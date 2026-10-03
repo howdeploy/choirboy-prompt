@@ -268,6 +268,13 @@ Kimi 0.39.x 会丢弃 `SessionStart` stdout，因此托管 TOML 块安装四个 
 9. **Hermes 并行启动。** `/tmp` 中的 state 文件没有锁——可能产生竞争（已知限制，见 README）。
 10. **受管理路径已有外部 OpenCode 插件。** 若文件没有 ownership 标记，
     install 与 uninstall 都会拒绝覆盖或删除。
+11. **Windows 上没有 PowerShell 7。** 根目录的 `install.ps1` 是引导脚本，
+    可在任意 PowerShell（包括 Windows PowerShell 5.1）中运行。它在 `PATH`
+    和标准安装位置查找 `pwsh` 7；找不到时先用 `winget` 安装
+    `Microsoft.PowerShell`，失败后改用 PowerShell GitHub releases 中由
+    Microsoft 签名的 MSI（校验 checksum 与 Authenticode 签名，Windows 会请求
+    管理员确认）。随后在 `pwsh` 下运行 `scripts/install-core.ps1`。已注册的
+    hooks 从 `PATH` 调用 `pwsh`，因此首次安装之前打开的终端和 agent 应用需要重启。
 
 ---
 

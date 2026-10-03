@@ -303,6 +303,15 @@ only after stdout was emitted successfully.
    possible (known limitation, see README).
 10. **Foreign OpenCode plugin at the managed path.** Install and uninstall
     refuse to overwrite or remove a file without the ownership marker.
+11. **Windows without PowerShell 7.** The root `install.ps1` is a bootstrap
+    that runs in any PowerShell, including Windows PowerShell 5.1. It looks
+    for `pwsh` 7 on `PATH` and in the standard install locations; if it is
+    missing, it installs `Microsoft.PowerShell` with `winget`, then falls back
+    to the Microsoft-signed MSI from the PowerShell GitHub releases (checksum
+    and Authenticode signature verified, administrator prompt). It then runs
+    `scripts/install-core.ps1` under `pwsh`. Registered hooks call `pwsh` from
+    `PATH`, so terminals and agent apps opened before that first install must
+    be restarted.
 
 ---
 

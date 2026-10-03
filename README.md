@@ -93,22 +93,30 @@ Done. Open a **new** session. Claude Code and Codex show a short memory status a
 - Rollback: `./install.sh --uninstall` (timestamped `*.bak.*` backups stay next to the configs)
 - `Permission denied` on launch: `chmod +x install.sh` and retry
 
-### Windows (PowerShell 7)
+### Windows (any PowerShell)
 
-Install PowerShell 7 and Python 3. Git is needed only to clone the repository. Windows registrations use PowerShell hooks; Git Bash is not required.
+You need Python 3. Git is needed only to clone the repository. Windows registrations use PowerShell hooks; Git Bash is not required. Run the commands in the regular Windows PowerShell or in PowerShell 7:
 
 ```powershell
 git clone https://github.com/howdeploy/choirboy-prompt.git
 Set-Location choirboy-prompt
-pwsh -NoProfile -File .\install.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
+
+`install.ps1` starts in any PowerShell, including the Windows PowerShell 5.1
+that ships with Windows. The hooks need PowerShell 7 (`pwsh`). If it is missing,
+the installer installs it automatically: first with `winget`, and if that fails,
+from the Microsoft-signed MSI in the PowerShell GitHub releases (Windows asks
+for administrator confirmation). After that first install, restart open
+terminals and agent apps so they can find `pwsh`. `-ExecutionPolicy Bypass`
+applies only to this run and does not change system policy.
 
 The installer uses Python helpers and context files from the checked-out
 repository, so run it from that checkout.
 
-- Selected apps only: `pwsh -NoProfile -File .\install.ps1 --target claude,codex`
-- Per-runtime status: `pwsh -NoProfile -File .\install.ps1 --list`
-- Rollback: `pwsh -NoProfile -File .\install.ps1 --uninstall`
+- Selected apps only: `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --target claude,codex`
+- Per-runtime status: `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --list`
+- Rollback: `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --uninstall`
 
 Project artifacts live outside a manual checkout. Location precedence is
 `CHOIRBOY_ARTIFACTS_DIR` → `${CLAUDE_PLUGIN_DATA}/project-artifacts` →

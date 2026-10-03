@@ -55,6 +55,14 @@ The plugin uses exec form so `${CLAUDE_PLUGIN_ROOT}` is a single argument, but
 automatic delivery still needs `bash` on `PATH`. Install Git for Windows or use
 the skill fallback. The skill itself has no Bash, jq, Python, or Node dependency.
 
+### `pwsh` is not recognized on Windows
+
+The old command `pwsh -NoProfile -File .\install.ps1` needs PowerShell 7
+preinstalled. Run `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1`
+instead: it works in Windows PowerShell 5.1 and installs PowerShell 7
+automatically. If hooks report that `pwsh` is missing after the install,
+restart the terminal and the agent app so they pick up the new `PATH`.
+
 ### Hook runs twice
 
 The marketplace plugin and `./install.sh --target claude` are both enabled.

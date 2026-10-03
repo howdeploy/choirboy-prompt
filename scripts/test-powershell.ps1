@@ -21,7 +21,7 @@ $createdLinks = [Collections.Generic.List[string]]::new()
 
 try {
     foreach ($relative in @(
-        'install.ps1',
+        'scripts/install-core.ps1',
         'hooks/powershell-common.ps1',
         'hooks/session-start.ps1',
         'hooks/artifact-stop.ps1',
@@ -33,7 +33,7 @@ try {
         Copy-Item -LiteralPath $source -Destination $destination
     }
 
-    $installer = Join-Path $fixtureRoot 'install.ps1'
+    $installer = Join-Path $fixtureRoot 'scripts/install-core.ps1'
     . $installer '--target' 'none' '--list'
 
     # Codex hook values must be numeric, and a null legacy value must be stale.

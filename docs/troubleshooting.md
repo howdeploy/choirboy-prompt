@@ -56,6 +56,15 @@ exec-form, но автоматической доставке всё ещё ну
 for Windows или используй skill. Сам skill не зависит от Bash, jq, Python или
 Node.
 
+### `pwsh` не распознано в Windows
+
+Старая команда `pwsh -NoProfile -File .\install.ps1` требует заранее
+установленный PowerShell 7. Запускай вместо неё
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1`: она
+работает в Windows PowerShell 5.1 и сама ставит PowerShell 7. Если после
+установки хуки сообщают, что `pwsh` не найден, перезапусти терминал и
+приложение агента, чтобы они подхватили новый `PATH`.
+
 ### Hook запускается дважды
 
 Одновременно включены marketplace plugin и `./install.sh --target claude`.
