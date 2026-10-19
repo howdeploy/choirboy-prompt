@@ -224,11 +224,11 @@ target_installed() {
               && grep -qF "$ARTIFACT_GENERATOR" "$HOME/.grok/AGENTS.md" 2>/dev/null ;;
     grokbot) [ "$(grokbot_workflow "$HOME/.grokbot/choirboy-context/SKILL.md" status 2>/dev/null || true)" = current ] ;;
     pi)     instruction_current "$HOME/.pi/agent/APPEND_SYSTEM.md" \
-              && skill_link_current "$HOME/.pi/agent/skills/load-context" ;;
+              && skill_install_is_ours "$HOME/.pi/agent/skills/load-context" ;;
     omp)    instruction_current "$HOME/.omp/agent/AGENTS.md" \
-              && skill_link_current "$HOME/.omp/agent/skills/load-context" ;;
+              && skill_install_is_ours "$HOME/.omp/agent/skills/load-context" ;;
     llama)  instruction_current "$HOME/.config/llama.cpp/choirboy-system-prompt.md" \
-              && skill_link_current "$HOME/.config/llama.cpp/skills/load-context" \
+              && skill_install_is_ours "$HOME/.config/llama.cpp/skills/load-context" \
               && llama_ui_current ;;
     *) return 1 ;;
   esac
@@ -1075,14 +1075,27 @@ skill_link_current() {
   [ "$got" = "$src" ]
 }
 
+# skill_install_is_ours DEST — true when DEST is this checkout's load-context
+# skill, whether a symlink to it or a plain copy left by a prior install where
+# symlink creation was unavailable (for example Windows Git Bash without the
+# privilege, where `ln -s` copies the directory). A foreign skill directory,
+# whose SKILL.md differs from ours, is never treated as ours.
+skill_install_is_ours() {
+  local dest="$1"
+  if skill_link_current "$dest"; then return 0; fi
+  [ -d "$dest" ] && [ ! -L "$dest" ] \
+    && [ -f "$dest/SKILL.md" ] \
+    && cmp -s "$dest/SKILL.md" "$PLUGIN_ROOT/skills/load-context/SKILL.md"
+}
+
 # install_skill_link DEST — symlink this checkout's load-context skill into a
 # harness skill directory. A real directory or a foreign symlink is refused.
 install_skill_link() {
   local dest="$1"
   local src="$PLUGIN_ROOT/skills/load-context"
   if [ "$UNINSTALL" = 1 ]; then
-    if skill_link_current "$dest"; then
-      rm "$dest"
+    if skill_install_is_ours "$dest"; then
+      rm -rf "$dest"
       echo "  skill link removed: $dest"
     elif [ -L "$dest" ] || [ -e "$dest" ]; then
       echo "  skill at $dest is not ours — left in place"
@@ -1092,11 +1105,14 @@ install_skill_link() {
     return 0
   fi
   mkdir -p "$(dirname "$dest")"
-  if [ -e "$dest" ] && [ ! -L "$dest" ]; then
-    die "refusing to replace an existing skill directory: $dest"
-  fi
-  if [ -L "$dest" ] && ! skill_link_current "$dest"; then
-    die "refusing to replace a foreign skill link: $dest"
+  if [ -L "$dest" ]; then
+    skill_link_current "$dest" || die "refusing to replace a foreign skill link: $dest"
+  elif [ -e "$dest" ]; then
+    # A plain directory is ours only when it is a copy of this skill left by a
+    # prior install where symlinks were unavailable; replacing it keeps the
+    # installer idempotent. A foreign skill directory is still refused.
+    skill_install_is_ours "$dest" || die "refusing to replace an existing skill directory: $dest"
+    rm -rf "$dest"
   fi
   ln -sfn "$src" "$dest"
   echo "  skill linked: $dest"
