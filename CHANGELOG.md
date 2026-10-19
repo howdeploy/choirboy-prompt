@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.6.0 — 2026-10-19
 
 - `install.ps1` on Windows is now a bootstrap that runs in any PowerShell,
   including Windows PowerShell 5.1. When PowerShell 7 is missing it installs
@@ -9,6 +9,12 @@
   `scripts/install-core.ps1`, under `pwsh`. The documented command is now
   `powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1`, and
   the Russian and Chinese READMEs gained the Windows section.
+- `install.sh` stays idempotent where symlink creation is unavailable (for
+  example Windows Git Bash without the privilege, where `ln -s` copies the
+  skill directory). A re-install and `--uninstall` now recognize a skill
+  directory that is a copy of our own `load-context`, by comparing `SKILL.md`,
+  and `--list` reports Pi/OMP/llama installed in that case; a foreign skill
+  directory is still refused.
 - Claude Code and Codex SessionStart now emit a short status under 2,000
   characters and omit the `choirboy-delivery` marker. The full lore stays in
   the load-context skill, which loads only when `choirboy-context` is absent.
