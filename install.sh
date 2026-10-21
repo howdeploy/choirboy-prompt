@@ -1099,6 +1099,11 @@ install_skill_link() {
     die "refusing to replace a foreign skill link: $dest"
   fi
   ln -sfn "$src" "$dest"
+  # Git Bash without symlink rights copies instead; a copy would block every rerun.
+  if [ ! -L "$dest" ]; then
+    rm -rf "$dest"
+    die "symlinks are unavailable (Windows: enable Developer Mode or set MSYS=winsymlinks:nativestrict): $dest"
+  fi
   echo "  skill linked: $dest"
 }
 

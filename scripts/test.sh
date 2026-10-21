@@ -1069,6 +1069,20 @@ HOME="$grokbot_binary_home" PATH="$grokbot_binary_path:$PATH" \
 grep -Eq '^grokbot[[:space:]]+detected[[:space:]]+' "$TEST_ROOT/grokbot-binary-list.txt"
 pass "fresh Grok Bot binary detection"
 
+symlink_probe="$TEST_ROOT/symlink-probe"
+mkdir -p "$symlink_probe/dir"
+ln -s "$symlink_probe/dir" "$symlink_probe/link" 2>/dev/null || true
+if [ ! -L "$symlink_probe/link" ]; then
+  nolink_home="$TEST_ROOT/local-harness-nolink"
+  mkdir -p "$nolink_home/.pi/agent"
+  if HOME="$nolink_home" ./install.sh --target pi >/dev/null 2>"$TEST_ROOT/local-harness-nolink.err"; then
+    echo "installer accepted a copied skill instead of a symlink" >&2
+    exit 1
+  fi
+  grep -q 'symlinks are unavailable' "$TEST_ROOT/local-harness-nolink.err"
+  test ! -e "$nolink_home/.pi/agent/skills/load-context"
+  pass "Pi harness install refuses to copy the skill without symlinks"
+else
 local_home="$TEST_ROOT/local-harness-home"
 mkdir -p "$local_home/.pi/agent" "$local_home/.omp/agent" "$local_home/.config/llama.cpp"
 printf '%s\n' 'pi user sentinel' > "$local_home/.pi/agent/APPEND_SYSTEM.md"
@@ -1139,6 +1153,7 @@ ui = json.loads((home / ".config/llama.cpp/choirboy-ui.json").read_text(encoding
 assert ui["systemMessage"] == ""
 PY
 pass "Pi, OMP, and llama harness install, skill link, and uninstall"
+fi
 
 runtime_home="$TEST_ROOT/runtime-home"
 mkdir -p "$runtime_home"
