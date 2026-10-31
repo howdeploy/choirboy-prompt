@@ -54,7 +54,10 @@ class AgyHooksTests(unittest.TestCase):
         self.assertEqual(self.configure("uninstall"), "unchanged")
         self.assertFalse(self.path.exists())
 
+    @unittest.skipIf(os.name == "nt", "Native Windows adapters are covered by test-powershell.ps1")
     def test_bash_installer_and_adapter(self):
+        # Model an installed CLI without depending on agy being in the host PATH.
+        (self.root / ".gemini/antigravity-cli").mkdir(parents=True)
         env = os.environ.copy()
         env.update(HOME=str(self.root), CHOIRBOY_ARTIFACTS_DIR=str(self.root / "artifacts"), CHOIRBOY_BUNDLE_DIR=str(self.root / "no-bundle"))
         def install(*arguments):
