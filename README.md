@@ -13,7 +13,7 @@
 
 <p>
 <img alt="Bash 5.0+" src="https://img.shields.io/badge/bash-5.0%2B-4EAA25?style=flat-square&logo=gnubash&logoColor=white">
-<img alt="runtimes" src="https://img.shields.io/badge/runtimes-claude%20%C2%B7%20codex%20%C2%B7%20opencode%20%C2%B7%20hermes%20%C2%B7%20kimi%20%C2%B7%20gemini%20%C2%B7%20grok%20%C2%B7%20grokbot-22D3EE?style=flat-square">
+<img alt="runtimes" src="https://img.shields.io/badge/runtimes-claude%20%C2%B7%20codex%20%C2%B7%20opencode%20%C2%B7%20hermes%20%C2%B7%20kimi%20%C2%B7%20gemini%20%C2%B7%20agy%20%C2%B7%20grok%20%C2%B7%20grokbot-22D3EE?style=flat-square">
 <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-3FB950?style=flat-square"></a>
 </p>
 
@@ -68,6 +68,7 @@ Plugin internals: [docs/architecture.en.md](docs/architecture.en.md).
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + consent allowlist, first turn only |
 | Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart/PreCompact reset delivery; UserPromptSubmit emits changed plain context; Stop does not continue the turn |
 | Gemini | `~/.gemini/GEMINI.md` | synchronized lifecycle instruction block |
+| AGY / Antigravity CLI | `~/.gemini/config/hooks.json` | native SessionStart injects full context; Stop restores artifact state without continuing |
 | Grok Build | `~/.grok/AGENTS.md` | synchronized lifecycle instruction block (hook stdout is ignored) |
 | Grok Bot | `~/.grokbot/choirboy-context/SKILL.md` | workflow for manual import; run `@choirboy-context` in every new chat |
 | Pi | `~/.pi/agent/APPEND_SYSTEM.md` | same instruction contract as Gemini, plus the `load-context` skill |
@@ -180,7 +181,7 @@ reproducible.
 
 - Grok Bot: requires a one-time workflow import and an explicit
   `@choirboy-context` invocation in every new conversation.
-- Gemini, Grok Build, and `--instructions` have no native delivery hook: their
+- The Gemini instruction target, Grok Build, and `--instructions` use instruction-based delivery: their
   managed instruction block asks the agent to run the lifecycle command. A
   normal installer rerun synchronizes that block; no uninstall/reinstall cycle
   is required.

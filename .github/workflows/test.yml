@@ -36,6 +36,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Run plugin suite
+        env:
+          # Git Bash otherwise copies directories for ln -s on Windows.
+          MSYS: winsymlinks:nativestrict
         run: bash scripts/test.sh
       - name: Build custom-plugin ZIP
         run: python3 scripts/package-plugin.py

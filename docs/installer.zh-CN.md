@@ -289,3 +289,21 @@ echo '{"session_id":"hook-check","extra":{"is_first_turn":false}}' \
 正文；只有路径的消息不算成功投递记忆。
 
 完整的临时测试套件——[docs/testing.zh-CN.md](testing.zh-CN.md)。
+
+---
+
+## AGY / Antigravity CLI（Linux、WSL 和 Windows）
+
+AGY 是独立目标：Linux/WSL 使用 `./install.sh --target agy`；Windows 使用
+`powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --target agy`。
+配置写入 `~/.gemini/config/hooks.json`，Windows 对应
+`$HOME\.gemini\config\hooks.json`。安装器只管理 `agent-plugin:vibe-lore` 条目，
+保留其他钩子；重复安装不重复注册，卸载只移除自己的条目，损坏的 JSON 不会被覆盖。
+
+SessionStart 使用 `--format agy`，通过
+`injectSteps[].systemMessage.systemMessage` 在调用模型前投递完整上下文、
+校验标记及产物状态；Stop 使用现有 artifact-stop，不强制继续。需要 Python 3；
+Windows 使用原生 PowerShell 7，不依赖 Bash，执行策略只作用于钩子子进程。
+安装后开始新会话。Windows、WSL 和使用独立 HOME 的应用需要各自注册。
+ARTEX 可使用 `HOME="$HOME/artex/agy" ./install.sh --target agy`。
+不要覆盖应用已有的钩子文件。上下文投递不会消除供应商拒绝。

@@ -13,7 +13,7 @@
 
 <p>
 <img alt="Bash 5.0+" src="https://img.shields.io/badge/bash-5.0%2B-4EAA25?style=flat-square&logo=gnubash&logoColor=white">
-<img alt="runtimes" src="https://img.shields.io/badge/runtimes-claude%20%C2%B7%20codex%20%C2%B7%20opencode%20%C2%B7%20hermes%20%C2%B7%20kimi%20%C2%B7%20gemini%20%C2%B7%20grok%20%C2%B7%20grokbot-22D3EE?style=flat-square">
+<img alt="runtimes" src="https://img.shields.io/badge/runtimes-claude%20%C2%B7%20codex%20%C2%B7%20opencode%20%C2%B7%20hermes%20%C2%B7%20kimi%20%C2%B7%20gemini%20%C2%B7%20agy%20%C2%B7%20grok%20%C2%B7%20grokbot-22D3EE?style=flat-square">
 <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-3FB950?style=flat-square"></a>
 </p>
 
@@ -62,6 +62,7 @@ choirboy-prompt 是面向生产环境的智能体记忆插件。它把既定项�
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + 授权白名单，仅第一轮 |
 | Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart/PreCompact 重置投递；UserPromptSubmit 输出已变化的纯文本上下文；Stop 不延续回合 |
 | Gemini | `~/.gemini/GEMINI.md` | 可同步的生命周期指令块 |
+| AGY / Antigravity CLI | `~/.gemini/config/hooks.json` | 原生 SessionStart 注入完整上下文；Stop 恢复产物状态，不延续回合 |
 | Grok Build | `~/.grok/AGENTS.md` | 可同步的生命周期指令块（钩子 stdout 会被忽略） |
 | Grok Bot | `~/.grokbot/choirboy-context/SKILL.md` | 供手动导入的工作流；每个新对话运行 `@choirboy-context` |
 | Pi | `~/.pi/agent/APPEND_SYSTEM.md` | 与 Gemini 相同的指令契约，外加 `load-context` 技能 |
@@ -168,7 +169,7 @@ Chat / Cowork 自定义插件、Windows 与 WSL——见
 
 - Grok Bot：需要一次性导入工作流，并在每个新对话中显式运行
   `@choirboy-context`。
-- Gemini、Grok Build 与 `--instructions` 没有原生投递钩子；其托管
+- Gemini 指令目标、Grok Build 与 `--instructions` 使用指令式投递；其托管
   指令块会要求智能体运行生命周期命令。正常重新运行安装器即可同步该块，
   不需要先卸载再安装。
 - Hermes 第一轮去重使用 `/tmp` 中的状态文件，没有锁；并行启动

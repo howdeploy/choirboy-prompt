@@ -324,3 +324,38 @@ becomes `installed` (or `prepared` for Grok Bot). For a ready artifact bundle,
 dossier bodies; a path-only message is not a successful memory delivery.
 
 The full ad-hoc suite — [docs/testing.en.md](testing.en.md).
+
+---
+
+## AGY / Antigravity CLI (Linux, WSL and Windows)
+
+AGY is a separate target from the Gemini instruction-file adapter. Install it
+with `./install.sh --target agy`, or on Windows:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --target agy
+```
+
+The native AGY 1.4.12 contract uses `~/.gemini/config/hooks.json` (on Windows,
+`$HOME\.gemini\config\hooks.json`). The installer owns only the named
+`agent-plugin:vibe-lore` entry and preserves other hooks. Reinstall refreshes moved
+checkout paths without duplicates; `--uninstall --target agy` removes only this entry.
+Malformed JSON is rejected without rewriting it. `--list` validates both commands
+and their numeric timeouts. Installation is automatically detected from `agy` or
+`~/.gemini/antigravity-cli`.
+
+SessionStart runs `session-start.sh --format agy` on Linux/WSL and the native
+`session-start.ps1 --format agy` on Windows. It sends full fixed lore, a hashed
+`choirboy-delivery` marker and artifact lifecycle state as
+`injectSteps[].systemMessage.systemMessage`. It executes before the model is
+called; the model need not decide to read files first. Stop runs the existing
+artifact-stop adapter and never requests continuation. Both hooks require Python 3;
+Windows uses PowerShell 7 without Bash, with execution policy scoped to the child
+process so unsigned checkout scripts also work from UNC paths.
+
+Start a new conversation after installation. WSL and Windows have separate HOME
+and registrations. An application using a private HOME needs its own registration:
+for ARTEX use `HOME="$HOME/artex/agy" ./install.sh --target agy`, or link its
+`.gemini/config/hooks.json` to the main HOME's registered file. Do not replace an
+existing application hook file; install into that HOME to merge the owned entry.
+Hooks ensure context delivery, not provider acceptance of a request.

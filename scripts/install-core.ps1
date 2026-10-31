@@ -24,7 +24,7 @@ $script:KimiStopHookScript = Join-Path $script:PluginRoot "hooks/kimi-artifact-s
 $script:ArtifactGenerator = Join-Path $script:PluginRoot 'scripts/artifact-generator.py'
 $script:BuildContext = Join-Path $script:PluginRoot 'scripts/build-context.py'
 $script:CodexContextLimit = 4000
-$script:AllTargets = @('claude', 'codex', 'opencode', 'hermes', 'kimi', 'gemini', 'grok', 'grokbot', 'pi', 'omp', 'llama')
+$script:AllTargets = @('claude', 'codex', 'opencode', 'hermes', 'kimi', 'gemini', 'agy', 'grok', 'grokbot', 'pi', 'omp', 'llama')
 $script:HomePath = if ($HOME) { [IO.Path]::GetFullPath($HOME) } else { [Environment]::GetFolderPath('UserProfile') }
 $script:KimiHome = if ($env:KIMI_CODE_HOME) { [IO.Path]::GetFullPath($env:KIMI_CODE_HOME) } else { Join-Path $script:HomePath '.kimi-code' }
 $script:Uninstall = $false
@@ -47,7 +47,7 @@ PowerShell installer for Choirboy Prompt.
   --settings PATH     use an explicit Claude settings file
   -h, --help          show this help
 
-Targets: claude,codex,opencode,hermes,kimi,gemini,grok,grokbot,pi,omp,llama
+Targets: claude,codex,opencode,hermes,kimi,gemini,agy,grok,grokbot,pi,omp,llama
 '@
 }
 
@@ -119,6 +119,7 @@ function Get-TargetPath([string] $Target) {
         'hermes'   { return (Join-Path $script:HomePath '.hermes/config.yaml') }
         'kimi'     { return (Join-Path $script:KimiHome 'config.toml') }
         'gemini'   { return (Join-Path $script:HomePath '.gemini/GEMINI.md') }
+        'agy'      { return (Join-Path $script:HomePath '.gemini/config/hooks.json') }
         'grok'     { return (Join-Path $script:HomePath '.grok/AGENTS.md') }
         'grokbot'  { return (Join-Path $script:HomePath '.grokbot/choirboy-context/SKILL.md') }
         'pi'       { return (Join-Path $script:HomePath '.pi/agent/APPEND_SYSTEM.md') }
@@ -140,6 +141,7 @@ function Test-TargetPresent([string] $Target) {
         'hermes' { Join-Path $script:HomePath '.hermes' }
         'kimi' { $script:KimiHome }
         'gemini' { Join-Path $script:HomePath '.gemini' }
+        'agy' { Join-Path $script:HomePath '.gemini/antigravity-cli' }
         'grok' { Join-Path $script:HomePath '.grok' }
         'grokbot' { Join-Path $script:HomePath '.grokbot' }
         'pi' { Join-Path $script:HomePath '.pi' }
@@ -437,6 +439,10 @@ function Test-TargetInstalled([string] $Target) {
                     (Get-JsonHookStatus $path (Get-HookCommand $script:StopHookScript) 'hooks.Stop' '' 15 $null (Get-HookId $script:StopHookScript)) -eq 'current'
             } catch { return $false }
         }
+        'agy' {
+            try { return ((Set-AgyHooks 'status') -join '') -eq 'current' }
+            catch { return $false }
+        }
         'opencode' { return (Test-ExactManagedFile $path (New-OpenCodePlugin)) }
         'hermes' {
             $allow = Join-Path $script:HomePath '.hermes/shell-hooks-allowlist.json'
@@ -477,6 +483,7 @@ function Test-ExactManagedFile([string] $Path, [string] $Expected) {
 
 function Test-TargetManagedPresent([string] $Target) {
     $path = Get-TargetPath $Target
+    if ($Target -eq 'agy') { return (Test-FileContains $path @($script:Mark)) }
     if ($Target -in @('claude', 'codex')) {
         return (Test-FileContains $path @((Get-HookId $script:HookScript))) -or
             (Test-FileContains $path @((Get-HookId $script:StopHookScript)))
@@ -974,6 +981,23 @@ function Invoke-DoLlama {
 }
 
 function Invoke-DoGemini { Write-InstructionBlock (Get-TargetPath 'gemini') 'html' 'gemini' }
+
+function Set-AgyHooks([string] $Mode) {
+    $start = Get-HookCommand $script:HookScript '--format agy'
+    $stop = Get-HookCommand $script:StopHookScript
+    if ($IsWindows) {
+        # AGY's cmd.exe launcher must also run unsigned checkout scripts on UNC paths.
+        $start = $start.Replace('pwsh -NoProfile -File ', 'pwsh -NoProfile -ExecutionPolicy Bypass -File ')
+        $stop = $stop.Replace('pwsh -NoProfile -File ', 'pwsh -NoProfile -ExecutionPolicy Bypass -File ')
+    }
+    return Invoke-Python @((Join-Path $script:PluginRoot 'scripts/agy-hooks.py'), (Get-TargetPath 'agy'), $Mode, $start, $stop)
+}
+
+function Invoke-DoAgy {
+    $mode = if ($script:Uninstall) { 'uninstall' } else { 'install' }
+    Write-Host "agy: $mode SessionStart/Stop hooks in $(Get-TargetPath 'agy')"
+    Set-AgyHooks $mode | ForEach-Object { Write-Host $_ }
+}
 function Invoke-DoGrok { Write-InstructionBlock (Get-TargetPath 'grok') 'html' 'grok' }
 
 function Invoke-DoGrokBot {
@@ -1006,6 +1030,7 @@ function Invoke-Target([string] $Target) {
         'hermes' { Invoke-DoHermes }
         'kimi' { Invoke-DoKimi }
         'gemini' { Invoke-DoGemini }
+        'agy' { Invoke-DoAgy }
         'grok' { Invoke-DoGrok }
         'grokbot' { Invoke-DoGrokBot }
         'pi' { Invoke-DoPi }

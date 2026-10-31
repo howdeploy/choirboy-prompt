@@ -23,6 +23,7 @@
 #   hermes   ~/.hermes/config.yaml       pre_llm_call shell hook + consent allowlist
 #   kimi     ~/.kimi-code/config.toml    SessionStart + PreCompact + prompt + Stop
 #   gemini   ~/.gemini/GEMINI.md         managed instruction block
+#   agy      ~/.gemini/config/hooks.json SessionStart + Stop hooks (Antigravity)
 #   grok     ~/.grok/AGENTS.md           Grok Build global rules
 #   grokbot  ~/.grokbot/choirboy-context/SKILL.md
 #                                         importable Grok Bot workflow
@@ -51,7 +52,7 @@ ARTIFACT_GENERATOR="$PLUGIN_ROOT/scripts/artifact-generator.py"
 # The full lore is not sent through this hook.
 CODEX_CONTEXT_LIMIT="4000"
 KIMI_HOME="${KIMI_CODE_HOME:-$HOME/.kimi-code}"
-ALL_TARGETS="claude codex opencode hermes kimi gemini grok grokbot pi omp llama"
+ALL_TARGETS="claude codex opencode hermes kimi gemini agy grok grokbot pi omp llama"
 
 UNINSTALL=0
 LIST_ONLY=0
@@ -96,6 +97,7 @@ target_present() {
     hermes) command -v hermes >/dev/null 2>&1 || [ -d "$HOME/.hermes" ] ;;
     kimi)   command -v kimi   >/dev/null 2>&1 || [ -d "$KIMI_HOME" ] ;;
     gemini) command -v gemini >/dev/null 2>&1 || [ -d "$HOME/.gemini" ] ;;
+    agy) command -v agy >/dev/null 2>&1 || [ -d "$HOME/.gemini/antigravity-cli" ] ;;
     grok)   command -v grok   >/dev/null 2>&1 || [ -d "$HOME/.grok" ] ;;
     grokbot) command -v grokbot >/dev/null 2>&1 \
                || command -v grok-bot >/dev/null 2>&1 \
@@ -218,6 +220,7 @@ target_installed() {
               && grep -qF "$HOOK_SCRIPT" "$HOME/.hermes/config.yaml" 2>/dev/null \
               && grep -qF "$HOOK_SCRIPT" "$HOME/.hermes/shell-hooks-allowlist.json" 2>/dev/null ;;
     kimi)   kimi_hooks_current 2>/dev/null ;;
+    agy) [ "$(agy_hooks status 2>/dev/null || true)" = current ] ;;
     gemini) grep -qF "$REGISTRATION_MARK" "$HOME/.gemini/GEMINI.md" 2>/dev/null \
               && grep -qF "$ARTIFACT_GENERATOR" "$HOME/.gemini/GEMINI.md" 2>/dev/null ;;
     grok)   grep -qF "$REGISTRATION_MARK" "$HOME/.grok/AGENTS.md" 2>/dev/null \
@@ -244,6 +247,7 @@ target_managed_present() {
     hermes) grep -qF "$MARK" "$HOME/.hermes/config.yaml" 2>/dev/null ;;
     kimi) grep -qF "$MARK" "$KIMI_HOME/config.toml" 2>/dev/null ;;
     gemini) grep -qF "$MARK" "$HOME/.gemini/GEMINI.md" 2>/dev/null ;;
+    agy) grep -qF "$MARK" "$HOME/.gemini/config/hooks.json" 2>/dev/null ;;
     grok) grep -qF "$MARK" "$HOME/.grok/AGENTS.md" 2>/dev/null ;;
     grokbot) grep -qF "$MARK" "$HOME/.grokbot/choirboy-context/SKILL.md" 2>/dev/null ;;
     pi)     grep -qF "$MARK" "$HOME/.pi/agent/APPEND_SYSTEM.md" 2>/dev/null \
@@ -1204,6 +1208,20 @@ do_gemini() {
   do_instructions "$HOME/.gemini/GEMINI.md" html "gemini"
 }
 
+agy_hooks() {
+  local start_command stop_command
+  start_command="$(python3 -c 'import shlex,sys; print("bash " + shlex.quote(sys.argv[1]) + " --format agy")' "$HOOK_SCRIPT")"
+  stop_command="$(python3 -c 'import shlex,sys; print("bash " + shlex.quote(sys.argv[1]))' "$STOP_HOOK_SCRIPT")"
+  python3 "$PLUGIN_ROOT/scripts/agy-hooks.py" "$HOME/.gemini/config/hooks.json" "$1" "$start_command" "$stop_command"
+}
+
+do_agy() {
+  local mode=install
+  [ "$UNINSTALL" = 0 ] || mode=uninstall
+  echo "agy: $mode SessionStart/Stop hooks in $HOME/.gemini/config/hooks.json"
+  agy_hooks "$mode"
+}
+
 do_grok() {
   do_instructions "$HOME/.grok/AGENTS.md" html "grok"
 }
@@ -1324,6 +1342,7 @@ if [ "$LIST_ONLY" = 1 ]; then
       hermes) loc="$HOME/.hermes/config.yaml" ;;
       kimi)   loc="$KIMI_HOME/config.toml" ;;
       gemini) loc="$HOME/.gemini/GEMINI.md" ;;
+      agy) loc="$HOME/.gemini/config/hooks.json" ;;
       grok)   loc="$HOME/.grok/AGENTS.md" ;;
       grokbot) loc="$HOME/.grokbot/choirboy-context/SKILL.md" ;;
       pi)     loc="$HOME/.pi/agent/APPEND_SYSTEM.md" ;;
@@ -1352,7 +1371,7 @@ fi
 
 for t in $TARGETS; do
   case "$t" in
-    claude|codex|opencode|hermes|kimi|gemini|grok|grokbot|pi|omp|llama) "do_$t" ;;
+    claude|codex|opencode|hermes|kimi|gemini|agy|grok|grokbot|pi|omp|llama) "do_$t" ;;
     *) die "unknown target: $t (known: $(echo "$ALL_TARGETS" | tr ' ' ','))" ;;
   esac
 done

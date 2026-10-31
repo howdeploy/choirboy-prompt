@@ -22,6 +22,7 @@ $createdLinks = [Collections.Generic.List[string]]::new()
 try {
     foreach ($relative in @(
         'scripts/install-core.ps1',
+        'scripts/agy-hooks.py',
         'hooks/powershell-common.ps1',
         'hooks/session-start.ps1',
         'hooks/artifact-stop.ps1',
@@ -35,6 +36,44 @@ try {
 
     $installer = Join-Path $fixtureRoot 'scripts/install-core.ps1'
     . $installer '--target' 'none' '--list'
+
+    # Native AGY hooks use a named root entry; unrelated hooks must survive.
+    $script:HomePath = Join-Path $temporaryRoot 'agy home with spaces'
+    $agyPath = Get-TargetPath 'agy'
+    [IO.Directory]::CreateDirectory((Split-Path -Parent $agyPath)) | Out-Null
+    [IO.File]::WriteAllText($agyPath, '{"foreign":{"SessionStart":[{"command":"keep-me"}]}}')
+    Invoke-DoAgy
+    Assert-Condition (Test-TargetInstalled 'agy') 'Fresh AGY hooks are not reported installed'
+    $agyBefore = [IO.File]::ReadAllText($agyPath)
+    Invoke-DoAgy
+    Assert-Condition ([IO.File]::ReadAllText($agyPath) -eq $agyBefore) 'AGY reinstall changed its registration'
+    $agyData = $agyBefore | ConvertFrom-Json -AsHashtable
+    Assert-Number $agyData['agent-plugin:vibe-lore'].SessionStart[0].timeout 30 'AGY SessionStart timeout'
+    Assert-Condition ($agyData['agent-plugin:vibe-lore'].SessionStart[0].command -match 'pwsh .*session-start.ps1" --format agy$') 'AGY did not register the native PowerShell adapter'
+    $script:Uninstall = $true
+    Invoke-DoAgy
+    $script:Uninstall = $false
+    $agyData = Get-Content -LiteralPath $agyPath -Raw | ConvertFrom-Json -AsHashtable
+    Assert-Condition ($agyData.foreign.SessionStart[0].command -eq 'keep-me') 'AGY uninstall modified foreign hooks'
+    Assert-Condition (-not $agyData.Contains('agent-plugin:vibe-lore')) 'AGY uninstall retained the owned entry'
+    [IO.File]::WriteAllText($agyPath, '{broken')
+    $refused = $false
+    try { Invoke-DoAgy } catch { $refused = $true }
+    Assert-Condition $refused 'AGY installer accepted invalid JSON'
+    Assert-Condition ([IO.File]::ReadAllText($agyPath) -eq '{broken') 'AGY installer overwrote invalid JSON'
+
+    # cmd.exe's OEM code page must not corrupt the hook JSON wire format.
+    [IO.File]::WriteAllText((Join-Path $fixtureRoot 'prompt.md'), 'Unicode wire check: café — привет 你好', [Text.UTF8Encoding]::new($false))
+    $wireProbe = Join-Path $temporaryRoot 'wire-check.py'
+    $wireSource = @'
+import json, subprocess, sys
+result = subprocess.run(sys.argv[1], shell=True, input=b'{}', capture_output=True, check=True)
+context = json.loads(result.stdout.decode('utf-8'))['injectSteps'][0]['systemMessage']['systemMessage']
+assert 'café — привет 你好' in context, 'PowerShell hook corrupted Unicode context'
+'@
+    [IO.File]::WriteAllText($wireProbe, $wireSource, [Text.UTF8Encoding]::new($false))
+    $wireCommand = (Get-HookCommand $script:HookScript '--format agy').Replace('pwsh -NoProfile -File ', 'pwsh -NoProfile -ExecutionPolicy Bypass -File ')
+    Invoke-Python @($wireProbe, $wireCommand) | Out-Null
 
     # Codex hook values must be numeric, and a null legacy value must be stale.
     $script:HomePath = Join-Path $temporaryRoot 'codex-home'

@@ -227,3 +227,17 @@ python3 scripts/package-plugin.py
 - 修改内容文件后——先运行 `python3 scripts/build-context.py`，再运行规范测试和
   §4 清理检查。
 - 修改 `instruction_block` 后——在已安装文件中按标记 grep（见 [docs/installer.zh-CN.md](installer.zh-CN.md) §3.3）。
+
+## AGY 原生钩子
+
+`python3 scripts/test-agy.py` 检查外部钩子保留、重复安装、BOM、损坏 JSON、
+卸载与 Bash 上下文投递；主测试套件会运行它。Windows 使用
+`scripts/test-powershell.ps1` 检查原生注册及含空格的路径。
+安装后可单独运行 `python3 scripts/test-agy-live.py`（Windows 使用 `python`）：
+它执行两次安全模型请求，记录一次 SessionStart、两次 Stop，并验证模型两次
+返回真实投递 nonce。使用 stream-json、自定义代理和原生工具拒绝策略。需要
+已登录的 AGY 和模型配额；离线测试不会自动运行。不会打印私有上下文或模型
+回答。`--hooks` 只选择配置文件，AGY 仍使用调用进程的 HOME。
+
+`--single-turn` 检查普通 print 模式，`--timeout 60` 限制 CLI 及子进程。
+CLI 挂起不是钩子检查成功；应与关闭钩子的安全对照比较，配置检查不能单独证明原生投递。
