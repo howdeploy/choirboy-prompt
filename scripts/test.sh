@@ -1080,11 +1080,14 @@ HOME="$local_home" ./install.sh --target pi,omp,llama > "$TEST_ROOT/local-harnes
 HOME="$local_home" ./install.sh --target pi,omp,llama >/dev/null
 HOME="$local_home" ./install.sh --list > "$TEST_ROOT/local-harness-list.txt"
 python3 - "$local_home" "$ROOT" <<'PY'
-import json, sys
+import json, os, subprocess, sys
 from pathlib import Path
 
 home, root = Path(sys.argv[1]), Path(sys.argv[2])
 skill = (root / "skills/load-context").resolve()
+generator = str(root / "scripts/artifact-generator.py")
+if os.name == "nt":
+    generator = subprocess.check_output(["cygpath", "-u", generator], text=True).strip()
 cases = (
     home / ".pi/agent/APPEND_SYSTEM.md",
     home / ".omp/agent/AGENTS.md",
@@ -1098,7 +1101,7 @@ links = (
 for path, link in zip(cases, links):
     text = path.read_text(encoding="utf-8")
     assert "agent-plugin:vibe-lore:registration=2" in text
-    assert str(root / "scripts/artifact-generator.py") in text
+    assert generator in text
     assert "session-context" in text
     assert link.is_symlink()
     assert link.resolve() == skill
