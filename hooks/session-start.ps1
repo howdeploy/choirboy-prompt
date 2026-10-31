@@ -1,5 +1,5 @@
 # Native PowerShell equivalent of hooks/session-start.sh for Windows installs.
-# Supported formats: claude (SessionStart JSON), plain, and hermes.
+# Supported formats: claude (SessionStart JSON), plain, agy, and hermes.
 #Requires -Version 7.0
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'powershell-common.ps1')
@@ -13,14 +13,14 @@ for ($i = 0; $i -lt $arguments.Count; $i++) {
         if ($i + 1 -ge $arguments.Count) { [Console]::Error.WriteLine('--format requires a value'); exit 1 }
         $format = [string]$arguments[++$i]
     } elseif ($arguments[$i] -in '-h', '--help') {
-        [Console]::Out.WriteLine('session-start.ps1 [--format claude|plain|hermes]')
+        [Console]::Out.WriteLine('session-start.ps1 [--format claude|plain|agy|hermes]')
         exit 0
     } else {
         [Console]::Error.WriteLine("session-start.ps1: unknown argument: $($arguments[$i])")
         exit 1
     }
 }
-if ($format -notin @('claude', 'plain', 'hermes')) {
+if ($format -notin @('claude', 'plain', 'agy', 'hermes')) {
     [Console]::Error.WriteLine("session-start.ps1: unknown format: $format")
     exit 1
 }
@@ -81,6 +81,13 @@ if ($env:CLAUDE_PLUGIN_DATA) {
 
 if ($format -eq 'plain') {
     [Console]::Out.WriteLine($payload)
+    exit 0
+}
+
+if ($format -eq 'agy') {
+    $context = "Choirboy SessionStart has already loaded the fixed context and run artifact-generator.py session-context. Use this delivery without repeating those startup steps.`n" + $payload
+    $response = @{ injectSteps = @(@{ systemMessage = @{ systemMessage = $context } }) }
+    [Console]::Out.WriteLine(($response | ConvertTo-Json -Depth 8 -Compress))
     exit 0
 }
 

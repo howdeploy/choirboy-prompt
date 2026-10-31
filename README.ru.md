@@ -13,7 +13,7 @@
 
 <p>
 <img alt="Bash 5.0+" src="https://img.shields.io/badge/bash-5.0%2B-4EAA25?style=flat-square&logo=gnubash&logoColor=white">
-<img alt="runtimes" src="https://img.shields.io/badge/runtimes-claude%20%C2%B7%20codex%20%C2%B7%20opencode%20%C2%B7%20hermes%20%C2%B7%20kimi%20%C2%B7%20gemini%20%C2%B7%20grok%20%C2%B7%20grokbot-22D3EE?style=flat-square">
+<img alt="runtimes" src="https://img.shields.io/badge/runtimes-claude%20%C2%B7%20codex%20%C2%B7%20opencode%20%C2%B7%20hermes%20%C2%B7%20kimi%20%C2%B7%20gemini%20%C2%B7%20agy%20%C2%B7%20grok%20%C2%B7%20grokbot-22D3EE?style=flat-square">
 <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-3FB950?style=flat-square"></a>
 </p>
 
@@ -68,6 +68,7 @@ choirboy-prompt — плагин памяти агентов для исполь
 | Hermes | `~/.hermes/config.yaml` | `pre_llm_call` + список разрешённых команд, только первый ход |
 | Kimi Code 0.39.x | `~/.kimi-code/config.toml` | SessionStart/PreCompact сбрасывают доставку; UserPromptSubmit выдаёт изменившийся текстовый контекст; Stop не продолжает ход |
 | Gemini | `~/.gemini/GEMINI.md` | синхронизируемый блок инструкций жизненного цикла |
+| AGY / Antigravity CLI | `~/.gemini/config/hooks.json` | нативный SessionStart передаёт полный контекст; Stop восстанавливает состояние артефактов без продолжения хода |
 | Grok Build | `~/.grok/AGENTS.md` | синхронизируемый блок инструкций жизненного цикла (stdout хука игнорируется) |
 | Grok Bot | `~/.grokbot/choirboy-context/SKILL.md` | рабочий процесс для ручного импорта; `@choirboy-context` в каждом новом чате |
 | Pi | `~/.pi/agent/APPEND_SYSTEM.md` | тот же контракт инструкций, что у Gemini, плюс навык `load-context` |
@@ -179,7 +180,7 @@ Windows PowerShell 5.1. Хукам нужен PowerShell 7 (`pwsh`). Если е
 
 - Grok Bot: нужен однократный импорт рабочего процесса и явный запуск
   `@choirboy-context` в каждом новом разговоре.
-- У Gemini, Grok Build и `--instructions` нет встроенного хука доставки: их
+- Цель инструкций Gemini, Grok Build и `--instructions` используют текстовую доставку: их
   управляемый блок просит агента запустить команду жизненного цикла. Обычный
   повторный запуск установщика синхронизирует блок; удалять и ставить заново не нужно.
 - Дедупликация первого хода в Hermes использует файл состояния в `/tmp` без блокировок;

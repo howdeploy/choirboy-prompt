@@ -35,6 +35,9 @@ install_test_command() {
 python3 scripts/build-context.py --check >/dev/null
 pass "generated context skill"
 
+python3 scripts/test-agy.py
+pass "AGY hook registration and delivery"
+
 python3 - <<'PY'
 import re
 import unicodedata

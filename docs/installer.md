@@ -329,3 +329,44 @@ echo '{"session_id":"hook-check","extra":{"is_first_turn":false}}' \
 содержимое досье; сообщение только с путём не считается успешной доставкой памяти.
 
 Полный набор отдельных проверок — [docs/testing.md](testing.md).
+
+---
+
+## AGY / Antigravity CLI: Linux, WSL и Windows
+
+AGY — отдельная цель от текстовых инструкций Gemini. Установка в WSL/Linux:
+
+```bash
+./install.sh --target agy
+```
+
+В Windows:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 --target agy
+```
+
+Для нативного AGY 1.4.12 используется `~/.gemini/config/hooks.json`; в Windows —
+`$HOME\.gemini\config\hooks.json`. Установщик управляет только записью
+`agent-plugin:vibe-lore`, сохраняя чужие хуки. Повторная установка не дублирует
+события и обновляет пути при переносе checkout. `--uninstall --target agy` удаляет
+только свою запись. Повреждённый JSON не переписывается. `--list` проверяет
+команды и числовые тайм-ауты. Автоопределение: бинарник `agy` либо каталог
+`~/.gemini/antigravity-cli`.
+
+SessionStart запускает `session-start.sh --format agy` в Linux/WSL и нативный
+`session-start.ps1 --format agy` в Windows. Полные правила и lore, маркер
+`choirboy-delivery` с хешем и состояние артефактов передаются модели через
+`injectSteps[].systemMessage.systemMessage` до первого вызова модели. Stop
+использует существующий artifact-stop и не продолжает ход. Нужен Python 3,
+а в Windows — PowerShell 7; Bash не нужен. Политика исполнения задаётся только
+дочернему процессу PowerShell, чтобы работали неподписанные скрипты checkout,
+включая UNC-пути.
+
+После установки открой новую беседу. У Windows и WSL отдельные HOME и регистрации.
+Приложению с изолированным HOME нужна отдельная регистрация: для ARTEX запусти
+`HOME="$HOME/artex/agy" ./install.sh --target agy` либо подключи ссылкой его
+`.gemini/config/hooks.json` к зарегистрированному файлу основного HOME. Существующий
+файл хуков приложения не заменяй: установщик добавит свою запись при запуске
+с HOME этого приложения. Хуки гарантируют доставку контекста, но не отменяют
+отказы провайдера.

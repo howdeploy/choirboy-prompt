@@ -243,3 +243,25 @@ python3 scripts/package-plugin.py
   canonical suite and §4 sanitization.
 - After an `instruction_block` edit — grep by the marker in installed files
   (see [docs/installer.en.md](installer.en.md) §3.3).
+
+## AGY native hooks
+
+`python3 scripts/test-agy.py` checks named-entry ownership, foreign hooks, BOM
+input, idempotency, moved commands, malformed JSON, uninstall and Bash delivery.
+It is included in `scripts/test.sh`. `scripts/test-powershell.ps1` checks native
+Windows registration and preservation in paths containing spaces.
+
+After `--target agy` installation, `python3 scripts/test-agy-live.py` (Windows:
+`python scripts/test-agy-live.py`) makes two harmless native AGY model calls. It
+wraps the installed commands only in a temporary workspace, records SessionStart
+and Stop receipts, and checks that the model echoes the actual delivery nonce on
+both turns: SessionStart once, Stop twice. It uses stream-json and a custom agent
+with native actions denied. It requires an authorized AGY CLI and consumes model
+quota; it is not run by the offline test suite. Private context and model output
+are not printed. A nonzero exit means delivery has not been proved. `--hooks` can
+select a configuration file; the AGY process still uses the caller's HOME.
+
+For an ordinary print-mode probe use `--single-turn`; `--timeout 60` bounds the
+CLI process and its children. A hanging native CLI is not a passing hook check.
+Compare a harmless control with hooks disabled before attributing the failure
+to Choirboy; installer/configuration checks alone do not prove native delivery.

@@ -14,6 +14,7 @@
 #                      "additionalContext": ...}}
 #   --format plain    Raw context text on stdout (runtimes that append hook
 #                     stdout to the session context, e.g. Kimi Code).
+#   --format agy      Antigravity SessionStart injectSteps/systemMessage JSON.
 #   --format hermes   Hermes shell-hook protocol (pre_llm_call): reads the
 #                     JSON payload from stdin, delivers only on the first turn
 #                     of a session, answers {"context": ...} or {}.
@@ -209,6 +210,14 @@ print(json.dumps(
 
   plain)
     printf '%s\n' "$payload"
+    ;;
+
+  agy)
+    printf '%s\n' "$payload" | python3 -c '
+import json, sys
+context = "Choirboy SessionStart has already loaded the fixed context and run artifact-generator.py session-context. Use this delivery without repeating those startup steps.\n" + sys.stdin.read()
+print(json.dumps({"injectSteps": [{"systemMessage": {"systemMessage": context}}]}, ensure_ascii=False))
+'
     ;;
 
   hermes)

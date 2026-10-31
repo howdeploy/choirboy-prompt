@@ -1,5 +1,12 @@
 # Shared helpers for the native PowerShell runtime hooks.
 
+# Hook JSON is a UTF-8 wire protocol, including when cmd.exe uses an OEM code page.
+$script:ChoirboyWireEncoding = [Text.UTF8Encoding]::new($false)
+[Console]::InputEncoding = $script:ChoirboyWireEncoding
+[Console]::OutputEncoding = $script:ChoirboyWireEncoding
+$OutputEncoding = $script:ChoirboyWireEncoding
+$env:PYTHONIOENCODING = 'utf-8'
+
 function Test-ChoirboyPython3Candidate([string] $Executable, [string[]] $Prefix) {
     try {
         & $Executable @Prefix -c 'import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)' *> $null
