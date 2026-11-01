@@ -304,6 +304,9 @@ SessionStart 使用 `--format agy`，通过
 `injectSteps[].systemMessage.systemMessage` 在调用模型前投递完整上下文、
 校验标记及产物状态；Stop 使用现有 artifact-stop，不强制继续。需要 Python 3；
 Windows 使用原生 PowerShell 7，不依赖 Bash，执行策略只作用于钩子子进程。
+Windows AGY 使用 `-EncodedCommand`：AGY 1.4.12 可能把 `-File` 路径两侧的
+引号当作文件名字符。编码内容仅为脚本调用及格式参数，不是记忆文本。
+升级后重新运行 `--target agy`，并启动新的 AGY 会话。
 安装后开始新会话。Windows、WSL 和使用独立 HOME 的应用需要各自注册。
 ARTEX 可使用 `HOME="$HOME/artex/agy" ./install.sh --target agy`。
 不要覆盖应用已有的钩子文件。上下文投递不会消除供应商拒绝。

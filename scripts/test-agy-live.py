@@ -28,11 +28,12 @@ def main():
         config.write_text(json.dumps({event: managed[event][0]["command"] for event in ("SessionStart", "Stop")}), encoding="utf-8")
         proxy = root / "proxy.py"
         proxy.write_text(
-            "import json,subprocess,sys\nfrom pathlib import Path\n"
+            "import json,os,shlex,subprocess,sys\nfrom pathlib import Path\n"
             "root=Path(__file__).parent\nevent=sys.argv[1]\n"
             "with (root/'receipts.jsonl').open('a') as f:f.write(json.dumps({'event':event})+'\\n')\n"
             "commands=json.loads((root/'commands.json').read_text(encoding='utf-8'))\n"
-            "result=subprocess.run(commands[event],shell=True,stdin=sys.stdin)\n"
+            "command=shlex.split(commands[event],posix=os.name != 'nt')\n"
+            "result=subprocess.run(command,stdin=sys.stdin)\n"
             "sys.exit(result.returncode)\n",
             encoding="utf-8",
         )
