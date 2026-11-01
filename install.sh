@@ -1374,6 +1374,12 @@ for t in $TARGETS; do
     claude|codex|opencode|hermes|kimi|gemini|agy|grok|grokbot|pi|omp|llama) "do_$t" ;;
     *) die "unknown target: $t (known: $(echo "$ALL_TARGETS" | tr ' ' ','))" ;;
   esac
+  if [ "$UNINSTALL" = 0 ]; then
+    case "$t" in
+      codex) echo 'codex: subagents inherit loaded lore with fork_turns="all"; with "none", load-context is needed separately (verified in WSL).' ;;
+      agy) echo 'agy: SessionStart also loads lore in native subagents (verified in WSL; Windows subagent delivery not verified).' ;;
+    esac
+  fi
 done
 
 for f in ${INSTRUCTIONS_FILES[@]+"${INSTRUCTIONS_FILES[@]}"}; do

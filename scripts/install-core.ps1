@@ -1117,7 +1117,15 @@ function Invoke-InstallerMain {
         Write-Host "agent-plugin: artifact lifecycle prepared — $($artifactStatus -join ' ')"
     }
 
-    foreach ($target in $script:Targets) { Invoke-Target $target }
+    foreach ($target in $script:Targets) {
+        Invoke-Target $target
+        if (-not $script:Uninstall) {
+            switch ($target) {
+                'codex' { Write-Host 'codex: subagents inherit loaded lore with fork_turns="all"; with "none", load-context is needed separately (verified in WSL).' }
+                'agy' { Write-Host 'agy: SessionStart also loads lore in native subagents (verified in WSL; Windows subagent delivery not verified).' }
+            }
+        }
+    }
     foreach ($file in $script:InstructionsFiles) {
         $style = if ($file -match '(?i)\.(md|markdown)$') { 'html' } else { 'hash' }
         Write-InstructionBlock $file $style "file:$file"

@@ -55,6 +55,24 @@ into English, Russian, and Simplified Chinese.
 5. **Continuity.** Stable user-data storage, migration, and structural
    validation keep the same project memory active across upgrades.
 
+### Subagent context
+
+Live checks in WSL confirmed the following behavior:
+
+- **Codex CLI 0.165.0 / gpt-6-luna:** after the parent reads the full Choirboy
+  context, a native subagent with `fork_turns: "all"` receives it. With `"none"`,
+  the probe received neither lore nor the private test marker; load `load-context`
+  separately or explicitly include the required context in its task. The short
+  SessionStart status alone is not loaded lore.
+- **AGY 1.4.12 / Gemini 3.8 Flash High:** native `invoke_subagent` sessions run
+  SessionStart hooks themselves and receive the full lore through `--format agy`.
+  A child returned a hook-only random marker and a lore fact without reading files
+  or receiving either value in its task.
+
+These checks cover fixed lore, not ready project-dossier delivery. Native Windows
+subagent delivery and other clients/models have not been verified. Installing the
+hooks does not guarantee every kind of child process inherits the parent's history.
+
 Plugin internals: [docs/architecture.en.md](docs/architecture.en.md).
 
 ### Supported runtimes

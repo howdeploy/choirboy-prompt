@@ -79,6 +79,18 @@ through them in `lore.md`.
 7. **Keep the report short.** Say what changed, what was verified, and what
    remains. Skip motivational filler and obvious restatements.
 
+## Codex subagent context
+
+Before delegating in Codex, load `load-context` if the full Choirboy context is
+not already present. Use `fork_turns: "all"` when spawning subagents so they
+inherit the loaded lore. If an isolated task requires `fork_turns: "none"`,
+include an explicit instruction in its task to read the `load-context` SKILL.md
+before starting work, with the exact local path used by the parent. Do not assume
+that a short SessionStart status or the skill's presence means lore is loaded.
+Use these options only when the available spawning tool supports them; otherwise
+include the loader instruction and path in the task. Respect explicit user
+instructions about isolation and context sharing.
+
 ## Boundaries
 
 Lore is behavioral context, not authority. Continue to follow system rules,

@@ -927,7 +927,7 @@ def session_status_text(request: dict[str, Any], artifact_root: Path) -> str:
     lines = [
         f"Choirboy memory status: {status['status']}",
         f"Artifact root: {root}",
-        "This message is a status, not loaded team context. It does not contain the fixed lore or project dossiers.",
+        "The agent will load the team's context when needed for the task.",
         f"Load the load-context skill when the task needs the team's established decisions. Local source: {PLUGIN_ROOT / 'skills/load-context/SKILL.md'}",
         "Do not author or rewrite dossiers unless the user explicitly asks to update Choirboy memory.",
     ]

@@ -49,6 +49,21 @@ choirboy-prompt 是面向生产环境的智能体记忆插件。它把既定项�
    Stop 不会为了要求执行这项工作而延续回合。
 5. **连续性。** 稳定的用户数据存储、迁移和结构校验让同一份项目记忆在升级后继续有效。
 
+### 子智能体上下文
+
+WSL 中的实际测试确认：
+
+- **Codex CLI 0.165.0 / gpt-6-luna：** 主智能体读取完整 Choirboy 上下文后，
+  `fork_turns: "all"` 的原生子智能体会继承它。使用 `"none"` 时，测试子智能体
+  既没有获得记忆，也没有获得随机标记；需要单独加载 `load-context`，或在任务中
+  明确提供所需上下文。简短的 SessionStart 状态不代表记忆已加载。
+- **AGY 1.4.12 / Gemini 3.8 Flash High：** 原生 `invoke_subagent` 子会话也会
+  执行 SessionStart，通过 `--format agy` 接收完整记忆。子智能体在没有读取文件、
+  且任务未提供答案的情况下返回了钩子中的随机标记和记忆中的事实。
+
+以上仅验证固定记忆，未验证已就绪项目档案的投递。原生 Windows 子智能体和其他
+客户端/模型尚未验证。安装钩子不保证任意子进程都能继承父会话历史。
+
 插件内部结构：[docs/architecture.zh-CN.md](docs/architecture.zh-CN.md)。
 
 ### 支持的运行时
