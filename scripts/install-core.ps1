@@ -175,7 +175,8 @@ function Quote-BashDouble([string] $Value) {
 function Get-HookCommand([string] $ScriptPath, [string] $Suffix = '') {
     if ($IsWindows) {
         $nativePath = [IO.Path]::GetFullPath($ScriptPath).Replace('"', '`"')
-        $command = "pwsh -NoProfile -File `"$nativePath`""
+        # Scope policy to this child so unsigned local and UNC checkout hooks can run.
+        $command = "pwsh -NoProfile -ExecutionPolicy Bypass -File `"$nativePath`""
     } else {
         $command = 'bash ' + (Quote-BashDouble (Convert-ToBashPath $ScriptPath))
     }
@@ -985,11 +986,6 @@ function Invoke-DoGemini { Write-InstructionBlock (Get-TargetPath 'gemini') 'htm
 function Set-AgyHooks([string] $Mode) {
     $start = Get-HookCommand $script:HookScript '--format agy'
     $stop = Get-HookCommand $script:StopHookScript
-    if ($IsWindows) {
-        # AGY's cmd.exe launcher must also run unsigned checkout scripts on UNC paths.
-        $start = $start.Replace('pwsh -NoProfile -File ', 'pwsh -NoProfile -ExecutionPolicy Bypass -File ')
-        $stop = $stop.Replace('pwsh -NoProfile -File ', 'pwsh -NoProfile -ExecutionPolicy Bypass -File ')
-    }
     return Invoke-Python @((Join-Path $script:PluginRoot 'scripts/agy-hooks.py'), (Get-TargetPath 'agy'), $Mode, $start, $stop)
 }
 
@@ -1121,8 +1117,8 @@ function Invoke-InstallerMain {
         Invoke-Target $target
         if (-not $script:Uninstall) {
             switch ($target) {
-                'codex' { Write-Host 'codex: subagents inherit loaded lore with fork_turns="all"; with "none", load-context is needed separately (verified in WSL).' }
-                'agy' { Write-Host 'agy: SessionStart also loads lore in native subagents (verified in WSL; Windows subagent delivery not verified).' }
+                'codex' { Write-Host 'codex: use fork_turns="all" after loading lore; always include the load-context path as a fallback for subagents.' }
+                'agy' { Write-Host 'agy: SessionStart loads lore in the parent and native subagents, not on every message (verified in WSL and Windows).' }
             }
         }
     }

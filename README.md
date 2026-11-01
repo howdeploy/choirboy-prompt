@@ -57,20 +57,28 @@ into English, Russian, and Simplified Chinese.
 
 ### Subagent context
 
-Live checks in WSL confirmed the following behavior:
+Live checks in WSL and native Windows confirmed the following behavior:
 
 - **Codex CLI 0.165.0 / gpt-6-luna:** after the parent reads the full Choirboy
   context, a native subagent with `fork_turns: "all"` receives it. With `"none"`,
   the probe received neither lore nor the private test marker; load `load-context`
   separately or explicitly include the required context in its task. The short
   SessionStart status alone is not loaded lore.
+  On native Windows with Codex 0.159.3, a probe using `"all"` did not inherit the
+  parent's loaded lore. Always pass the loader path with an instruction to read
+  it if context is absent; the Windows child successfully loaded lore this way.
 - **AGY 1.4.12 / Gemini 3.8 Flash High:** native `invoke_subagent` sessions run
   SessionStart hooks themselves and receive the full lore through `--format agy`.
   A child returned a hook-only random marker and a lore fact without reading files
   or receiving either value in its task.
+  A native Windows run also confirmed parent and child lore delivery plus a second
+  user message without another SessionStart. That run took about four minutes;
+  a separate short control with Choirboy disabled also timed out.
 
 These checks cover fixed lore, not ready project-dossier delivery. Native Windows
-subagent delivery and other clients/models have not been verified. Installing the
+and WSL were tested only with the versions/models above; other clients/models have
+not been verified. Codex `exec resume` starts another hook lifecycle, but the
+tested resumed agent reused loaded lore without reading the skill again. Installing the
 hooks does not guarantee every kind of child process inherits the parent's history.
 
 Plugin internals: [docs/architecture.en.md](docs/architecture.en.md).

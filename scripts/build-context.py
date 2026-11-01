@@ -53,14 +53,14 @@ files instead of this generated block.
 ## Codex subagent context
 
 Before delegating in Codex, load `load-context` if the full Choirboy context is
-not already present. Use `fork_turns: "all"` when spawning subagents so they
-inherit the loaded lore. If an isolated task requires `fork_turns: "none"`,
-include an explicit instruction in its task to read the `load-context` SKILL.md
-before starting work, with the exact local path used by the parent. Do not assume
-that a short SessionStart status or the skill's presence means lore is loaded.
-Use these options only when the available spawning tool supports them; otherwise
-include the loader instruction and path in the task. Respect explicit user
-instructions about isolation and context sharing.
+not already present. Prefer `fork_turns: "all"` when the spawning tool supports
+it, unless the user requires isolation. In every subagent task, include the exact
+local path to the `load-context` SKILL.md and instruct the child to read it before
+starting work if its conversation lacks the full Choirboy context. Apply this
+fallback even with `"all"`: inheritance can differ between client versions.
+With `fork_turns: "none"`, the child must load the context separately. Do not
+assume that a short SessionStart status or the skill's presence means lore is
+loaded. Respect explicit user instructions about isolation and context sharing.
 
 <choirboy-delivery version="{version}" delivery="skill" context_sha256="{digest}" />
 <choirboy-context>

@@ -72,7 +72,7 @@ context = json.loads(result.stdout.decode('utf-8'))['injectSteps'][0]['systemMes
 assert 'café — привет 你好' in context, 'PowerShell hook corrupted Unicode context'
 '@
     [IO.File]::WriteAllText($wireProbe, $wireSource, [Text.UTF8Encoding]::new($false))
-    $wireCommand = (Get-HookCommand $script:HookScript '--format agy').Replace('pwsh -NoProfile -File ', 'pwsh -NoProfile -ExecutionPolicy Bypass -File ')
+    $wireCommand = Get-HookCommand $script:HookScript '--format agy'
     Invoke-Python @($wireProbe, $wireCommand) | Out-Null
 
     # Codex hook values must be numeric, and a null legacy value must be stale.
@@ -80,6 +80,11 @@ assert 'café — привет 你好' in context, 'PowerShell hook corrupted Un
     Invoke-DoCodex
     $codexSettings = Join-Path $script:HomePath '.codex/hooks.json'
     $data = Get-Content -LiteralPath $codexSettings -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
+    if ($IsWindows) {
+        foreach ($event in @('SessionStart', 'Stop')) {
+            Assert-Condition ($data.hooks[$event][0].hooks[0].command.StartsWith('pwsh -NoProfile -ExecutionPolicy Bypass -File ')) "Codex $event cannot run unsigned checkout hooks"
+        }
+    }
     Assert-Number $data.hooks.SessionStart[0].hooks[0].timeout 15 'Codex SessionStart timeout'
     Assert-Number $data.hooks.SessionStart[0].hooks[0].additionalContextLimit 4000 'Codex context limit'
     Assert-Number $data.hooks.Stop[0].hooks[0].timeout 15 'Codex Stop timeout'

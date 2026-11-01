@@ -1376,8 +1376,8 @@ for t in $TARGETS; do
   esac
   if [ "$UNINSTALL" = 0 ]; then
     case "$t" in
-      codex) echo 'codex: subagents inherit loaded lore with fork_turns="all"; with "none", load-context is needed separately (verified in WSL).' ;;
-      agy) echo 'agy: SessionStart also loads lore in native subagents (verified in WSL; Windows subagent delivery not verified).' ;;
+      codex) echo 'codex: use fork_turns="all" after loading lore; always include the load-context path as a fallback for subagents.' ;;
+      agy) echo 'agy: SessionStart loads lore in the parent and native subagents, not on every message (verified in WSL and Windows).' ;;
     esac
   fi
 done
