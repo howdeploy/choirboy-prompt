@@ -172,8 +172,15 @@ function Quote-BashDouble([string] $Value) {
     return '"' + ($Value -replace '\\', '\\\\' -replace '"', '\\"' -replace '\$', '\\$' -replace '`', '\\`') + '"'
 }
 
-function Get-HookCommand([string] $ScriptPath, [string] $Suffix = '') {
+function Get-HookCommand([string] $ScriptPath, [string] $Suffix = '', [switch] $Encoded) {
     if ($IsWindows) {
+        if ($Encoded) {
+            # AGY preserves quotes in -File arguments; encode the invocation instead.
+            $invocation = "& '" + [IO.Path]::GetFullPath($ScriptPath).Replace("'", "''") + "'"
+            if ($Suffix) { $invocation += " $Suffix" }
+            $payload = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($invocation))
+            return "pwsh -NoProfile -ExecutionPolicy Bypass -EncodedCommand $payload"
+        }
         $nativePath = [IO.Path]::GetFullPath($ScriptPath).Replace('"', '`"')
         # Scope policy to this child so unsigned local and UNC checkout hooks can run.
         $command = "pwsh -NoProfile -ExecutionPolicy Bypass -File `"$nativePath`""
@@ -984,8 +991,8 @@ function Invoke-DoLlama {
 function Invoke-DoGemini { Write-InstructionBlock (Get-TargetPath 'gemini') 'html' 'gemini' }
 
 function Set-AgyHooks([string] $Mode) {
-    $start = Get-HookCommand $script:HookScript '--format agy'
-    $stop = Get-HookCommand $script:StopHookScript
+    $start = Get-HookCommand $script:HookScript '--format agy' -Encoded
+    $stop = Get-HookCommand $script:StopHookScript -Encoded
     return Invoke-Python @((Join-Path $script:PluginRoot 'scripts/agy-hooks.py'), (Get-TargetPath 'agy'), $Mode, $start, $stop)
 }
 

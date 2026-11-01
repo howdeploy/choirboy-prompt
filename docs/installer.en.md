@@ -353,6 +353,11 @@ artifact-stop adapter and never requests continuation. Both hooks require Python
 Windows uses PowerShell 7 without Bash, with execution policy scoped to the child
 process so unsigned checkout scripts also work from UNC paths.
 
+Windows AGY uses `-EncodedCommand` for the PowerShell invocation: AGY 1.4.12 can
+retain quotes around a `-File` path as literal filename characters. The encoded
+payload contains only the script invocation and format argument, not the lore.
+After upgrading, rerun `--target agy` and start a new AGY session.
+
 Start a new conversation after installation. WSL and Windows have separate HOME
 and registrations. An application using a private HOME needs its own registration:
 for ARTEX use `HOME="$HOME/artex/agy" ./install.sh --target agy`, or link its

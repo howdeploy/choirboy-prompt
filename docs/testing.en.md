@@ -265,3 +265,8 @@ For an ordinary print-mode probe use `--single-turn`; `--timeout 60` bounds the
 CLI process and its children. A hanging native CLI is not a passing hook check.
 Compare a harmless control with hooks disabled before attributing the failure
 to Choirboy; installer/configuration checks alone do not prove native delivery.
+
+The probe forwards installed commands as native argv, without a shell that could
+hide broken quoting. Also verify global registration by starting AGY from HOME
+without a workspace `hooks.json`, then check the injected delivery nonce. A
+workspace proxy check alone does not prove that AGY can launch the global command.

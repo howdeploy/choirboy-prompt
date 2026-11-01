@@ -49,7 +49,12 @@ try {
     Assert-Condition ([IO.File]::ReadAllText($agyPath) -eq $agyBefore) 'AGY reinstall changed its registration'
     $agyData = $agyBefore | ConvertFrom-Json -AsHashtable
     Assert-Number $agyData['agent-plugin:vibe-lore'].SessionStart[0].timeout 30 'AGY SessionStart timeout'
-    Assert-Condition ($agyData['agent-plugin:vibe-lore'].SessionStart[0].command -match 'pwsh .*session-start.ps1" --format agy$') 'AGY did not register the native PowerShell adapter'
+    if ($IsWindows) {
+        $startCommand = $agyData['agent-plugin:vibe-lore'].SessionStart[0].command
+        Assert-Condition ($startCommand.StartsWith('pwsh -NoProfile -ExecutionPolicy Bypass -EncodedCommand ')) 'AGY command depends on shell quote removal'
+        $invocation = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String(($startCommand -split ' ')[-1]))
+        Assert-Condition ($invocation -eq ("& '" + $script:HookScript.Replace("'", "''") + "' --format agy")) 'AGY encoded invocation lost its script path or format'
+    }
     $script:Uninstall = $true
     Invoke-DoAgy
     $script:Uninstall = $false
@@ -66,13 +71,15 @@ try {
     [IO.File]::WriteAllText((Join-Path $fixtureRoot 'prompt.md'), 'Unicode wire check: café — привет 你好', [Text.UTF8Encoding]::new($false))
     $wireProbe = Join-Path $temporaryRoot 'wire-check.py'
     $wireSource = @'
-import json, subprocess, sys
-result = subprocess.run(sys.argv[1], shell=True, input=b'{}', capture_output=True, check=True)
+import json, os, shlex, subprocess, sys
+# Exercise native argv without a shell silently fixing AGY's quoted -File path.
+command = shlex.split(sys.argv[1], posix=os.name != 'nt')
+result = subprocess.run(command, input=b'{}', capture_output=True, check=True)
 context = json.loads(result.stdout.decode('utf-8'))['injectSteps'][0]['systemMessage']['systemMessage']
 assert 'café — привет 你好' in context, 'PowerShell hook corrupted Unicode context'
 '@
     [IO.File]::WriteAllText($wireProbe, $wireSource, [Text.UTF8Encoding]::new($false))
-    $wireCommand = Get-HookCommand $script:HookScript '--format agy'
+    $wireCommand = Get-HookCommand $script:HookScript '--format agy' -Encoded
     Invoke-Python @($wireProbe, $wireCommand) | Out-Null
 
     # Codex hook values must be numeric, and a null legacy value must be stale.
