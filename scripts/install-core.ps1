@@ -172,10 +172,18 @@ function Quote-BashDouble([string] $Value) {
     return '"' + ($Value -replace '\\', '\\\\' -replace '"', '\\"' -replace '\$', '\\$' -replace '`', '\\`') + '"'
 }
 
-function Get-HookCommand([string] $ScriptPath, [string] $Suffix = '') {
+function Get-HookCommand([string] $ScriptPath, [string] $Suffix = '', [switch] $Encoded) {
     if ($IsWindows) {
+        if ($Encoded) {
+            # AGY preserves quotes in -File arguments; encode the invocation instead.
+            $invocation = "& '" + [IO.Path]::GetFullPath($ScriptPath).Replace("'", "''") + "'"
+            if ($Suffix) { $invocation += " $Suffix" }
+            $payload = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($invocation))
+            return "pwsh -NoProfile -ExecutionPolicy Bypass -EncodedCommand $payload"
+        }
         $nativePath = [IO.Path]::GetFullPath($ScriptPath).Replace('"', '`"')
-        $command = "pwsh -NoProfile -File `"$nativePath`""
+        # Scope policy to this child so unsigned local and UNC checkout hooks can run.
+        $command = "pwsh -NoProfile -ExecutionPolicy Bypass -File `"$nativePath`""
     } else {
         $command = 'bash ' + (Quote-BashDouble (Convert-ToBashPath $ScriptPath))
     }
@@ -983,13 +991,8 @@ function Invoke-DoLlama {
 function Invoke-DoGemini { Write-InstructionBlock (Get-TargetPath 'gemini') 'html' 'gemini' }
 
 function Set-AgyHooks([string] $Mode) {
-    $start = Get-HookCommand $script:HookScript '--format agy'
-    $stop = Get-HookCommand $script:StopHookScript
-    if ($IsWindows) {
-        # AGY's cmd.exe launcher must also run unsigned checkout scripts on UNC paths.
-        $start = $start.Replace('pwsh -NoProfile -File ', 'pwsh -NoProfile -ExecutionPolicy Bypass -File ')
-        $stop = $stop.Replace('pwsh -NoProfile -File ', 'pwsh -NoProfile -ExecutionPolicy Bypass -File ')
-    }
+    $start = Get-HookCommand $script:HookScript '--format agy' -Encoded
+    $stop = Get-HookCommand $script:StopHookScript -Encoded
     return Invoke-Python @((Join-Path $script:PluginRoot 'scripts/agy-hooks.py'), (Get-TargetPath 'agy'), $Mode, $start, $stop)
 }
 
@@ -1117,7 +1120,15 @@ function Invoke-InstallerMain {
         Write-Host "agent-plugin: artifact lifecycle prepared — $($artifactStatus -join ' ')"
     }
 
-    foreach ($target in $script:Targets) { Invoke-Target $target }
+    foreach ($target in $script:Targets) {
+        Invoke-Target $target
+        if (-not $script:Uninstall) {
+            switch ($target) {
+                'codex' { Write-Host 'codex: use fork_turns="all" after loading lore; always include the load-context path as a fallback for subagents.' }
+                'agy' { Write-Host 'agy: SessionStart loads lore in the parent and native subagents, not on every message (verified in WSL and Windows).' }
+            }
+        }
+    }
     foreach ($file in $script:InstructionsFiles) {
         $style = if ($file -match '(?i)\.(md|markdown)$') { 'html' } else { 'hash' }
         Write-InstructionBlock $file $style "file:$file"

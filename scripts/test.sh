@@ -724,7 +724,9 @@ assert doc["hookSpecificOutput"]["hookEventName"] == "SessionStart"
 assert len(context) < 2000
 assert "Choirboy memory status: ready" in context
 assert "load-context skill" in context
-assert "not loaded team context" in context
+assert "The agent must load the team's context before handling the first user task." in context
+assert "read the full load-context skill at:" in context
+assert "Skip only if this conversation already contains the full choirboy-context block." in context
 assert "<choirboy-delivery" not in context
 assert "<choirboy-context>" not in context
 assert "# Established project history" not in context

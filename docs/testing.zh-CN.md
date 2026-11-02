@@ -241,3 +241,7 @@ python3 scripts/package-plugin.py
 
 `--single-turn` 检查普通 print 模式，`--timeout 60` 限制 CLI 及子进程。
 CLI 挂起不是钩子检查成功；应与关闭钩子的安全对照比较，配置检查不能单独证明原生投递。
+
+探针以原生参数执行已安装的命令，不通过可能掩盖引号错误的 shell。还应从 HOME
+启动 AGY，不设置工作区 `hooks.json`，并核对投递 nonce，以单独验证全局注册。
+工作区代理测试成功并不能证明 AGY 能直接执行全局命令。
