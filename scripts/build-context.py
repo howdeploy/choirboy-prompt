@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 
@@ -62,6 +64,25 @@ With `fork_turns: "none"`, the child must load the context separately. Do not
 assume that a short SessionStart status or the skill's presence means lore is
 loaded. Respect explicit user instructions about isolation and context sharing.
 
+Before assigning substantive work, use a context-only handshake: the child must
+confirm that the complete mandatory Choirboy context is loaded without output
+truncation. The parent checks that confirmation before explicitly releasing the
+child to start its task. Inherited history, a hook status, skill availability,
+or a successful read exit code alone do not establish completeness.
+
+If completeness of inherited context cannot be verified, the child must read the
+local load-context SKILL.md in sequential, bounded chunks. Determine the total
+line count, report the absolute source path and every range read, and verify
+that all mandatory lines are covered without gaps or truncation. Reread any
+truncated range in smaller chunks. Apply the same procedure to additional
+mandatory sources required by the loader; distinguish them from research that
+is only needed for a particular task. Report missing or unread material honestly.
+
+The parent must withhold task execution until this evidence is complete. After
+compaction or context loss, recheck completeness and reload missing material
+before resuming. This handshake does not authorize messaging other user chats
+or changing files, memory, permissions, or task scope.
+
 <choirboy-delivery version="{version}" delivery="skill" context_sha256="{digest}" />
 <choirboy-context>
 {context}</choirboy-context>
@@ -70,8 +91,29 @@ loaded. Respect explicit user instructions about isolation and context sharing.
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--check", action="store_true", help="fail if the generated skill is stale")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="fail if the generated skill is stale")
+    mode.add_argument("--check-snapshot", action="store_true", help="return the validated skill as Base64")
     args = parser.parse_args()
+    if args.check_snapshot:
+        try:
+            with OUTPUT.open("rb") as skill:
+                maximum_bytes = 128 * 1024
+                snapshot = skill.read(maximum_bytes + 1)
+            if len(snapshot) > maximum_bytes:
+                print("Choirboy full context exceeds 128 KiB", file=sys.stderr)
+                return 1
+            text = snapshot.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        except (OSError, UnicodeError) as error:
+            print(f"cannot read context skill: {error}", file=sys.stderr)
+            return 1
+
+        if text != render():
+            print(f"stale generated file: {OUTPUT.relative_to(ROOT)}", file=sys.stderr)
+            return 1
+        print(base64.b64encode(snapshot).decode("ascii"))
+        return 0
+
     expected = render()
     if args.check:
         if not OUTPUT.exists() or OUTPUT.read_text(encoding="utf-8") != expected:
