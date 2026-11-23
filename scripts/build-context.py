@@ -62,6 +62,25 @@ With `fork_turns: "none"`, the child must load the context separately. Do not
 assume that a short SessionStart status or the skill's presence means lore is
 loaded. Respect explicit user instructions about isolation and context sharing.
 
+Before assigning substantive work, use a context-only handshake: the child must
+confirm that the complete mandatory Choirboy context is loaded without output
+truncation. The parent checks that confirmation before explicitly releasing the
+child to start its task. Inherited history, a hook status, skill availability,
+or a successful read exit code alone do not establish completeness.
+
+If completeness of inherited context cannot be verified, the child must read the
+local load-context SKILL.md in sequential, bounded chunks. Determine the total
+line count, report the absolute source path and every range read, and verify
+that all mandatory lines are covered without gaps or truncation. Reread any
+truncated range in smaller chunks. Apply the same procedure to additional
+mandatory sources required by the loader; distinguish them from research that
+is only needed for a particular task. Report missing or unread material honestly.
+
+The parent must withhold task execution until this evidence is complete. After
+compaction or context loss, recheck completeness and reload missing material
+before resuming. This handshake does not authorize messaging other user chats
+or changing files, memory, permissions, or task scope.
+
 <choirboy-delivery version="{version}" delivery="skill" context_sha256="{digest}" />
 <choirboy-context>
 {context}</choirboy-context>
