@@ -1,5 +1,5 @@
 # Native PowerShell equivalent of hooks/session-start.sh for Windows installs.
-# Supported formats: claude (SessionStart JSON), plain, agy, and hermes.
+# Supported formats: claude (SessionStart JSON), plain, agy, hermes, and codex-full.
 #Requires -Version 7.0
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'powershell-common.ps1')
@@ -13,14 +13,14 @@ for ($i = 0; $i -lt $arguments.Count; $i++) {
         if ($i + 1 -ge $arguments.Count) { [Console]::Error.WriteLine('--format requires a value'); exit 1 }
         $format = [string]$arguments[++$i]
     } elseif ($arguments[$i] -in '-h', '--help') {
-        [Console]::Out.WriteLine('session-start.ps1 [--format claude|plain|agy|hermes]')
+        [Console]::Out.WriteLine('session-start.ps1 [--format claude|plain|agy|hermes|codex-full]')
         exit 0
     } else {
         [Console]::Error.WriteLine("session-start.ps1: unknown argument: $($arguments[$i])")
         exit 1
     }
 }
-if ($format -notin @('claude', 'plain', 'agy', 'hermes')) {
+if ($format -notin @('claude', 'plain', 'agy', 'hermes', 'codex-full')) {
     [Console]::Error.WriteLine("session-start.ps1: unknown format: $format")
     exit 1
 }
@@ -28,6 +28,21 @@ if ($format -notin @('claude', 'plain', 'agy', 'hermes')) {
 $manifest = Join-Path $pluginRoot '.claude-plugin/plugin.json'
 $version = 'unknown'
 try { $version = [string](Get-Content -LiteralPath $manifest -Raw -Encoding utf8 | ConvertFrom-Json).version } catch { }
+
+if ($format -eq 'codex-full') {
+    $skillPath = Join-Path $pluginRoot 'skills/load-context/SKILL.md'
+    $maximumBytes = 128 * 1024
+    if (-not (Test-Path -LiteralPath $skillPath -PathType Leaf)) { throw 'Choirboy full context: loader is missing' }
+    if ((Get-Item -LiteralPath $skillPath).Length -gt $maximumBytes) { throw 'Choirboy full context exceeds 128 KiB; no partial context delivered' }
+    $fullContext = [IO.File]::ReadAllText($skillPath, [Text.Encoding]::UTF8)
+    if ([Text.Encoding]::UTF8.GetByteCount($fullContext) -gt $maximumBytes) { throw 'Choirboy full context exceeds 128 KiB; no partial context delivered' }
+    if (-not $fullContext.TrimEnd().EndsWith('</choirboy-context>')) { throw 'Choirboy full context: closing marker is missing' }
+    $check = Invoke-ChoirboyPython (Join-Path $pluginRoot 'scripts/build-context.py') @('--check')
+    if ($check.ExitCode -ne 0) { throw 'Choirboy full context is stale; regenerate the loader before delivery' }
+    $response = [ordered]@{ hookSpecificOutput = [ordered]@{ hookEventName = 'SessionStart'; additionalContext = $fullContext } }
+    [Console]::Out.WriteLine(($response | ConvertTo-Json -Depth 8 -Compress))
+    exit 0
+}
 
 if ($format -eq 'claude') {
     $status = 'Choirboy memory status: unavailable. Python or the artifact generator is missing. Load the load-context skill for the fixed lore. This message is a status, not loaded team context. Do not author dossiers unless the user explicitly asks to update Choirboy memory.'
