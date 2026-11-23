@@ -30,15 +30,12 @@ $version = 'unknown'
 try { $version = [string](Get-Content -LiteralPath $manifest -Raw -Encoding utf8 | ConvertFrom-Json).version } catch { }
 
 if ($format -eq 'codex-full') {
-    $skillPath = Join-Path $pluginRoot 'skills/load-context/SKILL.md'
-    $maximumBytes = 128 * 1024
-    if (-not (Test-Path -LiteralPath $skillPath -PathType Leaf)) { throw 'Choirboy full context: loader is missing' }
-    if ((Get-Item -LiteralPath $skillPath).Length -gt $maximumBytes) { throw 'Choirboy full context exceeds 128 KiB; no partial context delivered' }
-    $fullContext = [IO.File]::ReadAllText($skillPath, [Text.Encoding]::UTF8)
-    if ([Text.Encoding]::UTF8.GetByteCount($fullContext) -gt $maximumBytes) { throw 'Choirboy full context exceeds 128 KiB; no partial context delivered' }
+    $check = Invoke-ChoirboyPython (Join-Path $pluginRoot 'scripts/build-context.py') @('--check-snapshot')
+    if ($check.ExitCode -ne 0) { throw 'Choirboy full context: snapshot validation failed' }
+    $snapshot = [Convert]::FromBase64String($check.Output)
+    if ($snapshot.Length -gt (128 * 1024)) { throw 'Choirboy full context exceeds 128 KiB; no partial context delivered' }
+    $fullContext = [Text.UTF8Encoding]::new($false, $true).GetString($snapshot)
     if (-not $fullContext.TrimEnd().EndsWith('</choirboy-context>')) { throw 'Choirboy full context: closing marker is missing' }
-    $check = Invoke-ChoirboyPython (Join-Path $pluginRoot 'scripts/build-context.py') @('--check')
-    if ($check.ExitCode -ne 0) { throw 'Choirboy full context is stale; regenerate the loader before delivery' }
     $response = [ordered]@{ hookSpecificOutput = [ordered]@{ hookEventName = 'SessionStart'; additionalContext = $fullContext } }
     [Console]::Out.WriteLine(($response | ConvertTo-Json -Depth 8 -Compress))
     exit 0

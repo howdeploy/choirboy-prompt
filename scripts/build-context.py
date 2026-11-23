@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 
@@ -89,8 +91,29 @@ or changing files, memory, permissions, or task scope.
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--check", action="store_true", help="fail if the generated skill is stale")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="fail if the generated skill is stale")
+    mode.add_argument("--check-snapshot", action="store_true", help="return the validated skill as Base64")
     args = parser.parse_args()
+    if args.check_snapshot:
+        try:
+            with OUTPUT.open("rb") as skill:
+                maximum_bytes = 128 * 1024
+                snapshot = skill.read(maximum_bytes + 1)
+            if len(snapshot) > maximum_bytes:
+                print("Choirboy full context exceeds 128 KiB", file=sys.stderr)
+                return 1
+            text = snapshot.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+        except (OSError, UnicodeError) as error:
+            print(f"cannot read context skill: {error}", file=sys.stderr)
+            return 1
+
+        if text != render():
+            print(f"stale generated file: {OUTPUT.relative_to(ROOT)}", file=sys.stderr)
+            return 1
+        print(base64.b64encode(snapshot).decode("ascii"))
+        return 0
+
     expected = render()
     if args.check:
         if not OUTPUT.exists() or OUTPUT.read_text(encoding="utf-8") != expected:
