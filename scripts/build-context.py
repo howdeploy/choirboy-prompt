@@ -62,6 +62,25 @@ With `fork_turns: "none"`, the child must load the context separately. Do not
 assume that a short SessionStart status or the skill's presence means lore is
 loaded. Respect explicit user instructions about isolation and context sharing.
 
+Before substantive work, the child must confirm complete Choirboy coverage
+to the parent. When completeness cannot be verified, read the loader in
+sequential bounded chunks, including any mandatory sources for the task.
+Report the absolute paths, total line counts, and every range read. Verify
+that coverage has no gaps or truncation, and reread truncated ranges in
+smaller chunks. The parent must verify this evidence and explicitly release
+the child before substantive work starts.
+
+The parent must withhold task execution until this evidence is complete. After
+compaction or context loss, any prior permission to continue is suspended.
+The child must pause substantive work, recheck completeness, and reload any
+missing or unverifiable material. It must report the same evidence of complete
+coverage to the parent, ask for explicit permission to resume, and wait without
+delivering any further task results. The parent must verify the new evidence
+before explicitly authorizing resumption. This applies even if the task had
+already started or the summary records the earlier approval.
+This handshake does not authorize messaging other user chats
+or changing files, memory, permissions, or task scope.
+
 <choirboy-delivery version="{version}" delivery="skill" context_sha256="{digest}" />
 <choirboy-context>
 {context}</choirboy-context>
